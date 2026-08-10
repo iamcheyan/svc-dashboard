@@ -1,0 +1,14 @@
+[Unit]
+Description=svc-dashboard - 本机监听服务一览 (port 8000)
+After=network.target
+
+[Service]
+Type=simple
+# 按实际部署路径修改
+ExecStart=/usr/bin/python3 /home/tetsuya/development/svc-dashboard/dashboard.py
+WorkingDirectory=/home/tetsuya/development/svc-dashboard
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
