@@ -4,6 +4,8 @@
 
 纯 Python 标准库实现，零第三方依赖。访问 `http://<服务器>:8000/` 即可使用。
 
+![svc-dashboard 界面](screenshot.png)
+
 ## 功能
 
 - **服务列表**：端口号、监听地址、PID、启动命令、工作目录、服务类型
@@ -16,9 +18,17 @@
 - **系统信息卡片**：1/5/15 分钟负载、CPU 使用率与核心数、内存用量、根分区磁盘用量、开机时长
   - 打开页面时抓取一次快照，之后停住；点"刷新"按钮才更新
 - **刷新**：打开页面自动扫描；手动刷新按钮；可选 10 秒自动刷新（仅刷新服务列表，不动系统信息）
+- **agent 任务面板**：点击顶部 `agent任务` chip，查看正在运行的 agent（OMP 会话 + Codex 进程）：
+  - 状态（运行中 / 阻塞 / 空闲 / 已完成）、tmux 窗格、工作目录、最近活动时间、当前工具
+  - **点击任务标题展开详情**：最近 18 条会话日志时间线（工具调用、消息、结果、压缩、结束）+ 所在 tmux 窗格的实时终端画面，可原地刷新
+- **tmux 状态面板**：点击 `tmux状态` chip，列出全部 tmux 窗格（会话/窗格、命令、标题、目录、尺寸），当前活动窗格有标识
+- **定时任务面板**：点击 `定时任务` chip，查看 systemd timer 与 cron 任务（看门狗 / 提醒 / 定时，共 24 项），含周期、来源、命令、最近执行时间
 - **JSON API**：
   - `GET /api` —— 服务列表：`{"updated": 时间戳, "services": [{ip, port, pids, name, cmdline, cwd, type, unit, scope, ...}]}`
   - `GET /api/sys` —— 系统信息：`{"hostname", "loadavg", "cpu_usage", "cpu_count", "mem": {...}, "disk": {...}, "uptime"}`
+  - `GET /api/omp` —— agent 聚合：`{"omp": [...], "codex": [...]}`（OMP 会话 + Codex 进程）
+  - `GET /api/tmux` —— tmux 窗格列表
+  - `GET /api/agentlog?sid=&cwd=&tmux=` —— 某 agent 的会话日志时间线 + 终端画面
 
 ## 工作原理
 
