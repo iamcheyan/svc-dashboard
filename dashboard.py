@@ -21,6 +21,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -85,31 +86,63 @@ def listen_sockets():
 
 # ---------------- 特权增强(sudo 抓 root 服务) ----------------
 # 非 root 进程读不到异主进程的 /proc/<pid>/fd,所以 PID/名称/cwd 抓不到。
-# 这里用 `sudo -n ss -tlnp` 拿权威信息: 后台线程每 5 秒刷新一次并缓存,
-# 失败(无 sudo 权限/被禁)时自动降级为空映射,页面照常显示。
+# 用 `sudo -n ss -tlnp` 拿权威信息: 只在用户访问页面时同步扫描一次,
+# 无后台线程、无自动刷新 —— 没人访问时 dashboard 完全静默。
+# 失败(无 sudo 权限/被禁/ss 超时)时降级为空映射,页面照常显示。
+# (本机实测 `ss -H -tlnp` 需 24 分钟才返回,故设 8s 超时 + 杀进程组,不留孤儿。)
 
-_priv = {"lock": threading.Lock(), "t": 0.0, "map": {}}
+_priv = {"lock": threading.Lock(), "map": None}
+
+
+def _kill_tree(proc):
+    """subprocess 超时后,杀整个进程组(含 sudo 的孙进程 ss)。
+
+    实测: 本机 `ss -H -tlnp` 会挂起不返回(exit 124), subprocess.run(timeout=)
+    只杀 sudo 自身, ss 孙进程成为孤儿 R 态进程持续累积(曾堆到 240+ 个,
+    拖垮 dashboard 主循环)。start_new_session 让子进程自成进程组,超时后
+    os.killpg 一网打尽。
+    """
+    if proc.poll() is None:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def _run_sudo_ss():
     try:
-        out = subprocess.run(
+        proc = subprocess.Popen(
             ["sudo", "-n", "ss", "-H", "-tlnp"],
-            capture_output=True, text=True, timeout=10,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, start_new_session=True,
         )
-        if out.returncode != 0:
+        try:
+            out, err = proc.communicate(timeout=8)
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc)
+            return {}
+        if proc.returncode != 0:
             return {}
         mapping = {}
         for line in out.stdout.splitlines():
             parts = line.split()
             if len(parts) < 5:
                 continue
-            proc = parts[5] if len(parts) > 5 else ""
-            m = re.search(r'users:\(\("([^"]+)"', proc)
+            procinfo = parts[5] if len(parts) > 5 else ""
+            m = re.search(r'users:\(\("([^"]+)"', procinfo)
             if not m:
                 continue
             name = m.group(1)
-            pm = re.search(r"pid=(\d+)", proc)
+            pm = re.search(r"pid=(\d+)", procinfo)
             if not pm:
                 continue
             pid = int(pm.group(1))
@@ -141,25 +174,24 @@ def _run_sudo_ss():
         return {}
 
 
-def _priv_worker():
-    while True:
-        mapping = _run_sudo_ss()
-        with _priv["lock"]:
-            _priv["map"] = mapping
-            _priv["t"] = time.time()
-        time.sleep(5)
+def priv_scan():
+    """同步扫一次 sudo ss,缓存结果供本次 gather() 的多次 priv_lookup 复用。
 
-
-def _start_priv_thread():
-    threading.Thread(target=_priv_worker, daemon=True).start()
+    只在 gather() 调用时执行(即用户访问页面触发),无后台线程、无自动刷新。
+    本机 ss 极慢(24min),_run_sudo_ss 内部 8s 超时 + 杀进程组,不会阻塞页面。
+    """
+    with _priv["lock"]:
+        if _priv["map"] is None:
+            _priv["map"] = _run_sudo_ss()
+        return _priv["map"]
 
 
 def priv_lookup(port, ip):
     """返回 sudo 层记录的该端口进程列表;无数据时返回 None(用不到就降级)。"""
-    with _priv["lock"]:
-        if not _priv["map"]:
-            return None
-        return _priv["map"].get(port)
+    m = priv_scan()
+    if not m:
+        return None
+    return m.get(port)
 
 
 def inode_to_pid():
@@ -242,43 +274,58 @@ def proc_info(pid):
     return info
 
 
-_docker_cache = {"t": 0.0, "map": {}}
+_docker_ps_cache = {"t": 0.0, "map": {}}
 
 
 def docker_port_map():
-    """docker ps 的端口映射: 宿主机端口 -> (容器名, 容器短ID)。5 秒缓存。"""
+    """docker ps 的端口映射: 宿主机端口 -> (容器名, 容器短ID)。
+
+    访问时即扫(无后台刷新)。2s 内的重复请求复用结果,避免同一页面加载
+    的 HTML+API 两次请求各扫一遍。docker ps 本身很快(远快于 ss)。
+    """
     now = time.time()
-    if now - _docker_cache["t"] < 5:
-        return _docker_cache["map"]
+    if now - _docker_ps_cache["t"] < 2:
+        return _docker_ps_cache["map"]
     mapping = {}
     try:
-        out = subprocess.run(
+        proc = subprocess.Popen(
             ["docker", "ps", "--format", "{{.ID}}\t{{.Names}}\t{{.Ports}}"],
-            capture_output=True, text=True, timeout=2,
-        ).stdout
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, start_new_session=True,
+        )
+        try:
+            out, _ = proc.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc)
+            out = ""
     except Exception:
-        pass
-    else:
-        for line in out.splitlines():
-            parts = line.split("\t")
-            if len(parts) < 3:
-                continue
-            cid, name, ports = parts[0], parts[1], parts[2]
-            for chunk in ports.split(","):
-                m = re.search(r":(\d+)->", chunk.strip())
-                if m:
-                    mapping.setdefault(int(m.group(1)), (name, cid[:12]))
-    _docker_cache.update({"t": now, "map": mapping})
+        out = ""
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        cid, name, ports = parts[0], parts[1], parts[2]
+        for chunk in ports.split(","):
+            m = re.search(r":(\d+)->", chunk.strip())
+            if m:
+                mapping.setdefault(int(m.group(1)), (name, cid[:12]))
+    _docker_ps_cache.update({"t": now, "map": mapping})
     return mapping
 
 
 def gather():
-    """扫描一次,返回服务列表(按端口排序,同端口合并)。"""
+    """扫描一次,返回服务列表(按端口排序,同端口合并)。
+
+    只在用户访问页面时调用 —— 没有后台自动刷新,没人访问时 dashboard
+    完全静默(进程停着但不消耗 CPU/IO)。每次访问都重新扫描,不跨请求缓存。
+    """
+    # 重置 ss 兜底缓存:每次访问都即时获取最新状态,不用旧数据
+    with _priv["lock"]:
+        _priv["map"] = None
     socks = listen_sockets()
     inode_pid = inode_to_pid()
     docker_ports = docker_port_map()
     self_pid = os.getpid()
-    _start_priv_thread()
 
     by_key = {}
     for s in socks:
@@ -893,12 +940,19 @@ def _cron_last_runs():
     last = {}
     try:
         p = subprocess.Popen(
-            ["journalctl", "-u", "cron", "-o", "short-iso", "--no-pager"],
-            stdout=subprocess.PIPE, text=True, errors="replace")
+            ["journalctl", "-u", "cron", "-o", "short-iso", "--no-pager",
+             "--since", "7 days ago"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, errors="replace", start_new_session=True)
     except Exception:
         return last
+    try:
+        out, _ = p.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        _kill_tree(p)
+        out = ""
     re_line = re.compile(r"^(\S+T\S+[+-]\d{2}:?\d{2})\s+\S+\s+CRON\[\d+\]:\s+\(\S+\)\s+CMD\s+\((.*)\)\s*$")
-    for line in p.stdout:
+    for line in out.splitlines():
         m = re_line.match(line)
         if not m:
             continue
@@ -912,10 +966,6 @@ def _cron_last_runs():
             continue
         if key not in last or epoch > last[key]:
             last[key] = epoch
-    try:
-        p.stdout.close()
-    except Exception:
-        pass
     return last
 
 
@@ -1548,7 +1598,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   </h1>
   <span class="meta">{{HOSTNAME}} · {{T:updated}} <span id="updated">{{UPDATED}}</span> · <span id="count">{{COUNT}}</span> {{T:listen_ports}}</span>
   <span class="spacer"></span>
-  <label class="auto"><input type="checkbox" id="auto" checked> {{T:auto_refresh}} ({{AUTO}}s)</label>
+  <label class="auto"><input type="checkbox" id="auto"> {{T:auto_refresh}} ({{AUTO}}s)</label>
   <button id="refresh">{{T:refresh}}</button>
 </header>
 <main>
@@ -1583,7 +1633,7 @@ const AUTO = {{AUTO}};
 const LANG = "{{LANG}}";
 const T = {{T_JSON}};
 const t = (k, p) => { let s = T[k] ?? k; if (p !== undefined) { for (const [a, b] of Object.entries(p)) s = s.split("{" + a + "}").join(b); } return s; };
-let autoOn = true;
+let autoOn = false;
 let filter = "user"; // 默认只显示用户服务, 隐藏系统服务
 let services = [];
 const $ = (id) => document.getElementById(id);
@@ -2122,11 +2172,9 @@ def main():
             print("用法: dashboard.py [--port N] [--scan]")
             return 2
     if "--scan" in args:
-        _priv["map"] = _run_sudo_ss()  # 同步预热
         print(json.dumps({"services": gather()}, ensure_ascii=False, indent=2))
         return 0
-    if os.geteuid() != 0:
-        _priv["map"] = _run_sudo_ss()  # 非 root 时预热;root 直接读 /proc
+
     httpd = ThreadingHTTPServer((LISTEN_HOST, port), Handler)
     httpd.daemon_threads = True
     print(f"svc-dashboard 已启动: http://0.0.0.0:{port}/  (Ctrl+C 退出)", flush=True)
