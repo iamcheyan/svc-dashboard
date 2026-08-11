@@ -3,12 +3,12 @@
 """
 svc-dashboard — 列出本机正在监听(对外提供)的 TCP 服务。
 
-  访问  http://<本机IP>:8000/    服务列表(每次打开都会重新扫描)
-       http://<本机IP>:8000/api JSON 数据
+  访问  http://<本机IP>/    服务列表(每次打开都会重新扫描)
+       http://<本机IP>/api JSON 数据
   页面右上角: 手动刷新按钮 + 自动刷新开关(默认 10 秒)。
 
 用法:
-  python3 dashboard.py                 # 默认监听 8000
+  python3 dashboard.py                 # 默认监听 80(特权端口,需 root)
   python3 dashboard.py --port 9000     # 换端口
   python3 dashboard.py --scan          # 只打印 JSON,不启动服务
 
@@ -31,7 +31,7 @@ from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-DEFAULT_PORT = 8000
+DEFAULT_PORT = 80
 AUTO_REFRESH_SEC = 10
 LISTEN_HOST = "0.0.0.0"
 
@@ -346,6 +346,9 @@ def gather():
 
 # ---------------- 系统信息(负载/CPU/内存/磁盘) ----------------
 
+DEFAULT_LANG = "zh"
+LANG_KEYS = ("zh", "en", "ja")
+
 def _read_proc_stat():
     """读 /proc/stat 的 cpu 行,返回 (idle, total) 累计 jiffies。"""
     for line in read("/proc/stat").splitlines():
@@ -415,45 +418,270 @@ def fmt_bytes(n):
     return f"{g:.0f} G" if g >= 100 else f"{g:.1f} G"
 
 
-def fmt_uptime(sec):
+def fmt_uptime(sec, lang=DEFAULT_LANG):
     if not sec:
         return "—"
     d, rem = divmod(int(sec), 86400)
     h, m = divmod(rem, 3600)
     m //= 60
     if d:
-        return f"{d} 天 {h} 小时"
+        return t(lang, "day_hour", d=d, h=h)
     if h:
-        return f"{h} 小时 {m} 分"
-    return f"{m} 分"
+        return t(lang, "hour_min", h=h, m=m)
+    return t(lang, "minute", m=m)
 
 
-def render_sysbar(s):
+def render_sysbar(s, lang=DEFAULT_LANG):
     """系统信息卡片条(打开页面时渲染一次,手动刷新才更新)。"""
     loadavg = " / ".join(f"{x:.2f}" for x in s["loadavg"]) if s.get("loadavg") else "—"
-    cpu = f'{s["cpu_usage"]}% · {s["cpu_count"]} 核'
+    cpu = f'{s["cpu_usage"]}% · {s["cpu_count"]} {t(lang, "unit_core")}'
     mem = s.get("mem") or {}
     mem_txt = f'{fmt_bytes(mem.get("used"))} / {fmt_bytes(mem.get("total"))} ({mem.get("percent", 0)}%)'
     disk = s.get("disk") or {}
     disk_txt = f'{fmt_bytes(disk.get("used"))} / {fmt_bytes(disk.get("total"))} ({disk.get("percent", 0)}%)'
     cards = [
-        ("负载", loadavg),
+        (t(lang, "sys_load"), loadavg),
         ("CPU", cpu),
-        ("内存", mem_txt),
-        ("磁盘 /", disk_txt),
-        ("运行", fmt_uptime(s.get("uptime"))),
+        (t(lang, "sys_mem"), mem_txt),
+        (t(lang, "sys_disk"), disk_txt),
+        (t(lang, "sys_up"), fmt_uptime(s.get("uptime"), lang)),
     ]
     return '<div class="sysbar" id="sysbar">' + "".join(
         f'<div class="stat"><div class="label">{lbl}</div>'
         f'<div class="value">{val}</div></div>' for lbl, val in cards) + "</div>"
 
 
+# ---------------- 国际化 ----------------
+# 三语(中文 / English / 日本語),按 Accept-Language 自动切换,?lang= 可强制覆盖。
+
+L10N = {
+    "zh": {
+        "title": "服务一览", "github_repo": "GitHub 仓库",
+        "updated": "更新于", "listen_ports": "个监听端口", "auto_refresh": "自动刷新",
+        "refresh": "⟳ 刷新",
+        "chip_user": "用户服务", "chip_docker": "Docker", "chip_system": "系统服务",
+        "chip_all": "全部", "chip_omp": "agent任务", "chip_watchdog": "定时任务",
+        "chip_tmux": "tmux状态", "chip_manage": "服务管理",
+        "th_svc": "服务", "th_port": "端口", "th_addr": "监听地址", "th_pid": "PID",
+        "th_cmd": "启动命令", "th_cwd": "工作目录",
+        "badge_docker": "容器", "badge_direct": "进程", "badge_self": "本页",
+        "badge_proxy": "Docker映射", "detail_cid": "容器ID", "detail_unit": "systemd 单元",
+        "loopback": "仅本机", "no_match": "没有匹配的服务",
+        "sys_load": "负载", "sys_cpu": "CPU", "sys_mem": "内存", "sys_disk": "磁盘 /",
+        "sys_up": "运行", "unit_core": "核",
+        "day_hour": "{d} 天 {h} 小时", "hour_min": "{h} 小时 {m} 分", "minute": "{m} 分",
+        "tbd_wd": "看门狗", "tbd_rd": "提醒", "tbd_sc": "定时",
+        "t_scope_user": "用户", "t_scope_sys": "系统", "t_last": "上次",
+        "t_cycle": "周期", "t_source": "来源", "t_cmd": "命令", "t_lastrun": "最近执行",
+        "t_task": "任务", "panel_watchdog": "定时任务 / 看门狗", "t_total": "共 {n} 项",
+        "t_none": "没有定时任务 / 看门狗",
+        "cron_hourly": "每小时", "cron_daily": "每天", "cron_weekly": "每周",
+        "cron_monthly": "每月", "cron_daily_twice": "每天 {h1}:{m1} / {h2}:{m2}",
+        "cron_daily_at": "每天 {h}:{m}", "cron_daily_raw": "每天 {hm}",
+        "cron_every_min": "每 {n} 分钟", "cron_every_hour": "每 {n} 小时",
+        "cron_every_sec": "每 {n}", "cron_weekly_at": "每周{days} {h}:00",
+        "cron_month_day": "{mon}月{dom}日 {h}:{m}", "cron_by_unit": "按 unit 配置",
+        "wd_sun": "日", "wd_mon": "一", "wd_tue": "二", "wd_wed": "三",
+        "wd_thu": "四", "wd_fri": "五", "wd_sat": "六",
+        "a_running": "运行中", "a_blocked": "阻塞", "a_idle": "空闲", "a_done": "已完成",
+        "a_status": "状态", "a_loc": "tmux / 目录", "a_active": "最近活动", "a_tool": "当前工具",
+        "a_ago": "{s}s 前", "a_openlog": "点击查看日志 · {g}",
+        "a_openterm": "点击查看实时画面 · pid {p}",
+        "a_title": "agent 任务", "a_hint": "{n} 项 · 点击标题查看日志",
+        "a_none": "没有检测到 agent", "a_th_agent": "Agent",
+        "a_loading": "加载中…", "a_recent": "最近活动", "a_term": "终端画面",
+        "a_nolog": "没有可用的日志 / 终端画面", "a_fail": "加载失败: {e}",
+        "aev_exit": "✕ 会话结束: {r}", "aev_goal": "🔀 目标: {o}", "aev_comp": "↻ 压缩: {s}",
+        "tmux_panel": "tmux 状态", "tmux_panes": "{n} 个窗格", "tmux_active": "当前",
+        "tmux_th_pane": "窗格", "tmux_th_title": "标题", "tmux_th_size": "尺寸",
+        "tmux_none": "tmux 未运行",
+        "m_server": "Zircon 服务器 (ServerCore)", "m_server_desc": "Mir3 传奇3 服务器主进程",
+        "m_bots": "Zircon 机器人 (BotRunner)", "m_bots_desc": "AI 机器人运行器",
+        "m_ts": "Tailscale", "m_ts_desc": "Tailscale 组网服务",
+        "m_start": "启动", "m_stop": "停止", "m_restart": "重启", "m_pause": "暂停",
+        "m_resume": "恢复",
+        "m_state_fail": "状态获取失败", "m_paused": "已暂停 (SIGSTOP)",
+        "m_title_stop": "停止服务", "m_title_restart": "重启服务",
+        "m_title_resume": "SIGCONT 恢复", "m_title_pause": "SIGSTOP 挂起,不终止进程",
+        "m_title_start": "启动服务",
+        "m_panel": "服务管理",
+        "m_hint": "zircon / tailscaled · 暂停=挂起进程(SIGSTOP),不终止",
+        "m_confirm": "确认要{label} {unit} 吗?", "m_doing": "执行中…",
+        "m_unknown_unit": "未知受管单元: {id}", "m_show_fail": "systemctl show 失败 (code {c})",
+        "m_unknown_action": "未知操作: {a}",
+        "m_done_start": "启动已执行", "m_done_stop": "停止已执行",
+        "m_done_restart": "重启已执行", "m_done_pause": "暂停已执行",
+        "m_done_resume": "恢复已执行", "m_fail": "{a}失败 (code {c})",
+        "m_badreq": "请求体解析失败: {e}",
+    },
+    "en": {
+        "title": "Services", "github_repo": "GitHub repo",
+        "updated": "updated", "listen_ports": "listening ports", "auto_refresh": "Auto refresh",
+        "refresh": "⟳ Refresh",
+        "chip_user": "User services", "chip_docker": "Docker", "chip_system": "System services",
+        "chip_all": "All", "chip_omp": "Agents", "chip_watchdog": "Tasks",
+        "chip_tmux": "tmux", "chip_manage": "Manage",
+        "th_svc": "Service", "th_port": "Port", "th_addr": "Listen addr", "th_pid": "PID",
+        "th_cmd": "Command", "th_cwd": "Work dir",
+        "badge_docker": "Container", "badge_direct": "Process", "badge_self": "This page",
+        "badge_proxy": "Docker map", "detail_cid": "Container ID", "detail_unit": "systemd unit",
+        "loopback": "local only", "no_match": "No matching services",
+        "sys_load": "Load", "sys_cpu": "CPU", "sys_mem": "Memory", "sys_disk": "Disk /",
+        "sys_up": "Uptime", "unit_core": "cores",
+        "day_hour": "{d}d {h}h", "hour_min": "{h}h {m}m", "minute": "{m}m",
+        "tbd_wd": "Watchdog", "tbd_rd": "Reminder", "tbd_sc": "Scheduled",
+        "t_scope_user": "user", "t_scope_sys": "system", "t_last": "last ",
+        "t_cycle": "Schedule", "t_source": "Source", "t_cmd": "Command", "t_lastrun": "Last run",
+        "t_task": "Task", "panel_watchdog": "Tasks / Watchdogs", "t_total": "{n} total",
+        "t_none": "No tasks / watchdogs",
+        "cron_hourly": "hourly", "cron_daily": "daily", "cron_weekly": "weekly",
+        "cron_monthly": "monthly", "cron_daily_twice": "daily {h1}:{m1} / {h2}:{m2}",
+        "cron_daily_at": "daily at {h}:{m}", "cron_daily_raw": "daily {hm}",
+        "cron_every_min": "every {n} min", "cron_every_hour": "every {n} h",
+        "cron_every_sec": "every {n}", "cron_weekly_at": "weekly {days} {h}:00",
+        "cron_month_day": "{mon}/{dom} {h}:{m}", "cron_by_unit": "per unit config",
+        "wd_sun": "Sun", "wd_mon": "Mon", "wd_tue": "Tue", "wd_wed": "Wed",
+        "wd_thu": "Thu", "wd_fri": "Fri", "wd_sat": "Sat",
+        "a_running": "Running", "a_blocked": "Blocked", "a_idle": "Idle", "a_done": "Completed",
+        "a_status": "Status", "a_loc": "tmux / dir", "a_active": "Last activity",
+        "a_tool": "Current tool", "a_ago": "{s}s ago",
+        "a_openlog": "Click for log · {g}", "a_openterm": "Click for live view · pid {p}",
+        "a_title": "Agent tasks", "a_hint": "{n} items · click title for log",
+        "a_none": "No agents detected", "a_th_agent": "Agent",
+        "a_loading": "Loading…", "a_recent": "Recent activity", "a_term": "Terminal",
+        "a_nolog": "No log / terminal available", "a_fail": "Failed: {e}",
+        "aev_exit": "✕ session ended: {r}", "aev_goal": "🔀 Goal: {o}", "aev_comp": "↻ Compaction: {s}",
+        "tmux_panel": "tmux status", "tmux_panes": "{n} panes", "tmux_active": "active",
+        "tmux_th_pane": "Pane", "tmux_th_title": "Title", "tmux_th_size": "Size",
+        "tmux_none": "tmux not running",
+        "m_server": "Zircon Server (ServerCore)", "m_server_desc": "Mir3 legend3 server main process",
+        "m_bots": "Zircon Bots (BotRunner)", "m_bots_desc": "AI bot runner",
+        "m_ts": "Tailscale", "m_ts_desc": "Tailscale mesh service",
+        "m_start": "Start", "m_stop": "Stop", "m_restart": "Restart", "m_pause": "Pause",
+        "m_resume": "Resume",
+        "m_state_fail": "Failed to get status", "m_paused": "Paused (SIGSTOP)",
+        "m_title_stop": "Stop service", "m_title_restart": "Restart service",
+        "m_title_resume": "Resume (SIGCONT)", "m_title_pause": "Suspend (SIGSTOP), keeps process",
+        "m_title_start": "Start service",
+        "m_panel": "Service control",
+        "m_hint": "zircon / tailscaled · pause = SIGSTOP suspend, not terminate",
+        "m_confirm": "Confirm {label} {unit}?", "m_doing": "Running…",
+        "m_unknown_unit": "Unknown unit: {id}", "m_show_fail": "systemctl show failed (code {c})",
+        "m_unknown_action": "Unknown action: {a}",
+        "m_done_start": "Start executed", "m_done_stop": "Stop executed",
+        "m_done_restart": "Restart executed", "m_done_pause": "Pause executed",
+        "m_done_resume": "Resume executed", "m_fail": "{a} failed (code {c})",
+        "m_badreq": "Bad request: {e}",
+    },
+    "ja": {
+        "title": "サービス一覧", "github_repo": "GitHub リポジトリ",
+        "updated": "更新", "listen_ports": "個の待受ポート", "auto_refresh": "自動更新",
+        "refresh": "⟳ 更新",
+        "chip_user": "ユーザーサービス", "chip_docker": "Docker", "chip_system": "システムサービス",
+        "chip_all": "すべて", "chip_omp": "エージェント", "chip_watchdog": "タスク",
+        "chip_tmux": "tmux", "chip_manage": "サービス管理",
+        "th_svc": "サービス", "th_port": "ポート", "th_addr": "待受アドレス", "th_pid": "PID",
+        "th_cmd": "起動コマンド", "th_cwd": "作業ディレクトリ",
+        "badge_docker": "コンテナ", "badge_direct": "プロセス", "badge_self": "このページ",
+        "badge_proxy": "Dockerマップ", "detail_cid": "コンテナID", "detail_unit": "systemd ユニット",
+        "loopback": "ローカルのみ", "no_match": "一致するサービスがありません",
+        "sys_load": "負荷", "sys_cpu": "CPU", "sys_mem": "メモリ", "sys_disk": "ディスク /",
+        "sys_up": "稼働", "unit_core": "コア",
+        "day_hour": "{d}日 {h}時間", "hour_min": "{h}時間 {m}分", "minute": "{m}分",
+        "tbd_wd": "ウォッチドッグ", "tbd_rd": "リマインダー", "tbd_sc": "定期",
+        "t_scope_user": "ユーザー", "t_scope_sys": "システム", "t_last": "前回 ",
+        "t_cycle": "周期", "t_source": "ソース", "t_cmd": "コマンド", "t_lastrun": "最終実行",
+        "t_task": "タスク", "panel_watchdog": "タスク / ウォッチドッグ", "t_total": "全 {n} 件",
+        "t_none": "タスク / ウォッチドッグはありません",
+        "cron_hourly": "毎時", "cron_daily": "毎日", "cron_weekly": "毎週",
+        "cron_monthly": "毎月", "cron_daily_twice": "毎日 {h1}:{m1} / {h2}:{m2}",
+        "cron_daily_at": "毎日 {h}:{m}", "cron_daily_raw": "毎日 {hm}",
+        "cron_every_min": "毎 {n} 分", "cron_every_hour": "毎 {n} 時間",
+        "cron_every_sec": "毎 {n}", "cron_weekly_at": "毎週{days} {h}:00",
+        "cron_month_day": "{mon}月{dom}日 {h}:{m}", "cron_by_unit": "unit 設定に従う",
+        "wd_sun": "日", "wd_mon": "月", "wd_tue": "火", "wd_wed": "水",
+        "wd_thu": "木", "wd_fri": "金", "wd_sat": "土",
+        "a_running": "実行中", "a_blocked": "ブロック", "a_idle": "待機", "a_done": "完了",
+        "a_status": "状態", "a_loc": "tmux / ディレクトリ", "a_active": "最終活動",
+        "a_tool": "現在のツール", "a_ago": "{s}秒前",
+        "a_openlog": "クリックでログ · {g}", "a_openterm": "クリックでライブ画面 · pid {p}",
+        "a_title": "エージェント", "a_hint": "{n} 件 · タイトルをクリックでログ",
+        "a_none": "エージェントが検出されません", "a_th_agent": "エージェント",
+        "a_loading": "読み込み中…", "a_recent": "最近の活動", "a_term": "ターミナル",
+        "a_nolog": "ログ / ターミナルはありません", "a_fail": "失敗: {e}",
+        "aev_exit": "✕ セッション終了: {r}", "aev_goal": "🔀 目標: {o}", "aev_comp": "↻ 圧縮: {s}",
+        "tmux_panel": "tmux 状態", "tmux_panes": "{n} ペイン", "tmux_active": "現在",
+        "tmux_th_pane": "ペイン", "tmux_th_title": "タイトル", "tmux_th_size": "サイズ",
+        "tmux_none": "tmux は起動していません",
+        "m_server": "Zircon サーバー (ServerCore)", "m_server_desc": "Mir3 レジェンド3 サーバー本体",
+        "m_bots": "Zircon ボット (BotRunner)", "m_bots_desc": "AI ボットランナー",
+        "m_ts": "Tailscale", "m_ts_desc": "Tailscale メッシュサービス",
+        "m_start": "起動", "m_stop": "停止", "m_restart": "再起動", "m_pause": "一時停止",
+        "m_resume": "再開",
+        "m_state_fail": "状態の取得に失敗", "m_paused": "一時停止中 (SIGSTOP)",
+        "m_title_stop": "サービス停止", "m_title_restart": "サービス再起動",
+        "m_title_resume": "再開 (SIGCONT)", "m_title_pause": "一時停止 (SIGSTOP),プロセスは維持",
+        "m_title_start": "サービス起動",
+        "m_panel": "サービス管理",
+        "m_hint": "zircon / tailscaled · 一時停止 = SIGSTOP でプロセスを保留,終了しない",
+        "m_confirm": "{label} {unit} を実行しますか?", "m_doing": "実行中…",
+        "m_unknown_unit": "不明なユニット: {id}", "m_show_fail": "systemctl show に失敗 (code {c})",
+        "m_unknown_action": "不明な操作: {a}",
+        "m_done_start": "起動しました", "m_done_stop": "停止しました",
+        "m_done_restart": "再起動しました", "m_done_pause": "一時停止しました",
+        "m_done_resume": "再開しました", "m_fail": "{a} に失敗 (code {c})",
+        "m_badreq": "リクエスト解析失敗: {e}",
+    },
+}
+
+
+def t(lang, key, **kw):
+    """取语言文本;带 {} 占位符时做格式化,缺键时原样返回 key。"""
+    s = L10N.get(lang, L10N[DEFAULT_LANG]).get(key, key)
+    if kw:
+        try:
+            return s.format(**kw)
+        except (KeyError, IndexError):
+            return s
+    return s
+
+
+_T_PAT = re.compile(r"\{\{T:(\w+)\}\}")
+
+
+def _apply_t(template, lang):
+    """替换模板里的 {{T:key}} 占位符。"""
+    return _T_PAT.sub(lambda m: t(lang, m.group(1)), template)
+
+
+def detect_lang(accept, query=""):
+    """Accept-Language 检测 + ?lang= 强制覆盖;zh/en/ja,缺省回退 zh。"""
+    for item in (query or "").split("&"):
+        if item.startswith("lang="):
+            v = item.split("=", 1)[1].lower()
+            if v in LANG_KEYS:
+                return v
+            v = v.split("-")[0]
+            if v in LANG_KEYS:
+                return v
+            break
+    if accept:
+        for part in accept.split(","):
+            tag = part.split(";")[0].strip().lower()
+            if tag in LANG_KEYS:
+                return tag
+            base = tag.split("-")[0]
+            if base in LANG_KEYS:
+                return base
+    return DEFAULT_LANG
+
+
 # ---------------- 页面 ----------------
 
 BADGE = {
-    "docker": ("容器", "badge-docker"),
-    "systemd": ("systemd", "badge-systemd"),
-    "direct": ("进程", "badge-direct"),
+    "docker": "badge-docker",
+    "systemd": "badge-systemd",
+    "direct": "badge-direct",
 }
 
 
@@ -471,51 +699,55 @@ WATCHDOG_RE = re.compile(r"watchdog|monitor|health|guard|keepalive|heartbeat", r
 REMINDER_RE = re.compile(r"reminder|notice|notify|remind", re.I)
 _tasks_cache = {"t": 0.0, "data": None}
 
-WEEKDAYS = {"0": "日", "1": "一", "2": "二", "3": "三",
-            "4": "四", "5": "五", "6": "六", "7": "日"}
+WEEKDAYS = {
+    "zh": {"0": "日", "1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六", "7": "日"},
+    "en": {"0": "Sun", "1": "Mon", "2": "Tue", "3": "Wed", "4": "Thu", "5": "Fri", "6": "Sat", "7": "Sun"},
+    "ja": {"0": "日", "1": "月", "2": "火", "3": "水", "4": "木", "5": "金", "6": "土", "7": "日"},
+}
 
 
-def human_cron(fields):
-    """5 字段 cron 或 systemd OnCalendar 表达式 -> 人类可读中文。"""
+def human_cron(fields, lang=DEFAULT_LANG):
+    """5 字段 cron 或 systemd OnCalendar 表达式 -> 人类可读文本(按语言)。"""
     if isinstance(fields, str):
         s = fields.strip()
         # systemd OnCalendar 格式
         if s == "hourly":
-            return "每小时"
+            return t(lang, "cron_hourly")
         if s == "daily":
-            return "每天"
+            return t(lang, "cron_daily")
         if s == "weekly":
-            return "每周"
+            return t(lang, "cron_weekly")
         if s == "monthly":
-            return "每月"
+            return t(lang, "cron_monthly")
         if s.startswith("*-*-* "):
             hm = s.split(None, 1)[1]
             if hm == "6,18:00":
-                return "每天 6:00 / 18:00"
+                return t(lang, "cron_daily_twice", h1="6", m1="00", h2="18", m2="00")
             if ":" in hm:
                 h, m = hm.split(":", 1)
-                return f"每天 {h}:{m}"
-            return f"每天 {hm}"
+                return t(lang, "cron_daily_at", h=h, m=m)
+            return t(lang, "cron_daily_raw", hm=hm)
         if s.startswith("*:"):
             # systemd `*:0/5` = 每 5 分钟
             step = s[2:].split("/", 1)
-            return f"每 {step[1]} 分钟" if len(step) == 2 else f"每 {step[0]} 分钟"
+            return t(lang, "cron_every_min", n=step[1] if len(step) == 2 else step[0])
         if s.startswith("*-*-* "):
-            return s.replace("*-*-* ", "每天 ")
+            return t(lang, "cron_daily_raw", hm=s.replace("*-*-* ", ""))
         return s
     m, h, dom, mon, dow = fields
+    wd = WEEKDAYS.get(lang, WEEKDAYS[DEFAULT_LANG])
     star = dom == "*" and mon == "*" and dow == "*"
     if m.startswith("*/") and h == "*" and star:
-        return f"每 {m[2:]} 分钟"
+        return t(lang, "cron_every_min", n=m[2:])
     if m == "0" and h.startswith("*/") and star:
-        return f"每 {h[2:]} 小时"
+        return t(lang, "cron_every_hour", n=h[2:])
     if m == "0" and h not in "*" and star:
-        return f"每天 {h}:00"
+        return t(lang, "cron_daily_at", h=h, m="00")
     if m == "0" and h not in "*" and dom == "*" and mon == "*" and dow not in "*":
-        days = "/".join(WEEKDAYS.get(d, d) for d in dow.split(","))
-        return f"每周{days} {h}:00"
+        days = "/".join(wd.get(d, d) for d in dow.split(","))
+        return t(lang, "cron_weekly_at", days=days, h=h)
     if m not in "*" and h not in "*" and dom not in "*" and mon not in "*" and dow == "*":
-        return f"{mon}月{dom}日 {h}:{int(m):02d}"
+        return t(lang, "cron_month_day", mon=mon, dom=dom, h=h, m=f"{int(m):02d}")
     return " ".join(fields)
 
 
@@ -529,7 +761,7 @@ def classify_task(name, command):
     return "scheduled"
 
 
-def parse_cron_lines(lines, scope):
+def parse_cron_lines(lines, scope, lang=DEFAULT_LANG):
     """解析 crontab 文本行 -> 任务 dict 列表。"""
     tasks = []
     for raw in lines:
@@ -545,36 +777,36 @@ def parse_cron_lines(lines, scope):
             name = cmd
         tasks.append({
             "name": name, "kind": "cron", "scope": scope,
-            "schedule": human_cron(fields), "expr": " ".join(fields),
+            "schedule": human_cron(fields, lang), "expr": " ".join(fields),
             "next": None, "last": None, "state": "enabled",
             "type": classify_task(name, cmd), "command": cmd,
         })
     return tasks
 
 
-def _read_cron_file(path, scope, out):
+def _read_cron_file(path, scope, lang, out):
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
-            out.extend(parse_cron_lines(f, scope))
+            out.extend(parse_cron_lines(f, scope, lang))
     except OSError:
         pass
 
 
-def scan_cron():
+def scan_cron(lang=DEFAULT_LANG):
     tasks = []
     for scope, path in CRON_FILES:
-        _read_cron_file(path, scope, tasks)
+        _read_cron_file(path, scope, lang, tasks)
     try:
         for fn in sorted(os.listdir(CRON_D_DIR)):
             if fn.startswith("."):
                 continue
-            _read_cron_file(os.path.join(CRON_D_DIR, fn), "system", tasks)
+            _read_cron_file(os.path.join(CRON_D_DIR, fn), "system", lang, tasks)
     except OSError:
         pass
     return tasks
 
 
-def _run_timers(scope):
+def _run_timers(scope, lang=DEFAULT_LANG):
     """枚举 timer units 并读结构化信息。"""
     env = None
     cmd = ["systemctl"]
@@ -616,8 +848,8 @@ def _run_timers(scope):
             cal = m.group(1).strip()
         m2 = re.search(r"OnUnitActiveSec\s*=\s*(.+)", path)
         if m2:
-            cal = f"每 {m2.group(1).strip()}"
-        schedule = human_cron(cal) if cal else "按 unit 配置"
+            cal = t(lang, "cron_every_sec", n=m2.group(1).strip())
+        schedule = human_cron(cal, lang) if cal else t(lang, "cron_by_unit")
         def to_ts(v):
             if not v or v == "n/a":
                 return None
@@ -687,19 +919,100 @@ def _cron_last_runs():
     return last
 
 
-def scan_tasks():
-    """汇总所有定时/看门狗任务(8 秒缓存)。"""
+def scan_tasks(lang=DEFAULT_LANG):
+    """汇总所有定时/看门狗任务(8 秒缓存,按语言分开)。"""
     now = time.time()
-    if _tasks_cache["data"] is not None and now - _tasks_cache["t"] < 8:
-        return _tasks_cache["data"]
-    tasks = scan_cron() + _run_timers("system") + _run_timers("user")
+    data = _tasks_cache["data"]
+    if isinstance(data, dict) and data.get(lang) is not None and now - _tasks_cache["t"] < 8:
+        return data[lang]
+    tasks = scan_cron(lang) + _run_timers("system", lang) + _run_timers("user", lang)
     last_runs = _cron_last_runs()
     for t in tasks:
         if t["kind"] == "cron":
             t["last"] = last_runs.get(_cmd_key(t["command"]))
     tasks.sort(key=lambda t: (t["type"] != "watchdog", t["name"]))
-    _tasks_cache.update({"t": now, "data": tasks})
+    d = _tasks_cache["data"]
+    if not isinstance(d, dict):
+        d = {}
+    d[lang] = tasks
+    _tasks_cache.update({"t": now, "data": d})
     return tasks
+
+
+# ---------------- 服务管理 (zircon / tailscaled) ----------------
+# 对本机关键 systemd 单元提供 启动 / 停止 / 重启 / 暂停(SIGSTOP)/ 恢复(SIGCONT)。
+# 系统服务需要 root: 走与 _run_sudo_ss 相同的免密 sudo 通道执行 systemctl。
+
+MANAGE_UNITS = [
+    {"id": "zircon-server", "unit": "zircon-server.service",
+     "label": "Zircon 服务器 (ServerCore)", "desc": "Mir3 传奇3 服务器主进程"},
+    {"id": "zircon-bots", "unit": "zircon-bots.service",
+     "label": "Zircon 机器人 (BotRunner)", "desc": "AI 机器人运行器"},
+    {"id": "tailscaled", "unit": "tailscaled.service",
+     "label": "Tailscale", "desc": "Tailscale 组网服务"},
+]
+
+ACTION_LABELS = {"start": "启动", "stop": "停止", "restart": "重启",
+                 "pause": "暂停", "resume": "恢复"}
+
+
+def _sysctl(*args, timeout=10):
+    try:
+        r = subprocess.run(["sudo", "-n", "systemctl", *args],
+                           capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout.strip(), r.stderr.strip()
+    except Exception as e:
+        return -1, "", str(e)
+
+
+def manage_status(unit_id, lang=DEFAULT_LANG):
+    """查询一个受管单元的状态: ActiveState / SubState / MainPID / 是否被 SIGSTOP 挂起。"""
+    cfg = next((u for u in MANAGE_UNITS if u["id"] == unit_id), None)
+    if not cfg:
+        return {"id": unit_id, "ok": False, "msg": t(lang, "m_unknown_unit", id=unit_id)}
+    unit = cfg["unit"]
+    code, out, err = _sysctl("show", unit, "-p", "LoadState", "-p", "ActiveState",
+                             "-p", "SubState", "-p", "MainPID", "-p", "Description")
+    if code != 0:
+        return {"id": unit_id, "ok": False, "msg": err or t(lang, "m_show_fail", c=code)}
+    info = {}
+    for line in out.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            info[k] = v
+    pid = info.get("MainPID") or ""
+    stopped = False
+    if pid and pid.isdigit() and int(pid) > 1:
+        try:
+            with open(f"/proc/{pid}/stat", encoding="utf-8", errors="replace") as f:
+                fields = f.read().split()
+            # 第 3 字段 = 进程状态; 'T' = 被 SIGSTOP 挂起
+            stopped = len(fields) > 2 and fields[2] == "T"
+        except OSError:
+            pass
+    return {"id": unit_id, "ok": True,
+            "active": info.get("ActiveState", "?"),
+            "sub": info.get("SubState", "?"),
+            "load": info.get("LoadState", "?"),
+            "pid": pid, "stopped": stopped,
+            "desc": info.get("Description", cfg["desc"])}
+
+
+def manage_action(unit_id, action, lang=DEFAULT_LANG):
+    """执行 start / stop / restart / pause(SIGSTOP) / resume(SIGCONT)。"""
+    cfg = next((u for u in MANAGE_UNITS if u["id"] == unit_id), None)
+    if not cfg:
+        return {"ok": False, "msg": t(lang, "m_unknown_unit", id=unit_id)}
+    if action not in ACTION_LABELS:
+        return {"ok": False, "msg": t(lang, "m_unknown_action", a=action)}
+    if action in ("pause", "resume"):
+        sig = "STOP" if action == "pause" else "CONT"
+        code, out, err = _sysctl("kill", "-s", sig, "--kill-who=main", cfg["unit"])
+    else:
+        code, out, err = _sysctl(action, cfg["unit"])
+    if code == 0:
+        return {"ok": True, "msg": t(lang, "m_done_" + action)}
+    return {"ok": False, "msg": err or out or t(lang, "m_fail", a=ACTION_LABELS[action], c=code)}
 
 
 # ---------------- OMP Goal 状态 ----------------
@@ -886,7 +1199,7 @@ def scan_tmux():
 
 # ---------------- Agent 日志 / 实时画面 ----------------
 # 点击 agent 标题展开:OMP jsonl 事件时间线 + tmux 窗格 capture-pane。
-def _event_text(event):
+def _event_text(event, lang=DEFAULT_LANG):
     """把一条 omp session 事件压成可读摘要行,返回 (kind, text)。"""
     t = event.get("type", "")
     ts = event.get("timestamp", "")
@@ -925,18 +1238,18 @@ def _event_text(event):
         if "tool_execution_end" in ct:
             return ("tool", f"[{ts}] ✓ {data.get('toolName', '—')}")
         if "session_exit" in ct:
-            return ("exit", f"[{ts}] ✕ 会话结束: {data.get('reason', '—')}")
+            return ("exit", f"[{ts}] {t(lang, 'aev_exit', r=data.get('reason', '—'))}")
         if "mode_change" in ct:
             goal = data.get("goal") or {}
             obj = " ".join(str(goal.get("objective") or "").split())
-            return ("goal", f"[{ts}] 🔀 目标: {obj[:120]}")
+            return ("goal", f"[{ts}] {t(lang, 'aev_goal', o=obj[:120])}")
         return ("evt", f"[{ts}] · {ct}")
     if t == "compaction":
-        return ("goal", f"[{ts}] ↻ 压缩: {str(event.get('summary', ''))[:120]}")
+        return ("goal", f"[{ts}] {t(lang, 'aev_comp', s=str(event.get('summary', ''))[:120])}")
     return ("evt", f"[{ts}] · {t}") if ts else None
 
 
-def scan_agent_log(sid):
+def scan_agent_log(sid, lang=DEFAULT_LANG):
     """OMP session 事件时间线(尾部最近 ~18 条)。"""
     if not sid:
         return []
@@ -953,7 +1266,7 @@ def scan_agent_log(sid):
             event = json.loads(raw)
         except (ValueError, TypeError):
             continue
-        row = _event_text(event)
+        row = _event_text(event, lang)
         if row and row[0] != "evt":
             events.append(row)
         if len(events) >= 18:
@@ -987,28 +1300,29 @@ def _tmux_by_cwd(cwd):
             return f'{p["session"]}:{p["pane"]}'
     return None
 
-def render_html(host_header, entries, updated_ts):
+def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG):
     rows = []
     for e in entries:
         ip, port = e["ip"], e["port"]
         is_loopback = ip.startswith("127.") or ip == "::1" or ip.startswith("::ffff:127.")
-        badge_text, badge_cls = BADGE.get(e["type"], ("进程", "badge-direct"))
+        badge_cls = BADGE.get(e["type"], "badge-direct")
+        badge_text = t(lang, "badge_docker") if e["type"] == "docker" else t(lang, "badge_direct")
         detail = ""
         if e.get("is_self"):
-            badge_text, badge_cls = "本页", "badge-self"
+            badge_text, badge_cls = t(lang, "badge_self"), "badge-self"
         elif e.get("docker_proxy"):
-            badge_text = "Docker映射"
+            badge_text = t(lang, "badge_proxy")
         elif e["type"] == "docker" and e.get("container_id"):
-            detail = f'<span class="detail" title="容器ID">{escape(e["container_id"])}</span>'
+            detail = f'<span class="detail" title="{t(lang, "detail_cid")}">{escape(e["container_id"])}</span>'
         elif e["type"] == "systemd" and e.get("unit"):
-            detail = f'<span class="detail" title="systemd 单元">{escape(e["unit"])}</span>'
+            detail = f'<span class="detail" title="{t(lang, "detail_unit")}">{escape(e["unit"])}</span>'
         cmd = escape(e["cmdline"] or "—")
         cwd = escape(e["cwd"] or "—")
         pids = ", ".join(str(p) for p in e.get("pids") or ["?"])
         hostname = host_header.split(":")[0]  # 去掉端口,用访问 dashboard 的主机名
         if is_loopback:
             link = f"http://127.0.0.1:{port}/"
-            loop = '<span class="local">仅本机</span>'
+            loop = f'<span class="local">{t(lang, "loopback")}</span>'
         else:
             link = f"http://{hostname}:{port}/"
             loop = ""
@@ -1016,30 +1330,33 @@ def render_html(host_header, entries, updated_ts):
             f'<tr>'
             f'<td class="name"><span class="svc">{escape(e["name"])}</span>'
             f'<span class="badge {badge_cls}">{badge_text}</span>{detail}</td>'
-            f'<td class="port"><a href="{link}" target="_blank" rel="noopener">{port}</a></td>'
-            f'<td class="addr">{escape(ip)} {loop}</td>'
-            f'<td class="pid">{pids}</td>'
-            f'<td class="cmd">{cmd}</td>'
-            f'<td class="cwd">{cwd}</td>'
+            f'<td class="port" data-label="{t(lang, "th_port")}"><a href="{link}" target="_blank" rel="noopener">{port}</a></td>'
+            f'<td class="addr" data-label="{t(lang, "th_addr")}">{escape(ip)} {loop}</td>'
+            f'<td class="pid" data-label="PID">{pids}</td>'
+            f'<td class="cmd" data-label="{t(lang, "th_cmd")}">{cmd}</td>'
+            f'<td class="cwd" data-label="{t(lang, "th_cwd")}">{cwd}</td>'
             f'</tr>')
     table = "\n".join(rows)
     hostname = socket.gethostname()
-    return (PAGE_TEMPLATE
+    body = (PAGE_TEMPLATE
+            .replace("{{LANG}}", lang)
+            .replace("{{T_JSON}}", json.dumps(L10N.get(lang, L10N[DEFAULT_LANG]), ensure_ascii=False))
             .replace("{{HOST}}", escape(host_header))
             .replace("{{HOSTNAME}}", escape(hostname))
             .replace("{{AUTO}}", str(AUTO_REFRESH_SEC))
-            .replace("{{SYSBAR}}", render_sysbar(sys_info()))
+            .replace("{{SYSBAR}}", render_sysbar(sys_info(), lang))
             .replace("{{UPDATED}}", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(updated_ts)))
             .replace("{{COUNT}}", str(len(entries)))
             .replace("<!--TABLE-->", table))
+    return _apply_t(body, lang)
 
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{LANG}}">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>服务一览 · {{HOSTNAME}}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{T:title}} · {{HOSTNAME}}</title>
 <link rel="icon" href="data:,">
 <style>
   :root { color-scheme: dark; }
@@ -1101,6 +1418,19 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
              font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.45;
              color: #9fd4a0; overflow-x: auto; white-space: pre; margin: 2px 0 8px; }
   .aglog-empty { color: #666; font-size: 12px; padding: 8px 0; }
+  .mgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; padding: 4px 0 12px; }
+  .mcard { background: #131313; border: 1px solid #222; border-radius: 8px; padding: 12px 14px; }
+  .mcard .mhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .mcard .mname { font-weight: 600; color: #eee; font-size: 14px; }
+  .mcard .mdesc { color: #777; font-size: 11px; }
+  .mcard .mstate { margin: 8px 0 10px; font-size: 12.5px; color: #b0b0b0; display: flex; align-items: center; gap: 6px; }
+  .mcard .mdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .mcard .mbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mcard .mbtn { background: #1d1d1d; border: 1px solid #2e2e2e; color: #d6d6d6; border-radius: 6px;
+                  padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
+  .mcard .mbtn:hover { border-color: #555; color: #fff; }
+  .mcard .mbtn:disabled { opacity: .5; cursor: default; }
+  .mcard .mresult { margin-top: 8px; font-size: 12px; color: #6ec89a; min-height: 15px; word-break: break-all; }
   .chip { background: #161616; color: #b0b0b0; border: 1px solid #2a2a2a; border-radius: 999px;
           padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
   .chip:hover { background: #1f1f1f; }
@@ -1136,42 +1466,111 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .local { color: #999; font-size: 11px; }
   .empty { color: #8a8a8a; text-align: center; padding: 48px 0; }
   @media (max-width: 900px) { .cmd, .cwd { min-width: 120px; } }
+
+  /* ---------------- 手机端 (<768px) ----------------
+     服务表/面板表 → 卡片化;chips 横滚;按钮触控加大。 */
+  @media (max-width: 768px) {
+    header { padding: 10px 12px; gap: 8px; }
+    header h1 { font-size: 15px; }
+    header h1 a { display: none; }
+    header .meta { width: 100%; order: 3; font-size: 11.5px; line-height: 1.5; }
+    header .spacer { display: none; }
+    label.auto { font-size: 12px; }
+    button { padding: 9px 14px; font-size: 13px; min-height: 38px; }
+    main { padding: 12px 12px 32px; }
+    .sysbar { gap: 8px; margin-bottom: 10px; }
+    .stat { min-width: calc(50% - 6px); flex: 1 1 calc(50% - 6px); padding: 8px 12px; }
+    .stat .value { font-size: 12.5px; }
+
+    /* chips 横向滚动 */
+    .filters { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+               scrollbar-width: none; margin: 0 -12px 10px; padding: 0 12px 4px; }
+    .filters::-webkit-scrollbar { display: none; }
+    .filters .spacer { display: none; }
+    .chip { flex: none; padding: 8px 14px; font-size: 12.5px; }
+
+    /* 服务表 → 卡片 */
+    #svc thead { display: none; }
+    #svc tbody tr { display: block; background: #131313; border: 1px solid #222;
+                    border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+    #svc tbody td { display: flex; justify-content: space-between; gap: 12px;
+                    align-items: baseline; border: none; padding: 3px 0;
+                    white-space: normal !important; }
+    #svc tbody td::before { content: attr(data-label); color: #777; font-size: 11px;
+                            flex: none; }
+    #svc tbody td .detail { margin-top: 0; }
+    #svc tbody td.name { display: block; margin-bottom: 4px; }
+    #svc tbody td.name::before { content: none; }
+    #svc tbody td .cmd, #svc tbody td .cwd { min-width: 0; }
+    .colswitch, .tcol { display: none; }
+    .empty { padding: 32px 0; }
+    #svc tbody tr:has(td.empty) { background: none; border: none; padding: 0; }
+    #svc tbody td.empty, .watchdog-panel td.empty {
+      display: block !important; text-align: center; justify-content: center; }
+    #svc tbody td.empty::before, .watchdog-panel td.empty::before { content: none; }
+
+    /* watchdog / agent / tmux 面板表 → 卡片 */
+    .watchdog-panel { padding: 10px 12px; }
+    .watchdog-panel thead { display: none; }
+    .watchdog-panel tbody tr { display: block; padding: 6px 0; }
+    .watchdog-panel td { display: flex; justify-content: space-between; gap: 12px;
+                         align-items: baseline; border: none; padding: 3px 0;
+                         white-space: normal !important; }
+    .watchdog-panel td::before { content: attr(data-label); color: #777; font-size: 11px;
+                                 flex: none; }
+    .watchdog-panel td:first-child { display: block; padding: 2px 0 4px; }
+    .watchdog-panel td:first-child::before { content: none; }
+    .watchdog-panel .tcmd { max-width: none; }
+    .watchdog-panel .agent-detail td { display: block; padding: 8px 4px; }
+    .watchdog-panel .agent-detail td::before { content: none; }
+    .aglog-row { flex-wrap: wrap; gap: 2px 8px; }
+    .aglog-ts { flex: none; }
+    .termlog { font-size: 10.5px; }
+
+    /* 服务管理卡片 */
+    .mgrid { grid-template-columns: 1fr; gap: 10px; }
+    .mcard { padding: 12px; }
+    .mcard .mbtns { gap: 6px; }
+    .mcard .mbtn { flex: 1 1 auto; min-width: 88px; padding: 11px 8px; font-size: 13.5px; }
+    .mcard .mresult { font-size: 12.5px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>服务一览
+  <h1>{{T:title}}
     <a href="https://github.com/iamcheyan/svc-dashboard" target="_blank" rel="noopener"
-       title="GitHub 仓库" style="text-decoration:none; margin-left:8px; vertical-align:-3px;">
+       title="{{T:github_repo}}" style="text-decoration:none; margin-left:8px; vertical-align:-3px;">
       <svg width="18" height="18" viewBox="0 0 16 16" fill="#d6d6d6" aria-hidden="true">
         <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
       </svg>
     </a>
   </h1>
-  <span class="meta">{{HOSTNAME}} · 更新于 <span id="updated">{{UPDATED}}</span> · <span id="count">{{COUNT}}</span> 个监听端口</span>
+  <span class="meta">{{HOSTNAME}} · {{T:updated}} <span id="updated">{{UPDATED}}</span> · <span id="count">{{COUNT}}</span> {{T:listen_ports}}</span>
   <span class="spacer"></span>
-  <label class="auto"><input type="checkbox" id="auto" checked> 自动刷新 ({{AUTO}}s)</label>
-  <button id="refresh">⟳ 刷新</button>
+  <label class="auto"><input type="checkbox" id="auto" checked> {{T:auto_refresh}} ({{AUTO}}s)</label>
+  <button id="refresh">{{T:refresh}}</button>
 </header>
 <main>
 {{SYSBAR}}
 <div class="filters" id="filters">
-  <button class="chip active" data-f="user">用户服务 <span id="n-user"></span></button>
-  <button class="chip" data-f="docker">Docker <span id="n-docker"></span></button>
-  <button class="chip" data-f="system">系统服务 <span id="n-system"></span></button>
-  <button class="chip" data-f="all">全部 <span id="n-all"></span></button>
+  <button class="chip active" data-f="user">{{T:chip_user}} <span id="n-user"></span></button>
+  <button class="chip" data-f="docker">{{T:chip_docker}} <span id="n-docker"></span></button>
+  <button class="chip" data-f="system">{{T:chip_system}} <span id="n-system"></span></button>
+  <button class="chip" data-f="all">{{T:chip_all}} <span id="n-all"></span></button>
   <span class="spacer"></span>
-  <button class="chip" data-f="omp">agent任务 <span id="n-omp"></span></button>
-  <button class="chip" data-f="watchdog">定时任务 <span id="n-watchdog"></span></button>
-  <button class="chip" data-f="tmux">tmux状态 <span id="n-tmux"></span></button>
+  <button class="chip" data-f="omp">{{T:chip_omp}} <span id="n-omp"></span></button>
+  <button class="chip" data-f="watchdog">{{T:chip_watchdog}} <span id="n-watchdog"></span></button>
+  <button class="chip" data-f="tmux">{{T:chip_tmux}} <span id="n-tmux"></span></button>
+  <button class="chip" data-f="manage">{{T:chip_manage}} <span id="n-manage"></span></button>
 </div>
 <div id="tasks" hidden></div>
 <table id="svc" data-col="cmd">
   <thead><tr>
-    <th>服务</th><th>端口</th><th>监听地址</th><th>PID</th>
+    <th>{{T:th_svc}}</th><th>{{T:th_port}}</th><th>{{T:th_addr}}</th><th>{{T:th_pid}}</th>
     <th class="colswitch">
-      <button class="tcol active" data-col="cmd">启动命令</button>
-      <button class="tcol" data-col="cwd">工作目录</button>
+      <button class="tcol active" data-col="cmd">{{T:th_cmd}}</button>
+      <button class="tcol" data-col="cwd">{{T:th_cwd}}</button>
     </th>
   </tr></thead>
   <tbody>
@@ -1181,6 +1580,9 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 </main>
 <script>
 const AUTO = {{AUTO}};
+const LANG = "{{LANG}}";
+const T = {{T_JSON}};
+const t = (k, p) => { let s = T[k] ?? k; if (p !== undefined) { for (const [a, b] of Object.entries(p)) s = s.split("{" + a + "}").join(b); } return s; };
 let autoOn = true;
 let filter = "user"; // 默认只显示用户服务, 隐藏系统服务
 let services = [];
@@ -1192,30 +1594,31 @@ const FILTERS = {
   system: (e) => e.scope === "system",
   omp:     () => false, // OMP 走独立面板,不混进服务表
   watchdog: () => false, // 看门狗走独立面板,不混进服务表
+  manage:  () => false, // 服务管理走独立面板
   all:    () => true,
 };
 
 function row(e) {
-  const badge = {docker:["容器","badge-docker"], systemd:["systemd","badge-systemd"], direct:["进程","badge-direct"]}[e.type] || ["进程","badge-direct"];
+  const badge = {docker:[t("badge_docker"),"badge-docker"], systemd:["systemd","badge-systemd"], direct:[t("badge_direct"),"badge-direct"]}[e.type] || [t("badge_direct"),"badge-direct"];
   let text = badge[0], detail = "";
-  if (e.is_self) { text = "本页"; badge[1] = "badge-self"; }
-  else if (e.docker_proxy) { text = "Docker映射"; }
-  else if (e.type === "docker" && e.container_id) detail = `<span class='detail' title='容器ID'>${e.container_id}</span>`;
-  else if (e.type === "systemd" && e.unit) detail = `<span class='detail' title='systemd 单元'>${e.unit}</span>`;
+  if (e.is_self) { text = t("badge_self"); badge[1] = "badge-self"; }
+  else if (e.docker_proxy) { text = t("badge_proxy"); }
+  else if (e.type === "docker" && e.container_id) detail = `<span class='detail' title='${t("detail_cid")}'>${e.container_id}</span>`;
+  else if (e.type === "systemd" && e.unit) detail = `<span class='detail' title='${t("detail_unit")}'>${e.unit}</span>`;
   const ip = e.ip;
   const loopback = ip.startsWith("127.") || ip === "::1" || ip.startsWith("::ffff:127.");
   const link = loopback ? `http://127.0.0.1:${e.port}/` : `http://${location.hostname}:${e.port}/`;
-  const loop = loopback ? ' <span class="local">仅本机</span>' : "";
+  const loop = loopback ? ' <span class="local">' + t("loopback") + '</span>' : "";
   const cmd = e.cmdline || "—";
   const cwd = e.cwd || "—";
   const esc = (s) => s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   return `<tr>
     <td class='name'><span class='svc'>${esc(e.name)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
-    <td class='port'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
-    <td class='addr'>${esc(ip)}${loop}</td>
-    <td class='pid'>${e.pids.join(", ")}</td>
-    <td class='cmd'>${esc(cmd)}</td>
-    <td class='cwd'>${esc(cwd)}</td>
+    <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
+    <td class='addr' data-label='${t("th_addr")}'>${esc(ip)}${loop}</td>
+    <td class='pid' data-label='PID'>${e.pids.join(", ")}</td>
+    <td class='cmd' data-label='${t("th_cmd")}'>${esc(cmd)}</td>
+    <td class='cwd' data-label='${t("th_cwd")}'>${esc(cwd)}</td>
   </tr>`;
 }
 
@@ -1228,28 +1631,34 @@ function applyFilter() {
   if (filter === "omp") {
     $("svc").style.display = "none";
     loadAgents().then(renderAgentPanel);
-    $("count").textContent = "agent任务";
+    $("count").textContent = t("chip_omp");
     return;
   }
   if (filter === "tmux") {
     $("svc").style.display = "none";
     loadTmux().then(renderTmuxPanel);
-    $("count").textContent = "tmux状态";
+    $("count").textContent = t("chip_tmux");
     return;
   }
   if (filter === "watchdog") {
     // 看门狗模式:隐藏服务表,显示看门狗面板
     $("svc").style.display = "none";
     loadTasks().then(renderWatchdogPanel);
-    $("count").textContent = "定时任务";
+    $("count").textContent = t("chip_watchdog");
+    return;
+  }
+  if (filter === "manage") {
+    $("svc").style.display = "none";
+    loadManage();
+    $("count").textContent = t("chip_manage");
     return;
   }
   $("svc").style.display = "";
   $("tasks").hidden = true;
   const tbody = $("svc").querySelector("tbody");
   tbody.innerHTML = shown.length ? shown.map(row).join("") :
-    '<tr><td class="empty" colspan="5">没有匹配的服务</td></tr>';
-  $("count").textContent = shown.length + " 个监听端口";
+    '<tr><td class="empty" colspan="5">' + t("no_match") + '</td></tr>';
+  $("count").textContent = shown.length;
 }
 
 function renderSys(s) {
@@ -1257,37 +1666,39 @@ function renderSys(s) {
   const fmtUp = (sec) => {
     if (!sec) return "—";
     const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
-    return d ? `${d} 天 ${h} 小时` : h ? `${h} 小时 ${m} 分` : `${m} 分`;
+    if (d) return t("day_hour", { d, h });
+    if (h) return t("hour_min", { h, m });
+    return t("minute", { m });
   };
   const mem = s.mem || {}, disk = s.disk || {};
   const cards = [
-    ["负载", (s.loadavg || []).join(" / ") || "—"],
-    ["CPU", `${s.cpu_usage}% · ${s.cpu_count} 核`],
-    ["内存", `${fmtBytes(mem.used)} / ${fmtBytes(mem.total)} (${mem.percent || 0}%)`],
-    ["磁盘 /", `${fmtBytes(disk.used)} / ${fmtBytes(disk.total)} (${disk.percent || 0}%)`],
-    ["运行", fmtUp(s.uptime)],
+    [t("sys_load"), (s.loadavg || []).join(" / ") || "—"],
+    ["CPU", `${s.cpu_usage}% · ${s.cpu_count} ${t("unit_core")}`],
+    [t("sys_mem"), `${fmtBytes(mem.used)} / ${fmtBytes(mem.total)} (${mem.percent || 0}%)`],
+    [t("sys_disk"), `${fmtBytes(disk.used)} / ${fmtBytes(disk.total)} (${disk.percent || 0}%)`],
+    [t("sys_up"), fmtUp(s.uptime)],
   ];
   $("sysbar").innerHTML = cards.map(([l, v]) =>
     `<div class='stat'><div class='label'>${l}</div><div class='value'>${v}</div></div>`).join("");
 }
 
 const TYPE_BADGE = {
-  watchdog: ["看门狗", "tbadge wd"],
-  reminder: ["提醒", "tbadge rd"],
-  scheduled: ["定时", "tbadge sc"],
+  watchdog: [t("tbd_wd"), "tbadge wd"],
+  reminder: [t("tbd_rd"), "tbadge rd"],
+  scheduled: [t("tbd_sc"), "tbadge sc"],
 };
 const TASK_COLS = ["name", "schedule", "scope", "command"];
 
-function taskRow(t) {
-  const [label, cls] = TYPE_BADGE[t.type] || ["定时", "tbadge sc"];
+function taskRow(x) {
+  const [label, cls] = TYPE_BADGE[x.type] || [t("tbd_sc"), "tbadge sc"];
   const esc = (s) => s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const next = t.next ? new Date(t.next * 1000).toLocaleString() : (t.last ? "上次 " + new Date(t.last * 1000).toLocaleString() : "—");
+  const next = x.next ? new Date(x.next * 1000).toLocaleString() : (x.last ? t("t_last") + new Date(x.last * 1000).toLocaleString() : "—");
   return `<tr>
-    <td><span class='${cls}'>${label}</span><span class='tname'>${esc(t.name)}</span></td>
-    <td class='tsch'>${esc(t.schedule)}</td>
-    <td class='tscope'>${t.kind === "timer" ? "systemd" : "cron"} · ${t.scope === "user" ? "用户" : "系统"}</td>
-    <td class='tcmd'>${esc(t.command)}</td>
-    <td class='tnext'>${next}</td>
+    <td><span class='${cls}'>${label}</span><span class='tname'>${esc(x.name)}</span></td>
+    <td class='tsch' data-label='${t("t_cycle")}'>${esc(x.schedule)}</td>
+    <td class='tscope' data-label='${t("t_source")}'>${x.kind === "timer" ? "systemd" : "cron"} · ${x.scope === "user" ? t("t_scope_user") : t("t_scope_sys")}</td>
+    <td class='tcmd' data-label='${t("t_cmd")}'>${esc(x.command)}</td>
+    <td class='tnext' data-label='${t("t_lastrun")}'>${esc(next)}</td>
   </tr>`;
 }
 
@@ -1307,27 +1718,26 @@ function renderAgentPanel(agents) {
   if (filter !== "omp") { el.hidden = true; return; }
   el.hidden = false; el.className = "watchdog-panel";
   const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const labels = {running:"运行中", blocked:"阻塞", idle:"空闲", completed:"已完成"};
+  const labels = {running:t("a_running"), blocked:t("a_blocked"), idle:t("a_idle"), completed:t("a_done")};
   let rows = "";
   // OMP agents
   agents.omp.forEach(x => {
     rows += "<tr><td><span class='tbadge wd'>OMP</span><span class='tname tlink' data-sid='" + esc(x.id) +
-      "' data-cwd='" + esc(x.cwd) + "' data-tmux='" + esc(x.tmux) + "' title='点击查看日志 · " + esc(x.goal) + "'>" +
-      esc((x.goal || x.cwd).slice(0, 60)) + "</span></td><td>" + (labels[x.health] || esc(x.status)) +
-      "</td><td class='tscope'>" + esc(x.tmux) + "<br>" + esc(x.cwd) + "</td><td class='tsch'>" +
-      esc(x.last_activity) + "<br>" + x.idle_seconds + "s 前</td><td class='tcmd'>" + esc(x.tool) + "</td></tr>";
+      "' data-cwd='" + esc(x.cwd) + "' data-tmux='" + esc(x.tmux) + "' title='" + t("a_openlog", { g: esc(x.goal) }) + "'>" +
+      esc((x.goal || x.cwd).slice(0, 60)) + "</span></td><td data-label='" + t("a_status") + "'>" + (labels[x.health] || esc(x.status)) +
+      "</td><td class='tscope' data-label='" + t("a_loc") + "'>" + esc(x.tmux) + "<br>" + esc(x.cwd) + "</td><td class='tsch' data-label='" + t("a_active") + "'>" +
+      esc(x.last_activity) + "<br>" + t("a_ago", { s: x.idle_seconds }) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>" + esc(x.tool) + "</td></tr>";
   });
   // Codex agents
   agents.codex.forEach(x => {
     rows += "<tr><td><span class='tbadge rd'>Codex</span><span class='tname tlink' data-sid='' data-cwd='" +
-      esc(x.cwd) + "' data-tmux='' title='点击查看实时画面 · pid " + esc(x.pid) + "'>" +
-      esc(x.cwd) + "</span></td><td>运行中</td><td class='tscope'>—<br>" + esc(x.cwd) + "</td><td class='tsch'>" +
-      esc(x.last_activity) + "<br>" + x.idle_seconds + "s 前</td><td class='tcmd'>pid " + esc(x.pid) + "</td></tr>";
+      esc(x.cwd) + "' data-tmux='' title='" + t("a_openterm", { p: esc(x.pid) }) + "'>" +
+      esc(x.cwd) + "</span></td><td data-label='" + t("a_status") + "'>" + t("a_running") + "</td><td class='tscope' data-label='" + t("a_loc") + "'>—<br>" + esc(x.cwd) + "</td><td class='tsch' data-label='" + t("a_active") + "'>" +
+      esc(x.last_activity) + "<br>" + t("a_ago", { s: x.idle_seconds }) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>pid " + esc(x.pid) + "</td></tr>";
   });
   const total = agents.omp.length + agents.codex.length;
-  el.innerHTML = "<h2>agent 任务 <span style='color:#666;font-weight:400'>" + total +
-    " 项 · 点击标题查看日志</span></h2><table><thead><tr><th>Agent</th><th>状态</th><th>tmux / 目录</th><th>最近活动</th><th>当前工具</th></tr></thead><tbody>" +
-    (rows || "<tr><td class='empty' colspan='5'>没有检测到 agent</td></tr>") + "</tbody></table>";
+  el.innerHTML = "<h2>" + t("a_title") + " <span style='color:#666;font-weight:400'>" + t("a_hint", { n: total }) + "</span></h2><table><thead><tr><th>" + t("a_th_agent") + "</th><th>" + t("a_status") + "</th><th>" + t("a_loc") + "</th><th>" + t("a_active") + "</th><th>" + t("a_tool") + "</th></tr></thead><tbody>" +
+    (rows || "<tr><td class='empty' colspan='5'>" + t("a_none") + "</td></tr>") + "</tbody></table>";
   el.querySelectorAll(".tlink").forEach(a => a.addEventListener("click", () => toggleAgentLog(a)));
 }
 
@@ -1336,28 +1746,28 @@ async function loadAgentLog(a, det) {
   const cwd = a.dataset.cwd || "";
   const tmx = a.dataset.tmux || "";
   const cell = det.querySelector("td");
-  cell.innerHTML = "<div class='agentlog'>加载中…</div>";
+  cell.innerHTML = "<div class='agentlog'>" + t("a_loading") + "</div>";
   try {
-    const r = await fetch("/api/agentlog?sid=" + encodeURIComponent(sid) + "&cwd=" + encodeURIComponent(cwd) + "&tmux=" + encodeURIComponent(tmx), { cache: "no-store" });
+    const r = await fetch("/api/agentlog?sid=" + encodeURIComponent(sid) + "&cwd=" + encodeURIComponent(cwd) + "&tmux=" + encodeURIComponent(tmx) + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
     const d = await r.json();
     const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
     let html = "<div class='agentlog'>";
     if ((d.events || []).length) {
-      html += "<div class='aglog-title'>最近活动 <button class='aglog-refresh'>⟳ 刷新</button></div><div class='aglog-list'>" +
+      html += "<div class='aglog-title'>" + t("a_recent") + " <button class='aglog-refresh'>" + t("refresh") + "</button></div><div class='aglog-list'>" +
         d.events.map(e => "<div class='aglog-row'><span class='aglog-ts'>" + esc(e[0]) + "</span><span class='aglog-txt'>" + esc(e[1]) + "</span></div>").join("") + "</div>";
     }
     if (d.capture && d.capture.length) {
-      html += "<div class='aglog-title'>终端画面 <button class='aglog-refresh'>⟳ 刷新</button></div><pre class='termlog'>" +
+      html += "<div class='aglog-title'>" + t("a_term") + " <button class='aglog-refresh'>" + t("refresh") + "</button></div><pre class='termlog'>" +
         d.capture.map(l => esc(l)).join("\\n") + "</pre>";
     }
-    if (!d.events.length && !d.capture) html += "<div class='aglog-empty'>没有可用的日志 / 终端画面</div>";
+    if (!d.events.length && !d.capture) html += "<div class='aglog-empty'>" + t("a_nolog") + "</div>";
     html += "</div>";
     det.className = "agent-detail";
     cell.innerHTML = html;
     det.querySelectorAll(".aglog-refresh").forEach(b => b.addEventListener("click", () => loadAgentLog(a, det)));
   } catch (err) {
     det.className = "agent-detail";
-    cell.innerHTML = "<div class='agentlog aglog-empty'>加载失败: " + esc(err.message) + "</div>";
+    cell.innerHTML = "<div class='agentlog aglog-empty'>" + t("a_fail", { e: esc(err.message) }) + "</div>";
   }
 }
 
@@ -1371,7 +1781,7 @@ function toggleAgentLog(a) {
   if (next && next.classList.contains("agent-detail-loading")) return;
   const det = document.createElement("tr");
   det.className = "agent-detail-loading";
-  det.innerHTML = "<td colspan='5'><div class='agentlog'>加载中…</div></td>";
+  det.innerHTML = "<td colspan='5'><div class='agentlog'>" + t("a_loading") + "</div></td>";
   tr.after(det);
   loadAgentLog(a, det);
 }
@@ -1393,12 +1803,12 @@ function renderTmuxPanel(panes) {
   el.hidden = false; el.className = "watchdog-panel";
   const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const rows = panes.map(x => "<tr><td class='tname'>" + esc(x.session) + ":" + esc(x.pane) +
-    (x.active ? " <span class='tbadge wd'>当前</span>" : "") + "</td><td>" + esc(x.command) +
-    "</td><td class='tscope'>" + esc(x.title) + "</td><td class='tcmd'>" + esc(x.cwd) +
-    "</td><td class='tsch'>" + esc(x.size) + "</td></tr>").join("");
-  el.innerHTML = "<h2>tmux 状态 <span style='color:#666;font-weight:400'>" + panes.length +
-    " 个窗格</span></h2><table><thead><tr><th>窗格</th><th>命令</th><th>标题</th><th>目录</th><th>尺寸</th></tr></thead><tbody>" +
-    (rows || "<tr><td class='empty' colspan='5'>tmux 未运行</td></tr>") + "</tbody></table>";
+    (x.active ? " <span class='tbadge wd'>" + t("tmux_active") + "</span>" : "") + "</td><td data-label='" + t("t_cmd") + "'>" + esc(x.command) +
+    "</td><td class='tscope' data-label='" + t("tmux_th_title") + "'>" + esc(x.title) + "</td><td class='tcmd' data-label='" + t("th_cwd") + "'>" + esc(x.cwd) +
+    "</td><td class='tsch' data-label='" + t("tmux_th_size") + "'>" + esc(x.size) + "</td></tr>").join("");
+  el.innerHTML = "<h2>" + t("tmux_panel") + " <span style='color:#666;font-weight:400'>" + t("tmux_panes", { n: panes.length }) +
+    "</span></h2><table><thead><tr><th>" + t("tmux_th_pane") + "</th><th>" + t("t_cmd") + "</th><th>" + t("tmux_th_title") + "</th><th>" + t("th_cwd") + "</th><th>" + t("tmux_th_size") + "</th></tr></thead><tbody>" +
+    (rows || "<tr><td class='empty' colspan='5'>" + t("tmux_none") + "</td></tr>") + "</tbody></table>";
 }
 
 let tasksCache = null; // 懒加载缓存
@@ -1406,7 +1816,7 @@ let tasksCache = null; // 懒加载缓存
 async function loadTasks() {
   if (tasksCache) return tasksCache;
   try {
-    const r = await fetch("/api/tasks", { cache: "no-store" });
+    const r = await fetch("/api/tasks?lang=" + encodeURIComponent(LANG), { cache: "no-store" });
     const data = await r.json();
     tasksCache = data.tasks || [];
     $("n-watchdog").textContent = tasksCache.length;
@@ -1424,13 +1834,98 @@ function renderWatchdogPanel(tasks) {
   const nwd = tasks.filter(t => t.type === "watchdog").length;
   const nrd = tasks.filter(t => t.type === "reminder").length;
   const nsc = tasks.length - nwd - nrd;
-  el.innerHTML = `<h2>定时任务 / 看门狗
-    <span style='color:#e0a84c'>${nwd} 看门狗</span> ·
-    <span style='color:#6ea8dc'>${nrd} 提醒</span> ·
-    <span style='color:#9a9a9a'>${nsc} 定时</span> ·
-    <span style='color:#666;font-weight:400'>共 ${tasks.length} 项</span></h2>
-    <table><thead><tr><th>任务</th><th>周期</th><th>来源</th><th>命令</th><th>最近执行</th></tr></thead>
-    <tbody>${tasks.length ? tasks.map(taskRow).join("") : "<tr><td class='empty' colspan='5'>没有定时任务 / 看门狗</td></tr>"}</tbody></table>`;
+  el.innerHTML = `<h2>${t("panel_watchdog")}
+    <span style='color:#e0a84c'>${nwd} ${t("tbd_wd")}</span> ·
+    <span style='color:#6ea8dc'>${nrd} ${t("tbd_rd")}</span> ·
+    <span style='color:#9a9a9a'>${nsc} ${t("tbd_sc")}</span> ·
+    <span style='color:#666;font-weight:400'>${t("t_total", { n: tasks.length })}</span></h2>
+    <table><thead><tr><th>${t("t_task")}</th><th>${t("t_cycle")}</th><th>${t("t_source")}</th><th>${t("t_cmd")}</th><th>${t("t_lastrun")}</th></tr></thead>
+    <tbody>${tasks.length ? tasks.map(taskRow).join("") : "<tr><td class='empty' colspan='5'>" + t("t_none") + "</td></tr>"}</tbody></table>`;
+}
+
+// ---------------------------------------------------------------- 服务管理
+// 管理本机关键 systemd 单元(zircon-server / zircon-bots / tailscaled):
+// 启动 / 停止 / 重启 / 暂停(SIGSTOP)/ 恢复(SIGCONT)。所有操作都需确认。
+const MANAGE_UNITS = [
+  { id: "zircon-server", label: t("m_server"), desc: t("m_server_desc") },
+  { id: "zircon-bots", label: t("m_bots"), desc: t("m_bots_desc") },
+  { id: "tailscaled", label: t("m_ts"), desc: t("m_ts_desc") },
+];
+const MANAGE_LABELS = { start: t("m_start"), stop: t("m_stop"), restart: t("m_restart"), pause: t("m_pause"), resume: t("m_resume") };
+
+function manageCard(u, st, result) {
+  const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const ok = st && st.ok;
+  const active = ok && st.active === "active";
+  const stopped = ok && st.stopped;
+  const color = !ok ? "#8a8a8a" : (stopped ? "#e0a84c" : (active ? "#6ec89a" : "#e06c6c"));
+  const stateTxt = !ok ? (st && st.msg ? st.msg : t("m_state_fail"))
+    : (stopped ? t("m_paused") : (active ? st.sub : st.active));
+  const pid = ok && st.pid && st.pid !== "0" ? " · PID " + esc(st.pid) : "";
+  let btns = "";
+  if (active) {
+    btns += `<button class='mbtn' data-unit='${u.id}' data-action='stop' title='${t("m_title_stop")}'>■ ${t("m_stop")}</button>`;
+    btns += `<button class='mbtn' data-unit='${u.id}' data-action='restart' title='${t("m_title_restart")}'>⟳ ${t("m_restart")}</button>`;
+    btns += stopped
+      ? `<button class='mbtn' data-unit='${u.id}' data-action='resume' title='${t("m_title_resume")}'>▶ ${t("m_resume")}</button>`
+      : `<button class='mbtn' data-unit='${u.id}' data-action='pause' title='${t("m_title_pause")}'>⏸ ${t("m_pause")}</button>`;
+  } else if (ok) {
+    btns += `<button class='mbtn' data-unit='${u.id}' data-action='start' title='${t("m_title_start")}'>▶ ${t("m_start")}</button>`;
+  }
+  const res = result ? `<div class='mresult'>${esc(result)}</div>` : "<div class='mresult'></div>";
+  return `<div class='mcard' data-unit='${u.id}'>
+    <div class='mhead'><span class='mname'>${esc(u.label)}</span><span class='mdesc'>${esc(u.desc)}</span></div>
+    <div class='mstate'><span class='mdot' style='background:${color}'></span> ${esc(stateTxt)}${pid}</div>
+    <div class='mbtns'>${btns}</div>
+    ${res}
+  </div>`;
+}
+
+async function loadManage() {
+  const el = $("tasks");
+  if (filter !== "manage") { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = "watchdog-panel";
+  // 记住各卡片的操作结果,面板重建(轮询/动作后刷新)时保留
+  const prevResults = {};
+  el.querySelectorAll(".mcard").forEach(c => {
+    const r = c.querySelector(".mresult");
+    if (r && r.textContent) prevResults[c.dataset.unit] = r.textContent;
+  });
+  const cards = await Promise.all(MANAGE_UNITS.map(async (u) => {
+    let st = null;
+    try {
+      const r = await fetch("/api/manage?unit=" + encodeURIComponent(u.id) + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
+      st = await r.json();
+    } catch (e) { st = null; }
+    return manageCard(u, st, prevResults[u.id] || "");
+  }));
+  el.innerHTML = `<h2>${t("m_panel")} <span style='color:#666;font-weight:400'>${t("m_hint")}</span></h2>
+    <div class='mgrid'>${cards.join("")}</div>`;
+  el.querySelectorAll(".mbtn").forEach(b => b.addEventListener("click", () => doManage(b)));
+}
+
+async function doManage(btn) {
+  const unit = btn.dataset.unit, action = btn.dataset.action;
+  const label = MANAGE_LABELS[action] || action;
+  if (!confirm(t("m_confirm", { label, unit }))) return;
+  btn.disabled = true;
+  const res = btn.closest(".mcard").querySelector(".mresult");
+  res.textContent = t("m_doing");
+  try {
+    const r = await fetch("/api/manage?lang=" + encodeURIComponent(LANG), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unit, action }),
+    });
+    const d = await r.json();
+    res.textContent = (d.ok ? "✓ " : "✗ ") + (d.msg || "");
+    res.style.color = d.ok ? "#6ec89a" : "#e06c6c";
+  } catch (e) {
+    res.textContent = "✗ " + e.message;
+    res.style.color = "#e06c6c";
+  }
+  btn.disabled = false;
+  setTimeout(() => loadManage(), 600); // 等 systemd 状态落地再刷新
 }
 
 async function load(alsoSys) {
@@ -1468,7 +1963,12 @@ document.querySelectorAll(".tcol").forEach(b =>
   }));
 $("refresh").addEventListener("click", () => load(true));
 $("auto").addEventListener("change", (ev) => { autoOn = ev.target.checked; if (autoOn) load(false); });
-setInterval(() => { if (autoOn) load(false); }, AUTO * 1000);
+setInterval(() => {
+  if (autoOn) {
+    if (filter === "manage") loadManage();
+    else load(false);
+  }
+}, AUTO * 1000);
 load(true);
 </script>
 </body>
@@ -1485,8 +1985,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path in ("/", "/index.html"):
+            lang = detect_lang(self.headers.get("Accept-Language", ""),
+                               urlparse(self.path).query)
             entries = gather()
-            body = render_html(self._host(), entries, time.time()).encode("utf-8")
+            body = render_html(self._host(), entries, time.time(), lang).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -1512,7 +2014,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(payload)
         elif path == "/api/tasks":
-            payload = json.dumps({"tasks": scan_tasks()}, ensure_ascii=False).encode("utf-8")
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
+            payload = json.dumps({"tasks": scan_tasks(lang)}, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -1537,6 +2040,22 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+        elif path == "/api/manage":
+            qs = parse_qs(urlparse(self.path).query)
+            uid = (qs.get("unit") or [""])[0]
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
+            if not uid:
+                payload = json.dumps(
+                    {"units": [{"id": u["id"], "label": u["label"], "desc": u["desc"]}
+                               for u in MANAGE_UNITS]}, ensure_ascii=False).encode("utf-8")
+            else:
+                payload = json.dumps(manage_status(uid, lang), ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
         elif path.startswith("/api/agentlog"):
             qs = parse_qs(urlparse(self.path).query)
             sid = (qs.get("sid") or [""])[0]
@@ -1544,7 +2063,8 @@ class Handler(BaseHTTPRequestHandler):
             tmx = (qs.get("tmux") or [""])[0]
             if not tmx and cwd:
                 tmx = _tmux_by_cwd(cwd)
-            body = {"events": scan_agent_log(sid) if sid else [],
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
+            body = {"events": scan_agent_log(sid, lang) if sid else [],
                     "capture": _tmux_capture(tmx)}
             payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
@@ -1555,6 +2075,38 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(payload)
         else:
             self.send_error(404)
+
+    def do_POST(self):
+        """管理端点: POST /api/manage  body={"unit": id, "action": start|stop|restart|pause|resume}"""
+        path = urlparse(self.path).path
+        if path != "/api/manage":
+            self.send_error(404)
+            return
+        try:
+            ln = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(ln) if ln else b""
+            body = json.loads(raw.decode("utf-8") or "{}")
+        except Exception as e:
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
+            payload = json.dumps({"ok": False, "msg": t(lang, "m_badreq", e=str(e))},
+                                 ensure_ascii=False).encode("utf-8")
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        unit = str(body.get("unit") or "")
+        action = str(body.get("action") or "")
+        self.log_message("manage %s %s", unit, action)
+        lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
+        payload = json.dumps(manage_action(unit, action, lang), ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[%s] %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
