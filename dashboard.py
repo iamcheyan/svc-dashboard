@@ -1007,10 +1007,18 @@ ACTION_LABELS = {"start": "启动", "stop": "停止", "restart": "重启",
 
 
 def _sysctl(*args, timeout=10):
+    """走免密 sudo 执行 systemctl;超时杀整个进程组,不留孤儿。"""
     try:
-        r = subprocess.run(["sudo", "-n", "systemctl", *args],
-                           capture_output=True, text=True, timeout=timeout)
-        return r.returncode, r.stdout.strip(), r.stderr.strip()
+        proc = subprocess.Popen(
+            ["sudo", "-n", "systemctl", *args],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, start_new_session=True,
+        )
+        out, err = proc.communicate(timeout=timeout)
+        return proc.returncode, out.strip(), err.strip()
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc)
+        return -1, "", "timeout"
     except Exception as e:
         return -1, "", str(e)
 
@@ -2032,8 +2040,31 @@ class Handler(BaseHTTPRequestHandler):
     def _host(self):
         return self.headers.get("Host") or f"localhost:{LISTEN_PORT}"
 
+    def _send_json(self, code, obj):
+        """发 JSON 响应,自带 no-store。任何异常都不让连接挂起。"""
+        try:
+            payload = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        except Exception:
+            payload = b'{"ok":false,"msg":"encode error"}'
+            code = 500
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        except Exception:
+            pass  # 连接已断,无能为力
+
     def do_GET(self):
         path = urlparse(self.path).path
+        try:
+            self._handle_get(path)
+        except Exception as e:
+            self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+
+    def _handle_get(self, path):
         if path in ("/", "/index.html"):
             lang = detect_lang(self.headers.get("Accept-Language", ""),
                                urlparse(self.path).query)
@@ -2046,66 +2077,26 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         elif path == "/api":
-            payload = json.dumps(
-                {"updated": time.time(), "services": gather()},
-                ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(200, {"updated": time.time(), "services": gather()})
         elif path == "/api/sys":
-            payload = json.dumps(sys_info(), ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(200, sys_info())
         elif path == "/api/tasks":
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
-            payload = json.dumps({"tasks": scan_tasks(lang)}, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(200, {"tasks": scan_tasks(lang)})
         elif path == "/api/omp":
-            payload = json.dumps({"updated": time.time(), "omp": scan_omp(),
-                                  "codex": scan_codex()}, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(200, {"updated": time.time(), "omp": scan_omp(),
+                                  "codex": scan_codex()})
         elif path == "/api/tmux":
-            payload = json.dumps({"updated": time.time(), "panes": scan_tmux()},
-                                 ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(200, {"updated": time.time(), "panes": scan_tmux()})
         elif path == "/api/manage":
             qs = parse_qs(urlparse(self.path).query)
             uid = (qs.get("unit") or [""])[0]
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             if not uid:
-                payload = json.dumps(
-                    {"units": [{"id": u["id"], "label": u["label"], "desc": u["desc"]}
-                               for u in MANAGE_UNITS]}, ensure_ascii=False).encode("utf-8")
+                self._send_json(200, {"units": [{"id": u["id"], "label": u["label"], "desc": u["desc"]}
+                               for u in MANAGE_UNITS]})
             else:
-                payload = json.dumps(manage_status(uid, lang), ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+                self._send_json(200, manage_status(uid, lang))
         elif path.startswith("/api/agentlog"):
             qs = parse_qs(urlparse(self.path).query)
             sid = (qs.get("sid") or [""])[0]
@@ -2114,15 +2105,8 @@ class Handler(BaseHTTPRequestHandler):
             if not tmx and cwd:
                 tmx = _tmux_by_cwd(cwd)
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
-            body = {"events": scan_agent_log(sid, lang) if sid else [],
-                    "capture": _tmux_capture(tmx)}
-            payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(200, {"events": scan_agent_log(sid, lang) if sid else [],
+                    "capture": _tmux_capture(tmx)})
         else:
             self.send_error(404)
 
@@ -2138,25 +2122,16 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(raw.decode("utf-8") or "{}")
         except Exception as e:
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
-            payload = json.dumps({"ok": False, "msg": t(lang, "m_badreq", e=str(e))},
-                                 ensure_ascii=False).encode("utf-8")
-            self.send_response(400)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self._send_json(400, {"ok": False, "msg": t(lang, "m_badreq", e=str(e))})
             return
         unit = str(body.get("unit") or "")
         action = str(body.get("action") or "")
         self.log_message("manage %s %s", unit, action)
         lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
-        payload = json.dumps(manage_action(unit, action, lang), ensure_ascii=False).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
+        try:
+            self._send_json(200, manage_action(unit, action, lang))
+        except Exception as e:
+            self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[%s] %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
