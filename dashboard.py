@@ -562,7 +562,7 @@ def render_sysbar(s, lang=DEFAULT_LANG):
 L10N = {
     "zh": {
         "title": "服务一览", "github_repo": "GitHub 仓库",
-        "updated": "更新于", "listen_ports": "个监听端口", "auto_refresh": "自动刷新",
+        "updated": "更新于", "svc_pre": "", "svc_post": " 个监听端口", "auto_refresh": "自动刷新",
         "refresh": "⟳ 刷新", "ptr_pull": "下拉刷新", "ptr_release": "松开刷新", "ptr_loading": "刷新中…",
         "chip_user": "用户服务", "chip_docker": "Docker", "chip_system": "系统服务",
         "chip_all": "全部", "chip_omp": "agent任务", "chip_watchdog": "定时任务",
@@ -647,10 +647,30 @@ L10N = {
         "chart_title": "负载 / CPU 趋势", "chart_win": "窗口 {n} 点",
         "chart_empty": "采样中：刷新几次就有曲线了（双指捏合可调时间窗）",
         "log_pick": "选择 agent 查看日志",
+        "st_all_ok": "全部正常", "st_alert": "有告警 {n}",
+        "st_stale": "数据过期", "st_loading": "读取中…",
+        "m_svc_ok": "正常服务", "m_goal_run": "在跑 Goal", "m_goal_bad": "暂停/异常",
+        "m_alerts": "未处理告警",
+        "al_title": "需要处理", "al_none": "没有需要处理的告警",
+        "al_paused": "Goal 已暂停", "al_stalled": "疑似挂死(STALLED)",
+        "al_lost": "会话丢失", "al_done": "已完成,待查看",
+        "al_ignore": "忽略", "al_detail": "详情",
+        "rc_title": "最近活动", "rc_more": "全部 →",
+        "lf_status": "状态", "lf_source": "来源", "lf_time": "时间",
+        "lf_all": "全部", "lf_success": "成功", "lf_warn": "告警",
+        "lf_fail": "失败", "lf_recover": "恢复",
+        "lf_wd": "watchdog", "lf_done": "完成", "lf_commit": "commit",
+        "lf_3d": "3天", "lf_7d": "7天",
+        "ev_loop": "循环 ×{n}", "ev_empty": "该时间范围内没有事件",
+        "ev_commit": "📦 提交",
+        "evk_complete": "完成", "evk_restart": "重启(进程死亡)",
+        "evk_nudge": "催行", "evk_recover": "已恢复", "evk_pause": "暂停",
+        "evk_cleanup": "清理", "evk_commit": "提交", "evk_other": "其他",
+        "g_ago_d": "{d} 天前",
     },
     "en": {
         "title": "Services", "github_repo": "GitHub repo",
-        "updated": "updated", "listen_ports": "listening ports", "auto_refresh": "Auto refresh",
+        "updated": "updated", "svc_pre": "", "svc_post": " listening ports", "auto_refresh": "Auto refresh",
         "refresh": "⟳ Refresh", "ptr_pull": "Pull to refresh", "ptr_release": "Release to refresh", "ptr_loading": "Refreshing…",
         "chip_user": "User services", "chip_docker": "Docker", "chip_system": "System services",
         "chip_all": "All", "chip_omp": "Agents", "chip_watchdog": "Tasks",
@@ -735,10 +755,30 @@ L10N = {
         "chart_title": "Load / CPU trend", "chart_win": "window {n} pts",
         "chart_empty": "Collecting samples: refresh a few times (pinch to adjust window)",
         "log_pick": "Pick an agent for logs",
+        "st_all_ok": "All good", "st_alert": "{n} alert(s)",
+        "st_stale": "stale data", "st_loading": "loading…",
+        "m_svc_ok": "services OK", "m_goal_run": "running goals", "m_goal_bad": "paused/bad",
+        "m_alerts": "open alerts",
+        "al_title": "Needs attention", "al_none": "Nothing needs attention",
+        "al_paused": "Goal paused", "al_stalled": "possibly stalled",
+        "al_lost": "session lost", "al_done": "completed, review pending",
+        "al_ignore": "Ignore", "al_detail": "Details",
+        "rc_title": "Recent activity", "rc_more": "All →",
+        "lf_status": "status", "lf_source": "source", "lf_time": "time",
+        "lf_all": "all", "lf_success": "ok", "lf_warn": "warn",
+        "lf_fail": "fail", "lf_recover": "recovered",
+        "lf_wd": "watchdog", "lf_done": "done", "lf_commit": "commit",
+        "lf_3d": "3d", "lf_7d": "7d",
+        "ev_loop": "loop ×{n}", "ev_empty": "No events in this range",
+        "ev_commit": "📦 commit",
+        "evk_complete": "complete", "evk_restart": "relaunch (dead)",
+        "evk_nudge": "nudge", "evk_recover": "recovered", "evk_pause": "paused",
+        "evk_cleanup": "cleanup", "evk_commit": "commit", "evk_other": "other",
+        "g_ago_d": "{d}d ago",
     },
     "ja": {
         "title": "サービス一覧", "github_repo": "GitHub リポジトリ",
-        "updated": "更新", "listen_ports": "個の待受ポート", "auto_refresh": "自動更新",
+        "updated": "更新", "svc_pre": "サービス ", "svc_post": "", "auto_refresh": "自動更新",
         "refresh": "⟳ 更新", "ptr_pull": "引っ張って更新", "ptr_release": "離して更新", "ptr_loading": "更新中…",
         "chip_user": "ユーザーサービス", "chip_docker": "Docker", "chip_system": "システムサービス",
         "chip_all": "すべて", "chip_omp": "エージェント", "chip_watchdog": "タスク",
@@ -823,6 +863,26 @@ L10N = {
         "chart_title": "負荷 / CPU 推移", "chart_win": "ウィンドウ {n} 点",
         "chart_empty": "サンプル収集中：数回更新すると曲線になります（ピンチで調整）",
         "log_pick": "エージェントを選択",
+        "st_all_ok": "すべて正常", "st_alert": "要注意 {n} 件",
+        "st_stale": "データ期限切れ", "st_loading": "読み込み中…",
+        "m_svc_ok": "正常サービス", "m_goal_run": "実行中 Goal", "m_goal_bad": "一時停止・異常",
+        "m_alerts": "未対応アラート",
+        "al_title": "要対応", "al_none": "対応が必要なアラートはありません",
+        "al_paused": "Goal 一時停止中", "al_stalled": "停滞(STALLED)の可能性",
+        "al_lost": "セッション消失", "al_done": "完了: 確認待ち",
+        "al_ignore": "無視", "al_detail": "詳細",
+        "rc_title": "最近の活動", "rc_more": "すべて →",
+        "lf_status": "状態", "lf_source": "ソース", "lf_time": "期間",
+        "lf_all": "すべて", "lf_success": "成功", "lf_warn": "注意",
+        "lf_fail": "失敗", "lf_recover": "復旧",
+        "lf_wd": "watchdog", "lf_done": "完了", "lf_commit": "commit",
+        "lf_3d": "3日", "lf_7d": "7日",
+        "ev_loop": "循環 ×{n}", "ev_empty": "この期間のイベントはありません",
+        "ev_commit": "📦 コミット",
+        "evk_complete": "完了", "evk_restart": "再始動(プロセス死亡)",
+        "evk_nudge": "催促", "evk_recover": "復旧", "evk_pause": "一時停止",
+        "evk_cleanup": "クリーンアップ", "evk_commit": "コミット", "evk_other": "その他",
+        "g_ago_d": "{d} 日前",
     },
 }
 
@@ -1731,6 +1791,29 @@ def _tail_lines(path, limit=64 * 1024):
         return []
 
 
+def _wd_event_kind(msg):
+    """watchdog 日志消息 -> 事件类型。
+    cleanup 判在 complete 之前: 'cleanup: recorded completed goal' 里
+    含 'completed' 子串,先判 complete 会把清理行误标成完成。
+    resumed/recovered = 恢复; relaunch/recreate = 进程死亡后重启。"""
+    low = msg.lower()
+    if "cleanup" in low:
+        return "cleanup"
+    if "commit" in low:
+        return "commit"
+    if "complete" in low:
+        return "complete"
+    if "resumed" in low or "recovered" in low:
+        return "recover"
+    if "relaunch" in low or "recreat" in low:
+        return "restart"
+    if "driving" in low or "nudge" in low:
+        return "nudge"
+    if "paused" in low:
+        return "pause"
+    return "other"
+
+
 _COMPL_RE = re.compile(
     r"\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\] goal=([\w-]+) label=(.*?) status=(\w+)[ \t]*\n"
     r"\s*transcript=(\S+)[ \t]*\n"
@@ -1766,23 +1849,6 @@ def parse_completed_goals(limit=50):
 _WD_LINE_RE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[([0-9a-f]+)\] (.*)$")
 
 
-def _wd_event_kind(msg):
-    """watchdog 日志消息 -> 事件类型。"""
-    low = msg.lower()
-    if "complete" in low:
-        return "complete"
-    if "relaunch" in low or "recreat" in low or "resumed" in low:
-        return "restart"
-    if "driving" in low or "nudge" in low:
-        return "nudge"
-    if "recovered" in low:
-        return "recover"
-    if "paused" in low:
-        return "pause"
-    if "cleanup" in low:
-        return "cleanup"
-    return "other"
-
 
 def parse_watchdog_events(limit=20):
     """goal-watchdog.log 尾部 -> 事件列表(时间倒序);不匹配的行跳过。"""
@@ -1812,12 +1878,15 @@ def parse_watchdog_events(limit=20):
 
 
 def merge_events(wd_events, completed, limit=24):
-    """watchdog 事件 + 完成台账合并为一条时间线(时间倒序)。"""
-    merged = list(wd_events)
+    """watchdog 事件 + 完成台账合并为一条时间线(时间倒序)。
+    每条带 src 标记(watchdog / done),前端日志页按来源筛选。"""
+    merged = [{"ts": e["ts"], "time": e["time"], "gid": e["gid"], "name": e["name"],
+               "kind": e["kind"], "text": e["text"], "src": "watchdog"}
+              for e in wd_events]
     for c in completed:
         merged.append({"ts": c["ts"], "time": c["time"], "gid": c["gid"],
                        "name": c["label"] or c["gid"][:8], "kind": "complete",
-                       "text": c["transcript"]})
+                       "text": c["transcript"], "src": "done"})
     merged.sort(key=lambda x: -x["ts"])
     return merged[:limit]
 
@@ -2231,7 +2300,7 @@ def render_events(events, lang=DEFAULT_LANG):
     """最近事件: watchdog 动作 + 完成台账,合并时间倒序。"""
     kind_key = {"complete": "ev_complete", "restart": "ev_restart",
                 "nudge": "ev_nudge", "recover": "ev_recover",
-                "pause": "ev_pause", "cleanup": "ev_cleanup"}
+                "pause": "ev_pause", "cleanup": "ev_cleanup", "commit": "ev_commit"}
     rows = []
     today = time.strftime("%Y-%m-%d")
     for e in events:
@@ -2326,7 +2395,13 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <title>{{T:title}} · {{HOSTNAME}}</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { color-scheme: dark; }
+  :root { color-scheme: dark;
+          /* 语义色规约: 红=严重 黄=关注 绿=正常 灰=历史 蓝=交互。
+             文本档均按 WCAG AA(≥4.5:1)对 #101010-#141414 卡片底校准。 */
+          --c-red: #e06c6c; --c-red-bg: #2a1a1a;
+          --c-warn: #f0b662; --c-warn-bg: #2a2118;
+          --c-green: #6ec89a; --c-green-bg: #14261c;
+          --c-gray: #9a9a9a; --c-blue: #8ab4f8; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: ui-sans-serif, system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
          background: #0a0a0a; color: #d6d6d6; }
@@ -2334,7 +2409,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
            border-bottom: 1px solid #1f1f1f; padding: 12px 24px;
            display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   header h1 { font-size: 17px; margin: 0; font-weight: 600; color: #f2f2f2; }
-  header .meta { color: #8a8a8a; font-size: 12.5px; }
+  header .meta { color: #a8a8a8; font-size: 12.5px; }  /* 8.3:1 (was #8a8a8a) */
   header .spacer { flex: 1; }
   /* ---------------- 自绘控件体系 ----------------
      不使用任何系统原生控件: 所有按钮/开关均为自绘元素。
@@ -2386,8 +2461,9 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   [hidden] { display: none !important; }  /* 防 class 的 display:flex 盖过 hidden 属性 */
   html { font-size: 100%; -webkit-text-size-adjust: 100%; }
   #pages { display: contents; }          /* 桌面: 透明容器,子元素即 main 内容 */
-  #tabbar, #pager-tabs, #chart-wrap, #logpage, #agents-page,
-  .skel, .gmore { display: none; }
+  #tabbar, #chart-wrap, #logpage, #agents-page,
+  .skel, .gmore, .statusline, .statuscard, .mgrid4, #alerts, #recent,
+  #log-filters, .lv { display: none; }
   .gextra { display: block; }            /* 桌面: goal 卡次要信息全展示 */
   .swipe-item { position: relative; overflow: hidden; }
   .swipe-bg { position: absolute; inset: 0; display: flex; align-items: stretch;
@@ -2411,11 +2487,11 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
                    padding: 10px 12px; font-size: 13px; min-height: 44px; }
   #chart-wrap canvas { width: 100%; height: 150px; display: block; touch-action: none; }
   #chart-empty { color: #666; font-size: 12px; padding: 18px 0; }
-  .gmore { display: none; color: #777; font-size: 11px; }
+  .gmore { display: none; color: #909090; font-size: 11px; }
   .sysbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .stat { background: #141414; border: 1px solid #222; border-radius: 10px;
           padding: 10px 16px; min-width: 130px; }
-  .stat .label { color: #777; font-size: 11px; margin-bottom: 3px; }
+  .stat .label { color: #909090; font-size: 11px; margin-bottom: 3px; }
   .stat .value { font-size: 14px; font-weight: 600; font-family: ui-monospace, monospace; color: #e8e8e8; white-space: nowrap; }
   .tbadge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px;
             margin-right: 6px; vertical-align: 1px; }
@@ -2481,14 +2557,14 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .gpanel { background: #141414; border: 1px solid #222; border-radius: 10px;
             padding: 12px 14px; margin-bottom: 14px; }
   .gpanel h2 { margin: 0 0 10px; font-size: 13px; color: #9a9a9a; font-weight: 500; }
-  .gpanel .ghint { color: #666; font-weight: 400; font-size: 11.5px; }
+  .gpanel .ghint { color: #8f8f8f; font-weight: 400; font-size: 11.5px; }
   .gcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; }
   .gcard { background: #131313; border: 1px solid #222; border-radius: 8px; padding: 10px 12px; }
   .gcard .ghead { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
   .gcard .glight { font-size: 13px; flex: none; }
   .gcard .gname { font-weight: 600; color: #eee; font-size: 14px; word-break: break-all; }
   .gcard .gstate { color: #8a8a8a; font-size: 11.5px; }
-  .gcard .gsub { color: #777; font-size: 11.5px; margin-top: 2px;
+  .gcard .gsub { color: #909090; font-size: 11.5px; margin-top: 2px;
                  word-break: break-all; line-height: 1.45; }
   .gcard .grow { display: flex; justify-content: space-between; gap: 10px;
                  font-size: 12.5px; color: #b0b0b0; padding: 3px 0 0; }
@@ -2520,10 +2596,10 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
                        align-items: baseline; gap: 6px; flex-wrap: wrap; }
   .loadline .ld-ico { font-size: 14px; }
   .loadline b { color: #eee; font-weight: 600; }
-  .loadline .ld-sub { color: #777; font-size: 12px; font-family: ui-monospace, monospace; }
+  .loadline .ld-sub { color: #909090; font-size: 12px; font-family: ui-monospace, monospace; }
   .loadline .ld-tops { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 8px; }
   .loadline .ld-top { flex: 1 1 260px; min-width: 0; }
-  .loadline .ld-t { color: #777; font-size: 11px; margin-bottom: 3px; }
+  .loadline .ld-t { color: #909090; font-size: 11px; margin-bottom: 3px; }
   .loadline .ld-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.6;
                       font-family: ui-monospace, monospace; }
   .loadline .ld-val { color: #c9c9c9; min-width: 52px; text-align: right; flex: none; }
@@ -2531,7 +2607,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 
   .evt-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.7;
              font-family: ui-monospace, monospace; flex-wrap: wrap; }
-  .evt-ts { color: #5c7a9a; flex: none; }
+  .evt-ts { color: #63849f; flex: none; }  /* 4.7:1 on #131313 (was #5c7a9a 4.4:1) */
   .evt-name { color: #e0a84c; flex: none; }
   .evt-txt { color: #b0b0b0; word-break: break-all; min-width: 200px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -2575,11 +2651,71 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
      五页横向滑动(概览/日志/Goal/服务/模型) + 底部页签栏 + safe-area;
      服务表→卡片(左滑复制/圆形打开), goal 卡收起次要信息。
      ≥769px 恢复桌面布局,所有规则只在此断点内生效。 */
+  /* ---------------- 概要摘要组件 + 日志时间线(桌面隐藏,手机显示) ----------------
+     字号体系: 状态数字 22-24px / 正文 14px / 辅助 12px。 */
+  .stale { display: inline-block; background: var(--c-warn-bg); color: var(--c-warn);
+           border: 1px solid #5a4422; border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+  .statusline { background: #101010; border: 1px solid #222; border-radius: 10px; color: #d6d6d6; }
+  .statuscard { background: #141414; border: 1px solid #232323; border-radius: 12px; padding: 14px 16px; }
+  .statuscard .sc-head { display: flex; align-items: center; gap: 12px; }
+  .statuscard .sc-ico { font-size: 30px; line-height: 1; }
+  .statuscard .sc-big { font-size: 24px; font-weight: 700; color: #f2f2f2; }
+  .statuscard .sc-sub { margin-top: 8px; color: #909090; font-size: 12px; }
+  .mgrid4 { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mcell { background: #141414; border: 1px solid #232323; border-radius: 10px; padding: 10px 12px;
+           display: flex; flex-direction: column; gap: 3px; }
+  .mnum { font-size: 22px; font-weight: 700; color: #f2f2f2; font-variant-numeric: tabular-nums; }
+  .mnum.alert { color: var(--c-warn); }
+  .mlabel { font-size: 12px; color: #909090; }
+  .al-btn { background: #1d1d1d; border: 1px solid #2e2e2e; color: #d6d6d6; border-radius: 6px;
+            padding: 8px 12px; font-size: 12.5px; cursor: pointer; }
+  .al-btn:hover { border-color: #555; color: #fff; }
+  .al-btn.ignore { color: #909090; }
+  .alert-item { align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid #1a1a1a; }
+  .alert-item:last-child { border-bottom: none; }
+  .al-ico { flex: none; font-size: 17px; }
+  .al-main { flex: 1 1 auto; min-width: 0; }
+  .al-line { font-size: 14px; color: #e8e8e8; display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .al-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .al-sub { font-size: 12px; color: #909090; margin-top: 2px; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; }
+  .al-act { display: flex; gap: 6px; flex: none; }
+  .rc-row { align-items: center; gap: 8px; padding: 9px 2px; border-bottom: 1px solid #1a1a1a;
+            font-size: 14px; color: #cfcfcf; }
+  .rc-row:last-child { border-bottom: none; }
+  .rc-ico { flex: none; }
+  .rc-kind { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rc-name { color: #909090; font-size: 12px; flex: none; max-width: 38%; overflow: hidden;
+             text-overflow: ellipsis; white-space: nowrap; }
+  .rc-ago { color: #909090; font-size: 12px; flex: none; }
+  /* 日志时间线: 第一行 图标+类型+相对时间, 第二行一句话摘要, 详情默认折叠 */
+  .lv { border-bottom: 1px solid #1a1a1a; padding: 9px 2px; }
+  .lv:last-child { border-bottom: none; }
+  .lv-line1 { display: flex; align-items: baseline; gap: 8px; font-size: 14px; color: #e8e8e8; min-width: 0; }
+  .lv-ico { flex: none; }
+  .lv-kind { font-weight: 600; flex: none; }
+  .lv-loop { color: var(--c-warn); font-size: 12.5px; flex: none; }
+  .lv-ago { margin-left: auto; color: #909090; font-size: 12px; flex: none; }
+  .lv-line2 { font-size: 14px; color: #c9c9c9; margin-top: 3px; line-height: 1.5;
+              display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .lv.open .lv-line2 { display: block; }
+  .lv-fold { margin-top: 6px; font-size: 12px; color: var(--c-blue); display: inline-flex;
+             align-items: center; gap: 4px; cursor: pointer; }
+  .lv-fold::before { content: "▸"; transition: transform .15s; }
+  .lv.open .lv-fold::before { transform: rotate(90deg); }
+  .lv-meta { display: none; margin-top: 6px; background: #101010; border: 1px solid #1d1d1d;
+             border-radius: 6px; padding: 8px 10px; font-family: ui-monospace, monospace;
+             font-size: 11px; color: #9a9a9a; word-break: break-all; line-height: 1.6; }
+  .lv.open .lv-meta { display: block; }
+  .lv-children { display: none; margin-top: 6px; border-left: 2px solid #1f1f1f; padding-left: 8px; }
+  .lv.open > .lv-children { display: block; }
+  .lv-more { font-size: 12px; color: #909090; padding: 10px 0 2px; }
+
   @media (max-width: 768px) {
     -webkit-tap-highlight-color: transparent;
-    /* safe-area: 刘海/手势条不遮挡 */
-    header { padding: 10px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left));
-             padding-top: calc(10px + env(safe-area-inset-top)); gap: 8px;
+    /* safe-area: 刘海/手势条不遮挡; 标题行+状态摘要合并紧凑化 */
+    header { padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+             padding-top: calc(8px + env(safe-area-inset-top)); gap: 8px;
              -webkit-backdrop-filter: blur(6px); }
     header h1 { font-size: 15px; }
     header h1 a { display: none; }
@@ -2587,42 +2723,51 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     header .spacer { display: none; }
     .auto { font-size: 12px; }
     .btn, .chip, .mbtn, .ctl-btn, .tcol, .aglog-refresh { padding: 9px 14px; font-size: 13px; min-height: 38px; }
-    main { padding: 12px max(12px, env(safe-area-inset-right)) calc(76px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    /* 内部滚动: main 自滚, 底部页签栏固定在文档流尾, 不再遮住最后一屏 */
+    html, body { height: 100%; }
+    body { display: flex; flex-direction: column; overflow: hidden;
+           overscroll-behavior: none; }
+    main { flex: 1 1 auto; min-height: 0; overflow-y: auto;
+           -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
+           padding: 10px max(12px, env(safe-area-inset-right)) 16px
+                    max(12px, env(safe-area-inset-left)); }
+    /* 每页底部留出 页签栏+safe-area+余量: 滚到内容末尾时最后一条完整露出 */
+    #track > .pg { padding-bottom: calc(68px + 24px + env(safe-area-inset-bottom)); }
+    /* 顶部状态摘要(图标+文字双通道; 颜色仅辅助) */
+    .statusline { display: flex; order: 5; width: 100%; gap: 8px; align-items: center;
+                  padding: 9px 12px; font-size: 13.5px; margin-top: 2px; }
+    .statusline #status-ico { font-size: 16px; flex: none; }
+    .statusline.ok #status-ico { color: var(--c-green); }
+    .statusline.warn #status-ico { color: var(--c-warn); }
+    .statusline.bad #status-ico { color: var(--c-red); }
 
-    /* 顶栏页签(点击切页) + 页面指示器 */
-    #pager-tabs { display: flex; align-items: center; gap: 2px; width: 100%; order: 4;
-                  margin-top: 2px; overflow-x: auto; -webkit-overflow-scrolling: touch;
-                  scrollbar-width: none; }
-    #pager-tabs::-webkit-scrollbar { display: none; }
-    .ptab { flex: none; display: inline-flex; align-items: center; padding: 8px 12px;
-            min-height: 38px; border-radius: 8px; color: #8a8a8a; font-size: 12.5px;
-            cursor: pointer; user-select: none; -webkit-user-select: none; }
-    .ptab.active { background: #262626; color: #f2f2f2; }
-    #pg-ind { margin-left: auto; display: inline-flex; gap: 4px; padding: 0 6px 0 12px; flex: none; }
-    #pg-ind i { width: 6px; height: 6px; border-radius: 50%; background: #333; }
-    #pg-ind i.on { background: #8ab4f8; }
 
-    /* 底部页签栏: 半透明毛玻璃, 拇指区, 不随页面滚动 */
-    #tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    /* 底部页签栏(唯一导航): 常规文档流尾部 + 毛玻璃, 不遮内容 */
+    #tabbar { display: flex; flex: none; z-index: 40;
               background: rgba(12,12,12,.82);
               -webkit-backdrop-filter: blur(16px) saturate(1.4);
               backdrop-filter: blur(16px) saturate(1.4);
               border-top: 1px solid #232323;
               padding: 4px max(8px, env(safe-area-inset-left)) calc(4px + env(safe-area-inset-bottom))
                           max(8px, env(safe-area-inset-right)); }
-    #tabbar .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    #tabbar .tab { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
                    padding: 7px 0 3px; min-height: 50px; color: #8a8a8a; font-size: 10.5px;
                    cursor: pointer; user-select: none; -webkit-user-select: none;
                    -webkit-tap-highlight-color: transparent; }
-    #tabbar .tab.active { color: #8ab4f8; }
+    #tabbar .tab.active { color: var(--c-blue); }
     #tabbar .tab svg { width: 22px; height: 22px; }
+    /* 概要页签未处理告警徽章: 红点+数字 */
+    .tbadge-dot { position: absolute; top: 2px; left: calc(50% + 12px); min-width: 17px; height: 17px;
+                  padding: 0 4px; border-radius: 999px; background: #c04848; color: #fff;
+                  font-size: 10.5px; font-weight: 700; display: flex; align-items: center;
+                  justify-content: center; border: 1.5px solid #141414; }
 
 
     /* 两层结构: #pages(裁剪窗口) > #track(500% 轨道) > .pg(各 20% = 屏宽) */
     #pages { display: block; width: 100%; overflow: hidden; }
     body { overscroll-behavior-x: none; }  /* 关掉浏览器右滑返回/左滑前进接管 */
     #pages, .swipe-fg { touch-action: pan-y; }  /* 横向留给 JS 手势 */
-    .filters, #pager-tabs { touch-action: pan-x; }  /* 自身横滚的容器除外 */
+    .filters { touch-action: pan-x; }  /* 自身横滚的容器除外 */
     #track { display: flex; align-items: flex-start; width: 500%;
              will-change: transform;
              transition: transform .26s cubic-bezier(.22,.61,.36,1); }
@@ -2631,6 +2776,19 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .skel { display: block; }
     #chart-wrap, #logpage, #agents-page { display: block; }  /* 移动专用面板 */
     #logpage[hidden], #agents-page[hidden] { display: none !important; }
+    /* 概要摘要组件(状态卡+指标2×2+需要处理+最近活动) */
+    .statuscard { display: block; margin-bottom: 10px; }
+    .mgrid4 { display: grid; margin-bottom: 12px; }
+    #alerts, #recent { display: block; margin-bottom: 12px; }
+    #recent h2 { display: flex; justify-content: space-between; align-items: baseline; }
+    .rc-more { cursor: pointer; }
+    #events { display: none; }  /* 概要页只留 3-5 条摘要(最近活动), 全量事件进日志页 */
+    .lv { display: block; }
+    #log-filters { display: flex; flex-wrap: nowrap; overflow-x: auto;
+                   -webkit-overflow-scrolling: touch; scrollbar-width: none;
+                   margin: 0 -12px 10px; padding: 0 12px 4px; }
+    #log-filters::-webkit-scrollbar { display: none; }
+    #log-filters .chip { flex: none; }
 
     .sysbar { gap: 8px; margin-bottom: 10px; }
     .stat { min-width: calc(50% - 6px); flex: 1 1 calc(50% - 6px); padding: 8px 12px;
@@ -2723,26 +2881,40 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
       </svg>
     </a>
   </h1>
-  <span class="meta">{{HOSTNAME}} · {{T:updated}} <span id="updated">{{UPDATED}}</span> · <span id="count">{{COUNT}}</span> {{T:listen_ports}}</span>
+  <span class="meta">{{T:updated}} <span id="updated">{{UPDATED}}</span> · {{T:svc_pre}}<span id="count">{{COUNT}}</span>{{T:svc_post}}</span>
   <span class="spacer"></span>
   <span class="auto">
     <span class="sw" id="auto" role="switch" aria-checked="false" tabindex="0"
           title="{{T:auto_refresh}}"><span class="sw-thumb"></span></span>
     {{T:auto_refresh}} (<span id="auto-sec">{{AUTO}}s</span>)
   </span>
-  <nav id="pager-tabs" aria-label="{{T:title}}">
-    <span class="ptab active" data-p="0" role="button" tabindex="0">{{T:tab_home}}</span>
-    <span class="ptab" data-p="1" role="button" tabindex="0">{{T:tab_log}}</span>
-    <span class="ptab" data-p="2" role="button" tabindex="0">{{T:tab_goal}}</span>
-    <span class="ptab" data-p="3" role="button" tabindex="0">{{T:tab_svc}}</span>
-    <span class="ptab" data-p="4" role="button" tabindex="0">{{T:tab_model}}</span>
-    <span id="pg-ind" aria-hidden="true"></span>
-  </nav>
   <span class="btn" id="refresh" role="button" tabindex="0">{{T:refresh}}</span>
+  <div class="statusline" id="statusline" role="button" tabindex="0">
+    <span id="status-ico">⏳</span><b id="status-text">{{T:st_loading}}</b>
+    <span class="stale" id="stale-badge" hidden>{{T:st_stale}}</span>
+  </div>
 </header>
 <div id="ptr-indicator" aria-hidden="true"><span class="ptr-arrow">↓</span><span class="ptr-label">{{T:ptr_pull}}</span></div>
 <main>
 <div id="pages">
+<div class="statuscard" id="statuscard" role="button" tabindex="0">
+  <div class="sc-head"><span class="sc-ico" id="sc-ico">⏳</span><span class="sc-big" id="sc-text">{{T:st_loading}}</span></div>
+  <div class="sc-sub"><span id="sc-fresh"></span><span class="stale" id="sc-stale" hidden> {{T:st_stale}}</span></div>
+</div>
+<div class="mgrid4">
+  <div class="mcell"><span class="mnum" id="m-svc">—</span><span class="mlabel">{{T:m_svc_ok}}</span></div>
+  <div class="mcell"><span class="mnum" id="m-run">—</span><span class="mlabel">{{T:m_goal_run}}</span></div>
+  <div class="mcell"><span class="mnum" id="m-bad">—</span><span class="mlabel">{{T:m_goal_bad}}</span></div>
+  <div class="mcell"><span class="mnum" id="m-alert">—</span><span class="mlabel">{{T:m_alerts}}</span></div>
+</div>
+<div class="gpanel" id="alerts">
+  <h2>{{T:al_title}}</h2>
+  <div id="alert-body" class="alert-body"><div class="gempty">{{T:st_loading}}</div></div>
+</div>
+<div class="gpanel" id="recent">
+  <h2>{{T:rc_title}} <span class="ghint rc-more" role="button" tabindex="0">{{T:rc_more}}</span></h2>
+  <div id="recent-body"></div>
+</div>
 {{SYSBAR}}
 {{LOADLINE}}
 <div class="gpanel" id="chart-wrap">
@@ -2784,19 +2956,35 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <div class="gpanel" id="logpage" hidden>
   <h2>{{T:tab_log}}</h2>
   <div class="logbar"><select id="logagent-sel"><option value="">{{T:log_pick}}</option></select></div>
+  <div class="filters" id="log-filters">
+    <span class="chip active" data-lf="all" role="button" tabindex="0">{{T:lf_all}}</span>
+    <span class="chip" data-lf="ok" role="button" tabindex="0">{{T:lf_success}}</span>
+    <span class="chip" data-lf="warn" role="button" tabindex="0">{{T:lf_warn}}</span>
+    <span class="chip" data-lf="fail" role="button" tabindex="0">{{T:lf_fail}}</span>
+    <span class="chip" data-lf="recover" role="button" tabindex="0">{{T:lf_recover}}</span>
+    <span class="chip active" data-ls="all" role="button" tabindex="0">{{T:lf_wd}}</span>
+    <span class="chip" data-ls="done" role="button" tabindex="0">{{T:lf_done}}</span>
+    <span class="chip" data-ls="commit" role="button" tabindex="0">{{T:lf_commit}}</span>
+    <span class="chip active" data-lt="24" role="button" tabindex="0">24h</span>
+    <span class="chip" data-lt="72" role="button" tabindex="0">{{T:lf_3d}}</span>
+    <span class="chip" data-lt="168" role="button" tabindex="0">{{T:lf_7d}}</span>
+    <span class="chip" data-lt="0" role="button" tabindex="0">{{T:lf_time}}{{T:lf_all}}</span>
+  </div>
   <div id="logbody"></div>
 </div>
 </div>
 </main>
 <nav id="tabbar" aria-label="{{T:title}}">
   <span class="tab" data-p="0" role="button" tabindex="0" aria-label="{{T:tab_home}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8.5 8 3l6 5.5V14H9.5v-4h-5v4H2z"/></svg>{{T:tab_home}}</span>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8.5 8 3l6 5.5V14H9.5v-4h-5v4H2z"/></svg><span class="tlabel">{{T:tab_home}}</span><span class="tbadge-dot" id="tab-alert-badge" hidden></span></span>
+  <span class="tab" data-p="1" role="button" tabindex="0" aria-label="{{T:tab_log}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3.5 3.5h9M3.5 6.5h9M3.5 9.5h6M3.5 12.5h4"/></svg><span class="tlabel">{{T:tab_log}}</span></span>
   <span class="tab" data-p="2" role="button" tabindex="0" aria-label="{{T:tab_goal}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/></svg>{{T:tab_goal}}</span>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/></svg><span class="tlabel">{{T:tab_goal}}</span></span>
   <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg>{{T:tab_svc}}</span>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg><span class="tlabel">{{T:tab_svc}}</span></span>
   <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_model}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M6 1.5v2M10 1.5v2M6 12.5v2M10 12.5v2M1.5 6h2M1.5 10h2M12.5 6h2M12.5 10h2"/></svg>{{T:tab_model}}</span>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M6 1.5v2M10 1.5v2M6 12.5v2M10 12.5v2M1.5 6h2M1.5 10h2M12.5 6h2M12.5 10h2"/></svg><span class="tlabel">{{T:tab_model}}</span></span>
 </nav>
 <script>
 const AUTO = {{AUTO}};
@@ -2870,7 +3058,7 @@ function applyFilter() {
   const shown = FILTERS[filter] ? services.filter(FILTERS[filter]) : [];
   ["user", "docker", "system", "all"].forEach(f =>
     $("n-" + f).textContent = services.filter(FILTERS[f]).length);
-  document.querySelectorAll(".chip").forEach(c =>
+  document.querySelectorAll("#filters .chip").forEach(c =>
     c.classList.toggle("active", c.dataset.f === filter));
   if (filter === "omp") {
     $("svc").style.display = "none";
@@ -3301,9 +3489,11 @@ async function load(alsoSys) {
     const r = await fetch("/api", { cache: "no-store" });
     const data = await r.json();
     $("updated").textContent = new Date(data.updated * 1000).toLocaleString();
+    lastUpdatedTs = data.updated * 1000;
     services = data.services;
     renderToolchips();
     applyFilter();
+    renderOverview(data);          // 概要摘要(状态卡/指标/需要处理/最近活动)
   } catch (err) {
     console.error("refresh failed", err);
   }
@@ -3318,6 +3508,241 @@ async function load(alsoSys) {
   btn.classList.remove("spinning");
   btn.setAttribute("aria-disabled", "false");
 }
+
+/* ================================================================
+   概要摘要 + 告警中心(轻量) + 日志时间线 —— 移动端概要/日志页的数据层。
+   桌面端 renderOverview 直接返回,布局零变化。
+   /api/goals 15s 缓存,概要与日志页共用。 */
+let lastUpdatedTs = Date.now();
+let goalsCache = { t: 0, data: null };
+const LOG_LIMIT = 60;
+
+async function fetchGoalsData(force) {
+  const now = Date.now();
+  if (!force && goalsCache.data && now - goalsCache.t < 15000) return goalsCache.data;
+  try {
+    const r = await fetch("/api/goals?limit=" + LOG_LIMIT + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
+    const d = await r.json();
+    if (d && d.updated) lastUpdatedTs = Math.max(lastUpdatedTs, d.updated * 1000);
+    goalsCache = { t: now, data: d };
+  } catch (err) { console.error("goals refresh failed", err); }
+  return goalsCache.data;
+}
+
+function agoStr(sec) {
+  if (sec == null) return "—";
+  sec = Math.max(0, sec);
+  if (sec < 60) return t("g_ago_s", { s: Math.round(sec) });
+  if (sec < 3600) return t("g_ago_m", { m: Math.floor(sec / 60) });
+  if (sec < 86400) return t("g_ago_h", { h: Math.floor(sec / 3600) });
+  return t("g_ago_d", { d: Math.floor(sec / 86400) });
+}
+function agoFromTs(ts) { return agoStr((Date.now() - ts * 1000) / 1000); }
+
+// --- 事件类型元数据: 图标(双通道) + 语义组(ok/warn/fail/recover) ---
+const EV_META = {
+  complete: { ico: "✅", grp: "ok", key: "evk_complete" },
+  recover:  { ico: "🟢", grp: "recover", key: "evk_recover" },
+  restart:  { ico: "🔄", grp: "fail", key: "evk_restart" },
+  nudge:    { ico: "🔔", grp: "warn", key: "evk_nudge" },
+  pause:    { ico: "⏸", grp: "warn", key: "evk_pause" },
+  cleanup:  { ico: "🧹", grp: "ok", key: "evk_cleanup" },
+  commit:   { ico: "📦", grp: "ok", key: "evk_commit" },
+  other:    { ico: "·", grp: "ok", key: "evk_other" },
+};
+
+// --- 告警(需要处理): 忽略记录存 localStorage(同 goal+类型不再提醒) ---
+const IGN_KEY = "svc-ignored-alerts";
+function ignoredSet() { try { return new Set(JSON.parse(localStorage.getItem(IGN_KEY) || "[]")); } catch (e) { return new Set(); } }
+function addIgnore(key) {
+  const s = ignoredSet(); s.add(key);
+  try { localStorage.setItem(IGN_KEY, JSON.stringify([...s])); } catch (e) {}
+}
+function goalAlerts(goals) {
+  const out = [];
+  (goals || []).forEach(g => {
+    const id = g.gid || g.session || g.name;
+    const sub = g.idle_sec != null ? t("g_last") + ": " + agoStr(g.idle_sec) : "";
+    let a = null;
+    if (g.light === "paused") a = { sev: "warn", key: "paused|" + id, icon: "⏸", msg: t("al_paused") };
+    else if (g.light === "lost") a = { sev: "bad", key: "lost|" + id, icon: "⚠️", msg: t("al_lost") };
+    else if (g.light === "done") a = { sev: "done", key: "done|" + id, icon: "✅", msg: t("al_done") };
+    else if (g.stalled) a = { sev: "warn", key: "stalled|" + id, icon: "🐌", msg: t("al_stalled") };
+    else if (g.light === "retry") a = { sev: "warn", key: "retry|" + id, icon: "🔁", msg: t("g_retry") };
+    if (a) out.push({ sev: a.sev, key: a.key, icon: a.icon, msg: a.msg,
+                      name: g.name || g.session || "—", sub: sub, cmd: g.resume_cmd || "" });
+  });
+  return out;
+}
+function renderAlerts(alerts) {
+  const el = $("alert-body");
+  if (!el) return;
+  if (!alerts.length) { el.innerHTML = `<div class="gempty">${t("al_none")}</div>`; return; }
+  el.innerHTML = alerts.map(a => `
+    <div class="alert-item" data-key="${escAttr(a.key)}">
+      <span class="al-ico">${a.icon}</span>
+      <div class="al-main">
+        <div class="al-line"><span class="al-name">${escHtml(a.name)}</span><span class="al-msg">${escHtml(a.msg)}</span></div>
+        ${a.sub ? `<div class="al-sub">${escHtml(a.sub)}</div>` : ""}
+      </div>
+      <div class="al-act">
+        ${a.cmd ? `<span class="al-btn gcopy" data-cmd="${escAttr(a.cmd)}" role="button" tabindex="0" title="${escAttr(a.cmd)}">⧉</span>` : ""}
+        <span class="al-btn detail" role="button" tabindex="0">${t("al_detail")}</span>
+        <span class="al-btn ignore" role="button" tabindex="0">${t("al_ignore")}</span>
+      </div>
+    </div>`).join("");
+}
+
+let lastSvc = { ok: 0, total: 0 };
+async function renderOverview(apiData) {
+  if (!isMobile()) return;
+  if (apiData && apiData.services) {
+    lastSvc = { ok: apiData.services.filter(s => !s.paused).length, total: apiData.services.length };
+  }
+  const d = await fetchGoalsData();
+  const goals = (d && d.goals) || [];
+  const events = (d && d.events) || [];
+  const alerts = goalAlerts(goals).filter(a => !ignoredSet().has(a.key));
+  const nRun = goals.filter(g => g.light === "active" || g.light === "retry").length;
+  const nBad = goals.filter(g => g.light === "paused" || g.light === "lost" || g.stalled).length;
+  const nAlert = alerts.length;
+  // 总体状态: 图标+文字双通道; 红=有严重(会话丢失) 黄=有告警 绿=全部正常
+  const ok = nAlert === 0;
+  const cls = ok ? "ok" : alerts.some(a => a.sev === "bad") ? "bad" : "warn";
+  const txt = ok ? t("st_all_ok") : t("st_alert", { n: nAlert });
+  const ico = ok ? "✅" : "⚠";
+  const sc = $("statuscard"), sl = $("statusline");
+  if (sc) { sc.className = "statuscard " + cls; $("sc-ico").textContent = ico; $("sc-text").textContent = txt; }
+  if (sl) { sl.className = "statusline " + cls; $("status-ico").textContent = ico; $("status-text").textContent = txt; }
+  $("m-svc").textContent = lastSvc.ok + "/" + lastSvc.total;
+  $("m-run").textContent = nRun;
+  $("m-bad").textContent = nBad;
+  $("m-bad").classList.toggle("alert", nBad > 0);
+  $("m-alert").textContent = nAlert;
+  $("m-alert").classList.toggle("alert", nAlert > 0);
+  renderAlerts(alerts);
+  // 最近活动: 3-5 条摘要(一行一条), 点击进日志页
+  const recent = events.slice(0, 5);
+  $("recent-body").innerHTML = recent.length ? recent.map(e => {
+    const m = EV_META[e.kind] || EV_META.other;
+    return `<div class="rc-row" role="button" tabindex="0"><span class="rc-ico">${m.ico}</span>` +
+      `<span class="rc-kind">${escHtml(t(m.key))} · ${escHtml(e.name)}</span>` +
+      `<span class="rc-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
+  }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
+  updateBadge(nAlert);
+  refreshFreshness();
+}
+function updateBadge(n) {
+  const b = $("tab-alert-badge");
+  if (!b) return;
+  b.hidden = !n;
+  b.textContent = n > 99 ? "99+" : String(n);
+}
+function refreshFreshness() {
+  const age = Date.now() - lastUpdatedTs;
+  const stale = age > 2 * autoSec * 1000;   // 超过 2× 刷新周期 → 数据过期
+  const h = $("stale-badge"), s = $("sc-stale");
+  if (h) { h.hidden = !stale; h.textContent = "⚠ " + t("st_stale"); }
+  if (s) { s.hidden = !stale; s.textContent = "⚠ " + t("st_stale"); }
+  const f = $("sc-fresh");
+  if (f) f.textContent = t("g_last") + ": " + agoStr(age / 1000);
+}
+setInterval(() => { if (!document.hidden) refreshFreshness(); }, 20000);
+
+// 概要页交互: 状态卡→Goal页 / 状态栏→回概要 / 最近活动→日志页 / 告警操作
+$("statuscard").addEventListener("click", () => setPage(2));
+$("statusline").addEventListener("click", () => {
+  setPage(0);
+  const m = document.querySelector("main");
+  if (m) m.scrollTo({ top: 0 });
+});
+const rcMore = document.querySelector(".rc-more");
+if (rcMore) rcMore.addEventListener("click", () => setPage(1));
+$("recent-body").addEventListener("click", () => setPage(1));
+document.addEventListener("click", (e) => {
+  const it = e.target.closest(".alert-item");
+  if (!it) return;
+  if (e.target.closest(".gcopy")) return;            // 复制 resume 命令: 交给全局 gcopy
+  if (e.target.closest(".ignore")) {                 // 忽略: localStorage 记住, 同 goal+类型不再提醒
+    addIgnore(it.dataset.key);
+    haptic(8);
+    renderOverview(null);
+    return;
+  }
+  if (e.target.closest(".detail")) setPage(2);
+});
+
+// --- 日志页: 全局事件时间线(筛选 chips + 同goal循环折叠 + 详情默认折叠) ---
+const logFilter = { st: "all", src: "all", hrs: 24 };
+function filterEvents(evs) {
+  const now = Date.now() / 1000;
+  return (evs || []).filter(e => {
+    if (logFilter.hrs && e.ts < now - logFilter.hrs * 3600) return false;
+    if (logFilter.src === "commit") { if (e.kind !== "commit") return false; }
+    else if (logFilter.src !== "all" && e.src !== logFilter.src) return false;
+    if (logFilter.st !== "all" && (EV_META[e.kind] || EV_META.other).grp !== logFilter.st) return false;
+    return true;
+  });
+}
+function lvHead(e, extra) {
+  const m = EV_META[e.kind] || EV_META.other;
+  return `<div class="lv-line1"><span class="lv-ico">${m.ico}</span>` +
+    `<span class="lv-kind">${escHtml(t(m.key))}</span>` +
+    `<span class="rc-name">${escHtml(e.name)}</span>${extra || ""}` +
+    `<span class="lv-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
+}
+function evSummary(e) { return e.src === "done" ? String(e.text).split("/").pop() : e.text; }
+async function renderLogTimeline() {
+  const body = $("logbody");
+  if (!body || !isMobile()) return;
+  body.innerHTML = `<div class="gempty">${t("a_loading")}</div>`;
+  const d = await fetchGoalsData();
+  const evs = filterEvents(d && d.events);
+  if (!evs.length) { body.innerHTML = `<div class="gempty">${t("ev_empty")}</div>`; return; }
+  // 同 goal 同类事件连续 >=3 条 → 折叠「循环 ×N」(019feb87 类刷屏降噪)
+  const groups = [];
+  evs.forEach(e => {
+    const key = e.gid + "|" + e.kind;
+    const g = groups[groups.length - 1];
+    if (g && g.key === key) g.items.push(e);
+    else groups.push({ key, items: [e] });
+  });
+  let html = "";
+  groups.forEach(g => {
+    const head = g.items[0];
+    if (g.items.length >= 3) {
+      html += `<div class="lv">${lvHead(head, `<span class="lv-loop">${t("ev_loop", { n: g.items.length })}</span>`)}` +
+        `<div class="lv-line2">${escHtml(evSummary(head))}</div>` +
+        `<span class="lv-fold" role="button" tabindex="0">${t("g_detail")}</span>` +
+        `<div class="lv-meta">${g.items.map(x => escHtml(x.time + " · " + x.gid + " · " + x.text)).join("<br>")}</div>` +
+        `<div class="lv-children">${g.items.slice(0, 12).map(x =>
+          lvHead(x) + `<div class="lv-line2">${escHtml(evSummary(x))}</div>`).join("")}` +
+        `${g.items.length > 12 ? `<div class="lv-more">… ${g.items.length - 12}</div>` : ""}</div></div>`;
+    } else {
+      html += g.items.map(e => `<div class="lv">${lvHead(e)}` +
+        `<div class="lv-line2">${escHtml(evSummary(e))}</div>` +
+        `<span class="lv-fold" role="button" tabindex="0">${t("g_detail")}</span>` +
+        `<div class="lv-meta">${escHtml(e.time)} · ${escHtml(e.gid)} · ${escHtml(e.src)}<br>${escHtml(e.text)}</div></div>`).join("");
+    }
+  });
+  body.innerHTML = html;
+}
+// 日志条目点按: 展开/收起折叠详情(PID/文件名/原始文本默认折叠)
+document.addEventListener("click", (e) => {
+  const lv = e.target.closest("#logbody .lv");
+  if (lv) lv.classList.toggle("open");
+});
+// 日志筛选 chips: 状态 / 来源 / 时间(默认 24h)
+document.querySelectorAll("#log-filters .chip").forEach(c => c.addEventListener("click", () => {
+  const attr = c.dataset.lf !== undefined ? "lf" : c.dataset.ls !== undefined ? "ls" : "lt";
+  if (attr === "lf") logFilter.st = c.dataset.lf;
+  else if (attr === "ls") logFilter.src = c.dataset.ls;
+  else logFilter.hrs = +c.dataset.lt;
+  document.querySelectorAll(`#log-filters .chip[data-${attr}]`).forEach(x =>
+    x.classList.toggle("active", x === c));
+  haptic(6);
+  renderLogTimeline();
+}));
 
 // 仅触摸设备启用：页面顶端向下拖动时复用现有手动刷新入口 load(true)。
 (function setupPullToRefresh() {
@@ -3337,13 +3762,16 @@ async function load(alsoSys) {
     indicator.classList.toggle("ready", ready);
     label.textContent = t(ready ? "ptr_release" : "ptr_pull");
   };
+  // 内部滚动布局: 判断「页面已滚下」要看 main 滚动容器, 不再是 window
+  const mainScroller = document.querySelector("main");
+  const pageScrolled = () => (mainScroller && mainScroller.scrollTop > 0) || window.scrollY > 0;
   document.addEventListener("touchstart", (e) => {
-    if (refreshing || e.touches.length !== 1 || window.scrollY !== 0) return;
+    if (refreshing || e.touches.length !== 1 || pageScrolled()) return;
     startY = e.touches[0].clientY;
     tracking = true;
   }, { passive: true });
   document.addEventListener("touchmove", (e) => {
-    if (!tracking || refreshing || window.scrollY !== 0) return;
+    if (!tracking || refreshing || pageScrolled()) return;
     const distance = e.touches[0].clientY - startY;
     if (distance <= 0) { tracking = false; setPull(0); return; }
     e.preventDefault();
@@ -3370,7 +3798,7 @@ async function load(alsoSys) {
   }, { passive: true });
 })();
 
-document.querySelectorAll(".chip").forEach(c =>
+document.querySelectorAll("#filters .chip").forEach(c =>
   c.addEventListener("click", () => { filter = c.dataset.f; applyFilter(); }));
 document.querySelectorAll(".tcol").forEach(b =>
   b.addEventListener("click", () => {
@@ -3412,7 +3840,7 @@ const gesture = { claimed: null };
 // 移动端把各分区装进 5 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#sysbar", "#loadline", "#chart-wrap", "#toolchips", "#events"],
+  ["#statuscard", ".mgrid4", "#alerts", "#recent", "#sysbar", "#loadline", "#chart-wrap", "#toolchips"],
   ["#logpage"],
   ["#goals"],
   ["#filters", "#tasks", "#svc"],
@@ -3451,9 +3879,6 @@ const pages = $("pages");
 const N_PAGES = 5;
 var page = 0;   // var: 挂到 window, 便于外部调试/测试读取
 function pageLabels() { return [t("tab_home"), t("tab_log"), t("tab_goal"), t("tab_svc"), t("tab_model")]; }
-function buildIndicator() {
-  $("pg-ind").innerHTML = Array.from({ length: N_PAGES }, (_, i) => `<i class="${i === page ? "on" : ""}"></i>`).join("");
-}
 function applyPagesX(withTransition) {
   const tr = trackEl; // 移动端才有轨道
   if (!tr) return;
@@ -3472,13 +3897,11 @@ function setPage(i, opts) {
   const changed = i !== page || first;
   page = i;
   applyPagesX(true);
-  document.querySelectorAll(".ptab").forEach(b => b.classList.toggle("active", +b.dataset.p === i));
   document.querySelectorAll("#tabbar .tab").forEach(b => b.classList.toggle("active", +b.dataset.p === i));
-  buildIndicator();
   if (changed) activatePage(i);
 }
 function activatePage(i) {
-  if (i === 1) initLogPage();        // 日志页: 填充 agent 选择器
+  if (i === 1) { initLogPage(); renderLogTimeline(); }  // 日志页: agent 选择器 + 事件时间线
   if (i === 4) initAgentsPage();     // 模型页: 拉取 OMP/Codex 卡片
   if (i === 3 && isMobile()) {       // 服务页: 骨架 → 渲染
     const tbody = $("svc").querySelector("tbody");
@@ -3487,7 +3910,7 @@ function activatePage(i) {
   }
 }
 document.addEventListener("click", (e) => {
-  const b = e.target.closest(".ptab, #tabbar .tab");
+  const b = e.target.closest("#tabbar .tab");
   if (b) { setPage(+b.dataset.p); return; }
 });
 
@@ -3536,6 +3959,7 @@ async function loadLogView() {
   const sel = $("logagent-sel");
   const opt = sel.selectedOptions[0];
   const sid = sel.value, cwd = opt ? opt.dataset.cwd || "" : "", tmx = opt ? opt.dataset.tmux || "" : "";
+  if (!sid && !cwd) { renderLogTimeline(); return; }  // 未选 agent → 全局事件时间线(默认视图)
   body.innerHTML = `<div class='agentlog'>${t("a_loading")}</div>`;
   try {
     const d = await fetchAgentLog(sid, cwd, tmx);
@@ -3665,7 +4089,7 @@ if (TOUCH) (function setupGestures() {
     const target = !edge && t.target.closest ? t.target.closest(".swipe-item") : null;
     const swipeItem = target;
     // 横向自身滚动的容器不参与手势; a/ chip 不排除 —— 链接上的横滑仍是列表手势, 点击照常触发
-    const scroller = t.target.closest ? t.target.closest(".filters, .aglog, .termlog, #pager-tabs, select") : null;
+    const scroller = t.target.closest ? t.target.closest(".filters, .aglog, .termlog, select") : null;
     if (swipeItem && !scroller) {
       g = { kind: "row", id: t.identifier, x0: t.clientX, y0: t.clientY, t0: Date.now(),
             fg: swipeItem.querySelector(".swipe-fg"), base: 0, lockX: null };
@@ -3932,10 +4356,17 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/sys":
             self._send_json(200, sys_info())
         elif path == "/api/goals":
+            # limit 控制事件条数(手机日志页 24h-7d 时间窗需要更多条目)
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                lim = max(1, min(200, int((qs.get("limit") or ["24"])[0])))
+            except ValueError:
+                lim = 24
             self._send_json(200, {"updated": time.time(), "goals": scan_goals(),
-                                  "completed": parse_completed_goals(),
-                                  "events": merge_events(parse_watchdog_events(),
-                                                        parse_completed_goals())})
+                                  "completed": parse_completed_goals(limit=lim),
+                                  "events": merge_events(
+                                      parse_watchdog_events(limit=min(lim, 80)),
+                                      parse_completed_goals(limit=lim), limit=lim)})
         elif path == "/api/tasks":
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             self._send_json(200, {"tasks": scan_tasks(lang)})
