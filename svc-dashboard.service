@@ -11,7 +11,7 @@ Restart=on-failure
 RestartSec=3
 # 资源限制:防止失控拖垮系统(无人访问时实际只用 ~17MB、0% CPU)
 MemoryMax=128M
-CPUQuota=10%
+CPUQuota=40%
 TasksMax=64
 
 [Install]
