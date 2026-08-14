@@ -562,7 +562,7 @@ L10N = {
     "zh": {
         "title": "服务一览", "github_repo": "GitHub 仓库",
         "updated": "更新于", "listen_ports": "个监听端口", "auto_refresh": "自动刷新",
-        "refresh": "⟳ 刷新",
+        "refresh": "⟳ 刷新", "ptr_pull": "下拉刷新", "ptr_release": "松开刷新", "ptr_loading": "刷新中…",
         "chip_user": "用户服务", "chip_docker": "Docker", "chip_system": "系统服务",
         "chip_all": "全部", "chip_omp": "agent任务", "chip_watchdog": "定时任务",
         "chip_tmux": "tmux状态", "chip_manage": "服务管理",
@@ -645,7 +645,7 @@ L10N = {
     "en": {
         "title": "Services", "github_repo": "GitHub repo",
         "updated": "updated", "listen_ports": "listening ports", "auto_refresh": "Auto refresh",
-        "refresh": "⟳ Refresh",
+        "refresh": "⟳ Refresh", "ptr_pull": "Pull to refresh", "ptr_release": "Release to refresh", "ptr_loading": "Refreshing…",
         "chip_user": "User services", "chip_docker": "Docker", "chip_system": "System services",
         "chip_all": "All", "chip_omp": "Agents", "chip_watchdog": "Tasks",
         "chip_tmux": "tmux", "chip_manage": "Manage",
@@ -728,7 +728,7 @@ L10N = {
     "ja": {
         "title": "サービス一覧", "github_repo": "GitHub リポジトリ",
         "updated": "更新", "listen_ports": "個の待受ポート", "auto_refresh": "自動更新",
-        "refresh": "⟳ 更新",
+        "refresh": "⟳ 更新", "ptr_pull": "引っ張って更新", "ptr_release": "離して更新", "ptr_loading": "更新中…",
         "chip_user": "ユーザーサービス", "chip_docker": "Docker", "chip_system": "システムサービス",
         "chip_all": "すべて", "chip_omp": "エージェント", "chip_watchdog": "タスク",
         "chip_tmux": "tmux", "chip_manage": "サービス管理",
@@ -2320,6 +2320,23 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .btn:hover { background: #333; }
   .btn:active { background: #3a3a3a; transform: translateY(1px); }
   .btn.spinning { opacity: .7; }
+  /* 移动端下拉刷新指示器；默认完全收起，桌面端不注册事件。 */
+  #ptr-indicator { position: fixed; top: 0; left: 50%; z-index: 30;
+    width: 132px; height: 48px; margin-left: -66px; margin-top: -48px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: #141414; border: 1px solid #2c2c2c; border-top: 0;
+    border-radius: 0 0 12px 12px; color: #aaa; font-size: 12px;
+    transform: translateY(0); transition: transform .22s ease, color .15s ease; }
+  #ptr-indicator .ptr-arrow { display: inline-block; font-size: 20px; line-height: 1;
+    transform: rotate(0deg); transition: transform .12s linear; }
+  #ptr-indicator.ready { color: #8ab4f8; }
+  #ptr-indicator.loading { color: #6ec89a; }
+  #ptr-indicator.loading .ptr-arrow { animation: ptr-spin .8s linear infinite; }
+  @keyframes ptr-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    #ptr-indicator, #ptr-indicator .ptr-arrow { transition: none; }
+    #ptr-indicator.loading .ptr-arrow { animation: none; }
+  }
   .btn[aria-disabled="true"], .btn.disabled { opacity: .5; cursor: default; pointer-events: none; }
   .btn:focus-visible, .chip:focus-visible, .tcol:focus-visible,
   .ctl-btn:focus-visible, .mbtn:focus-visible, .aglog-refresh:focus-visible {
@@ -2595,6 +2612,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   </span>
   <span class="btn" id="refresh" role="button" tabindex="0">{{T:refresh}}</span>
 </header>
+<div id="ptr-indicator" aria-hidden="true"><span class="ptr-arrow">↓</span><span class="ptr-label">{{T:ptr_pull}}</span></div>
 <main>
 {{SYSBAR}}
 {{LOADLINE}}
@@ -3122,6 +3140,55 @@ async function load(alsoSys) {
   btn.classList.remove("spinning");
   btn.setAttribute("aria-disabled", "false");
 }
+
+// 仅触摸设备启用：页面顶端向下拖动时复用现有手动刷新入口 load(true)。
+(function setupPullToRefresh() {
+  const touchCapable = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+  if (!touchCapable) return;
+  const indicator = $("ptr-indicator");
+  const arrow = indicator.querySelector(".ptr-arrow");
+  const label = indicator.querySelector(".ptr-label");
+  const threshold = 70;
+  let startY = 0, pull = 0, rawDistance = 0, tracking = false, refreshing = false;
+  const setPull = (distance) => {
+    rawDistance = Math.max(0, distance);
+    pull = Math.min(110, rawDistance * 0.55);
+    indicator.style.transform = `translateY(${pull}px)`;
+    arrow.style.transform = `rotate(${Math.min(180, rawDistance / threshold * 180)}deg)`;
+    const ready = rawDistance >= threshold;
+    indicator.classList.toggle("ready", ready);
+    label.textContent = t(ready ? "ptr_release" : "ptr_pull");
+  };
+  document.addEventListener("touchstart", (e) => {
+    if (refreshing || e.touches.length !== 1 || window.scrollY !== 0) return;
+    startY = e.touches[0].clientY;
+    tracking = true;
+  }, { passive: true });
+  document.addEventListener("touchmove", (e) => {
+    if (!tracking || refreshing || window.scrollY !== 0) return;
+    const distance = e.touches[0].clientY - startY;
+    if (distance <= 0) { tracking = false; setPull(0); return; }
+    e.preventDefault();
+    setPull(distance);
+  }, { passive: false });
+  document.addEventListener("touchend", async () => {
+    if (!tracking) return;
+    tracking = false;
+    if (rawDistance < threshold) { setPull(0); return; }
+    refreshing = true;
+    indicator.classList.remove("ready");
+    indicator.classList.add("loading");
+    indicator.style.transform = "translateY(48px)";
+    label.textContent = t("ptr_loading");
+    console.log("[svc-dashboard] pull-to-refresh: load(true)");
+    try { await load(true); }
+    finally {
+      refreshing = false;
+      indicator.classList.remove("loading");
+      setPull(0);
+    }
+  }, { passive: true });
+})();
 
 document.querySelectorAll(".chip").forEach(c =>
   c.addEventListener("click", () => { filter = c.dataset.f; applyFilter(); }));
