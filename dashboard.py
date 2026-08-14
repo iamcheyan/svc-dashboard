@@ -740,7 +740,7 @@ L10N = {
         "ev_pause": "目标暂停", "ev_cleanup": "清理",
         "ev_other": "·", "ev_none": "暂无事件",
         "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分钟前", "g_ago_h": "{h} 小时前",
-        "tab_home": "概览", "tab_goal": "Goal", "tab_svc": "服务", "tab_model": "模型", "tab_log": "日志",
+        "tab_home": "概览", "tab_goal": "Goal", "tab_svc": "服务", "tab_agent": "Agent", "tab_log": "日志",
         "act_open": "打开", "act_copy_addr": "复制地址", "g_detail": "详情", "g_view_detail": "查看详情", "g_status_detail": "当前状态", "g_runtime_detail": "运行信息", "g_terminal_detail": "实时终端（最近 40 行）", "g_activity_detail": "任务活动", "g_watchdog_detail": "Watchdog 事件", "g_field_status": "状态", "g_field_idle": "最近活动", "g_seconds": "{n} 秒前", "g_no_activity": "暂无可显示的活动",
         "chart_title": "负载 / CPU 趋势", "chart_win": "窗口 {n} 点",
         "chart_empty": "采样中：刷新几次就有曲线了（双指捏合可调时间窗）",
@@ -886,7 +886,7 @@ L10N = {
         "ev_pause": "goal paused", "ev_cleanup": "cleanup",
         "ev_other": "·", "ev_none": "No events yet",
         "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago", "g_ago_d": "{d}d ago",
-        "tab_home": "Overview", "tab_goal": "Goal", "tab_svc": "Services", "tab_model": "Models", "tab_log": "Logs",
+        "tab_home": "Overview", "tab_goal": "Goal", "tab_svc": "Services", "tab_agent": "Agents", "tab_log": "Logs",
         "tab_tools": "Tools",
         "tl_grp_insp": "Checks", "tl_grp_ops": "Operations", "tl_grp_direct": "Quick access", "tl_grp_pref": "Preferences",
         "act_open": "Open", "act_copy_addr": "Copy address", "g_detail": "details", "g_view_detail": "View details", "g_status_detail": "Current status", "g_runtime_detail": "Runtime", "g_terminal_detail": "Live terminal (last 40 lines)", "g_activity_detail": "Task activity", "g_watchdog_detail": "Watchdog events", "g_field_status": "Status", "g_field_idle": "Last activity", "g_seconds": "{n}s ago", "g_no_activity": "No activity to show",
@@ -1034,7 +1034,7 @@ L10N = {
         "ev_pause": "goal 一時停止", "ev_cleanup": "クリーンアップ",
         "ev_other": "·", "ev_none": "イベントなし",
         "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分前", "g_ago_h": "{h} 時間前",
-        "tab_home": "概要", "tab_goal": "Goal", "tab_svc": "サービス", "tab_model": "モデル", "tab_log": "ログ",
+        "tab_home": "概要", "tab_goal": "Goal", "tab_svc": "サービス", "tab_agent": "Agent", "tab_log": "ログ",
         "act_open": "開く", "act_copy_addr": "アドレスをコピー", "g_detail": "詳細", "g_view_detail": "詳細を見る", "g_status_detail": "現在の状態", "g_runtime_detail": "実行情報", "g_terminal_detail": "ライブ端末（最新40行）", "g_activity_detail": "タスク活動", "g_watchdog_detail": "Watchdogイベント", "g_field_status": "状態", "g_field_idle": "最終活動", "g_seconds": "{n}秒前", "g_no_activity": "表示できる活動はありません",
         "chart_title": "負荷 / CPU 推移", "chart_win": "ウィンドウ {n} 点",
         "chart_empty": "サンプル収集中：数回更新すると曲線になります（ピンチで調整）",
@@ -3093,13 +3093,13 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 
   /* ---------------- 移动 App 化基础(桌面端多数隐藏) ----------------
      字号走 rem(html=100%),尊重系统字体大小设置;
-     手势元素(页签栏/图表/骨架屏)仅手机布局出现。 */
+     手势元素(页签栏/图表)仅手机布局出现; 日志/agent/骨架屏双端共用。 */
   [hidden] { display: none !important; }  /* 防 class 的 display:flex 盖过 hidden 属性 */
   html { font-size: 100%; -webkit-text-size-adjust: 100%; }
   #pages { display: contents; }          /* 桌面: 透明容器,子元素即 main 内容 */
-  #tabbar, #chart-wrap, #logpage, #agents-page,
-  .skel, .gmore, .statuscard, .mgrid4, #alerts, #recent,
-  #log-filters, .lv { display: none; }
+  #tabbar, #chart-wrap, .gmore, .statuscard, .mgrid4, #alerts, #recent { display: none; }
+  /* 日志页(#logpage)/agent页(#agents-page)/骨架(.skel)/时间线条目(.lv)桌面可达:
+     初始由 hidden 属性遮蔽, 首次进入由 setCat/activatePage 解除; 分类过滤走 .cat-off */
   .gextra { display: block; }            /* 桌面: goal 卡次要信息全展示 */
   /* 服务卡头行显式圆形操作钮: 复制地址 + 打开(替代旧左滑手势) */
   .svc-act { display: inline-flex; align-items: center; justify-content: center;
@@ -3111,17 +3111,19 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
               width: 44px; height: 44px; border-radius: 50%; flex: none;
               background: var(--accent-blue-bg); border: 1px solid var(--accent-blue-bd);
               color: var(--accent-blue-tx); text-decoration: none; }
-  .skel { display: none; }
   .skel-line { height: 14px; border-radius: 6px; margin: 10px 0;
                background: var(--skel); animation: skel-pulse 1.1s ease-in-out infinite; }
   @keyframes skel-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+  /* 桌面日志页: agent 选择器收窄左置, 事件时间线全宽(桌面=横向空间原则) */
+  #logpage .ui-select { max-width: 460px; }
+  #logpage .agentlog { max-height: 65vh; }
   .logbar select { width: 100%; background: var(--chip-bg); color: var(--text);
                    border: none; border-radius: 999px;
                    padding: 10px 16px; font-size: 13px; min-height: 44px; }
   #chart-wrap canvas { width: 100%; height: 150px; display: block; touch-action: none; }
   #chart-empty { color: var(--text-dead); font-size: 12px; padding: 18px 0; }
   .gmore { display: none; color: var(--text-dim); font-size: 11px; }
-  .sysbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .sysbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 14px; }
   .stat { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px;
           padding: 10px 16px; min-width: 130px; }
   .stat .label { color: var(--text-dim); font-size: 11px; margin-bottom: 3px;
@@ -4012,7 +4014,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   </tbody>
 </table>
 <div class="gpanel" id="agents-page" hidden>
-  <h2>{{T:tab_model}} <span class="ghint">{{T:chip_omp}}</span></h2>
+  <h2>{{T:tab_agent}} <span class="ghint">{{T:chip_omp}}</span></h2>
 </div>
 <div class="gpanel" id="logpage" hidden>
   <h2>{{T:tab_log}}</h2>
@@ -4136,8 +4138,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/></svg><span class="tlabel">{{T:tab_goal}}</span></span>
   <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg><span class="tlabel">{{T:tab_svc}}</span></span>
-  <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_model}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M6 1.5v2M10 1.5v2M6 12.5v2M10 12.5v2M1.5 6h2M1.5 10h2M12.5 6h2M12.5 10h2"/></svg><span class="tlabel">{{T:tab_model}}</span></span>
+  <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_agent}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 4.5 6 8l-3.5 3.5M8.5 12h5.5"/></svg><span class="tlabel">{{T:tab_agent}}</span></span>
   <span class="tab" data-p="5" role="button" tabindex="0" aria-label="{{T:tab_tools}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9.5 1.5 3 8l-1.5 5 5-1.5 6.5-6.5a2.1 2.1 0 0 0-3-3z"/><path d="M9.5 1.5 12.5 4.5"/></svg><span class="tlabel">{{T:tab_tools}}</span></span>
 </nav>
@@ -5071,7 +5073,7 @@ function lvHead(e, extra) {
 function evSummary(e) { return e.src === "done" ? String(e.text).split("/").pop() : e.text; }
 async function renderLogTimeline() {
   const body = $("logbody");
-  if (!body || !isMobile()) return;
+  if (!body) return;
   body.innerHTML = `<div class="gempty">${t("a_loading")}</div>`;
   const d = await fetchGoalsData();
   const evs = filterEvents(d && d.events);
@@ -5312,7 +5314,7 @@ const pages = $("pages");
 const N_PAGES = 6;
 const PAGE_W = 100 / N_PAGES;   // 轨道宽 600%, 每页位移 = 轨道的 1/6
 var page = 0;   // var: 挂到 window, 便于外部调试/测试读取
-function pageLabels() { return [t("tab_home"), t("tab_log"), t("tab_goal"), t("tab_svc"), t("tab_model"), t("tab_tools")]; }
+function pageLabels() { return [t("tab_home"), t("tab_log"), t("tab_goal"), t("tab_svc"), t("tab_agent"), t("tab_tools")]; }
 function applyPagesX(withTransition) {
   const tr = trackEl; // 移动端才有轨道
   if (!tr) return;
@@ -5418,9 +5420,8 @@ function initLogAgentPicker() {
 }
 
 async function initLogPage(force) {
-  if (!isMobile()) return;
   const sel = $("logagent-sel"), body = $("logbody");
-  $("logpage").hidden = false;   // 移动端进入日志页即显示(桌面保持 hidden)
+  $("logpage").hidden = false;   // 双端进入日志页即显示(移动页签 / 桌面 cat=log)
   if (logAgents && !force) { if (!body.children.length) loadLogView(); return; }
   const agents = await loadAgents();
   logAgents = agents;
@@ -5465,8 +5466,7 @@ function toastCopied(anchor) {
 // --- 模型页: OMP / Codex agent 卡片(状态灯+名称+最近活动+日志入口) ---
 let agentsInit = false;
 async function initAgentsPage() {
-  if (!isMobile()) return;
-  $("agents-page").hidden = false;  // 移动端进入模型页即显示(桌面保持 hidden)
+  $("agents-page").hidden = false;  // 双端进入 agent 页即显示(移动页签 / 桌面 cat=agent)
   if (agentsInit) return;
   agentsInit = true;
   const el = $("agents-page");
@@ -5494,14 +5494,15 @@ async function initAgentsPage() {
   });
   el.innerHTML = `<h2>${t("a_title")} <span class="ghint">${t("a_hint", { n: total })}</span></h2>` +
     `<div class="gcards">${cards.join("") || esHtml("cpu", t("a_none"))}</div>`;
-  // 点模型卡 → 跳日志页并选中该 agent
+  // 点 agent 卡 → 跳日志页并选中该 agent(手机切页签, 桌面切分类)
   el.querySelectorAll(".gcard").forEach(c =>
     c.addEventListener("click", async () => {
       await initLogPage();
       const sel = $("logagent-sel");
       const opt = [...sel.options].find(o => o.value === c.dataset.sid && o.dataset.cwd === c.dataset.cwd);
       if (opt) { sel.value = opt.value; loadLogView(); }
-      setPage(1);
+      if (isMobile()) setPage(1);
+      else { setCat("log"); scrollTo(0, 0); }
     }));
 }
 
@@ -6566,14 +6567,16 @@ function initToolsPage() {
 }
 
 // --- 桌面端分类条(右上角 #catbar): 过滤 #pages 各分区; 移动端隐藏(底部页签), 断点切换时清过滤 ---
-const CATS = [   // [id, i18n key]; 顺序 = 展示顺序 ("全部"已删: 无信息架构,首页即导航面板)
-  ["home", "tab_home"], ["goal", "tab_goal"],
-  ["svc", "tab_svc"], ["tools", "tab_tools"],
+const CATS = [   // [id, i18n key]; 顺序 = 展示顺序, 与移动端 6 页签一致 ("全部"已删: 无信息架构,首页即导航面板)
+  ["home", "tab_home"], ["log", "tab_log"], ["goal", "tab_goal"],
+  ["svc", "tab_svc"], ["agent", "tab_agent"], ["tools", "tab_tools"],
 ];
-const CAT_SELS = {   // 桌面可见分区 → 分类(与移动端 PAGE_GROUPS 对齐; 日志/模型页为移动专用不设)
+const CAT_SELS = {   // 桌面可见分区 → 分类(与移动端 PAGE_GROUPS 一一对应)
   home: ["#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
+  log: ["#logpage"],
   goal: ["#goals"],
   svc: ["#filters", "#tasks", "#svc"],
+  agent: ["#agents-page"],
   tools: ["#toolspage"],
 };
 var curCat = "all";
@@ -6582,6 +6585,9 @@ function setCat(c, save) {
   document.querySelectorAll("#catbar .cat").forEach(b => b.classList.toggle("active", b.dataset.cat === c));
   const keep = new Set((CAT_SELS[c] || []).map(s => document.querySelector(s)).filter(Boolean));
   document.querySelectorAll("#pages > *").forEach(el => el.classList.toggle("cat-off", !keep.has(el)));
+  // 日志/agent 页桌面首入: 解除 hidden + 惰性初始化(与移动端 activatePage 同一套函数)
+  if (c === "log") { const lp = $("logpage"); if (lp) lp.hidden = false; initLogPage(); renderLogTimeline(); }
+  if (c === "agent") { const ap = $("agents-page"); if (ap) ap.hidden = false; initAgentsPage(); }
   if (save !== false) {
     try { localStorage.setItem("svc-cat", c); } catch (e) {}
     try {                                   // URL hash 同步: #cat=goal 可直达分类
@@ -6613,15 +6619,35 @@ window.addEventListener("hashchange", () => {   // 手改 hash/后退也跟随
   });
 })();
 
+// 横滚 chips 容器渐隐(.filters): 溢出才加 hf-ov, 滚动位置决定左/右缘渐隐;
+// 桌面 .filters 是 wrap 布局永不溢出 → 天然不触发(一处逻辑全站生效)
+(function setupFiltersFade() {
+  const upd = (el) => {
+    const max = el.scrollWidth - el.clientWidth;
+    el.classList.toggle("hf-ov", max > 1);
+    el.classList.toggle("hf-l", el.scrollLeft > 1);
+    el.classList.toggle("hf-r", el.scrollLeft < max - 1);
+  };
+  document.querySelectorAll(".filters").forEach(el => {
+    upd(el);
+    el.addEventListener("scroll", () => upd(el), { passive: true });
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(() => upd(el));
+      ro.observe(el);
+      [...el.children].forEach(ch => ro.observe(ch));   // chips 计数/文案变化也重算
+    }
+    window.addEventListener("resize", () => upd(el));
+  });
+})();
+
 // --- 启动 ---
 regroupPages();          // 手机: 分组进 6 页; 桌面: 保持原序
 if (isMobile()) {
   setPage(0, { first: true });
   applyAutoSec();
 } else {
-  $("logpage").hidden = true;
-  $("agents-page").hidden = true;
   initToolsPage();   // 桌面无页签: 工具面板直接展开在页面流里(内部会解除 hidden)
+  // 日志/agent 页不再硬锁 hidden: 初始由 HTML hidden 属性遮蔽, 首次 setCat 进入时解除
   let savedCat = catFromHash();
   if (!savedCat) { try { savedCat = localStorage.getItem("svc-cat"); } catch (e) {} }
   if (savedCat === "all") savedCat = "home";
