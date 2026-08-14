@@ -2791,7 +2791,9 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
         det_enc = escape(quote(det, safe=""), quote=True)
         detail_btn = (f'<span class="svc-detail" role="button" tabindex="0" data-detail="{det_enc}" '
                       f'title="{t(lang, "svc_detail")}">{t(lang, "svc_detail")}</span>')
-        cell = f'<div class="cmd-cell"><span class="cmd-text">{cmd}</span>{detail_btn}{ctl_btn}</div>'
+        # P1-5: 命令列单行省略 + "详情"展全(等宽继承 .cmd); cmd/cwd 各带详情按钮, 不再共用
+        cmd_cell = f'<div class="cmd-cell"><span class="cmd-text">{cmd}</span>{detail_btn}{ctl_btn}</div>'
+        cwd_cell = f'<div class="cmd-cell"><span class="cmd-text">{cwd}</span>{detail_btn}</div>'
         rows.append(
             f'<tr>'
             f'<td class="name"><span class="svc">{escape(e["name"])}</span>'
@@ -2799,8 +2801,8 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             f'<td class="port" data-label="{t(lang, "th_port")}"><a href="{link}" target="_blank" rel="noopener">{port}</a></td>'
             f'<td class="addr" data-label="{t(lang, "th_addr")}">{escape(ip)} {loop}</td>'
             f'<td class="pid" data-label="PID">{pids}</td>'
-            f'<td class="cmd" data-label="{t(lang, "th_cmd")}">{cell}</td>'
-            f'<td class="cwd" data-label="{t(lang, "th_cwd")}">{cell}</td>'
+            f'<td class="cmd" data-label="{t(lang, "th_cmd")}">{cmd_cell}</td>'
+            f'<td class="cwd" data-label="{t(lang, "th_cwd")}">{cwd_cell}</td>'
             f'</tr>')
     table = "\n".join(rows)
     hostname = socket.gethostname()
@@ -3277,27 +3279,31 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .port a { color: var(--text-hi); font-weight: 600; text-decoration: none; font-family: ui-monospace, monospace; font-size: 14px; }
   .port a:hover { text-decoration: underline; color: var(--text-title); }
   .addr, .pid { color: var(--text-faint); font-family: ui-monospace, monospace; white-space: nowrap; }
-  .cmd, .cwd { color: var(--text-soft); white-space: pre-wrap; word-break: break-all;
-               font-family: ui-monospace, monospace; min-width: 220px; }
+  /* P1-5: 命令列等宽 + 限宽(auto 表格下 nowrap 会把列撑爆 → max-width 锁住, 单行省略) */
+  .cmd, .cwd { color: var(--text-soft); white-space: normal; word-break: break-all;
+               font-family: ui-monospace, monospace; min-width: 220px; max-width: 430px;
+               overflow: hidden; }
   table[data-col="cmd"] td.cwd { display: none; }
   table[data-col="cwd"] td.cmd { display: none; }
   th.colswitch { min-width: 220px; }
   .cmd-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .cmd-cell .cmd-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-                        overflow: hidden; word-break: break-all; line-height: 1.45; }
-  .svc-detail { flex: none; font-size: 11.5px; color: var(--text-dim); border: 1px solid var(--btn-soft-border);
-                border-radius: 10px; padding: 4px 9px; cursor: pointer; user-select: none; white-space: nowrap; }
-  .svc-detail:hover { color: var(--text-title); border-color: var(--btn-soft-hover-bd); }
+  /* P1-5: 命令列单行省略(等宽继承 .cmd), 长命令不再拆行(88/00), 完整内容走"详情"弹层 */
+  .cmd-cell .cmd-text { flex: 1 1 auto; min-width: 0; overflow: hidden;
+                        text-overflow: ellipsis; white-space: nowrap; }
+  .svc-detail { flex: none; font-size: 12px; color: var(--c-blue); cursor: pointer;
+                user-select: none; white-space: nowrap; }
+  .svc-detail:hover { text-decoration: underline; }
   .cmd-ctl { flex: none; display: inline-flex; }
   .svc-detail-dialog .ui-dialog-msg { font-size: 13px; }
   .svc-detail-kv { display: grid; grid-template-columns: 84px 1fr; gap: 6px 12px; align-items: start; }
   .svc-detail-kv .k { color: var(--text-ghost); font-size: 12px; padding-top: 2px; }
   .svc-detail-kv .v { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--text-main);
                       word-break: break-all; user-select: all; }
-  .tcol { background: transparent; border: 1px solid var(--chip-border); color: var(--text-faint);
-          border-radius: 6px; padding: 2px 11px; font-size: 11.5px; cursor: pointer; }
-  .tcol:hover { color: var(--text-hi); border-color: var(--btn-hover); }
-  .tcol.active { background: var(--btn-bg); color: var(--text-title); border-color: var(--btn-hover); }
+  .tcol { background: none; border: none; border-radius: 0; padding: 0; color: var(--text-ghost);
+          font-size: 12px; font-weight: 500; cursor: pointer; }   /* 列名样式, 非胶囊 */
+  .tcol + .tcol { margin-left: 12px; }
+  .tcol:hover { color: var(--text-hi); }
+  .tcol.active { color: var(--text-faint); }   /* 与 thead th 同色 = 当前列名 */
   .badge { display: inline-block; margin-left: 8px; padding: 2px 7px; border-radius: 999px;
            font-size: 11px; font-weight: 500; vertical-align: 1px; }
   .badge-docker  { background: var(--tbadge-sc-bg); color: var(--text-mid); border: 1px solid var(--btn-hover); }
@@ -3524,6 +3530,10 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                    align-items: baseline; padding: 3px 0; }
     .td-rows .k { color: var(--text-ghost); font-size: 11px; flex: none; }
     .td-rows .v { text-align: right; word-break: break-all; white-space: normal; min-width: 0; }
+    /* P1-6: 长命令默认折叠 2 行, 点展开(mclamp 切换) */
+    .td-rows .v .mclamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+                          overflow: hidden; word-break: break-all; cursor: pointer; }
+    .td-rows .v .mclamp.open { -webkit-line-clamp: unset; display: block; }
     .ctl-btn { min-height: 44px; padding: 10px 16px; font-size: 13px; }
     .colswitch, .tcol { display: none; }
     .empty { padding: 32px 0; }
@@ -4161,8 +4171,8 @@ function row(e, mobile) {
   const ctl = man
     ? `<span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span>`
     : "";
-  // 详情按钮: 点击弹层看完整命令/目录 (行内最多两行,避免长命令把行拉高)
-  const detailBtn = `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify({name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids}))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
+  // 详情按钮(ghost 文字链): 点击弹层看完整命令/目录(行内单行省略)
+  const detailBtn = (payload) => `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(payload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
   if (mobile) {
     // 手机卡片(合法表格结构): 头行右侧显式 44px 圆形 复制/打开 按钮(无滑扫手势)
     const kv = (k, v) => `<div class='kv'><span class='k'>${k}</span><span class='v'>${v}</span></div>`;
@@ -4170,25 +4180,23 @@ function row(e, mobile) {
       kv(t("th_port"), `<a href='${link}' target='_blank' rel='noopener'>${e.port}</a>`) +
       kv(t("th_addr"), `${esc(ip)}${loop}`) +
       kv("PID", e.pids.join(", ")) +
-      kv(t("th_cmd"), esc(cmd)) +
+      kv(t("th_cmd"), `<span class='mclamp' role='button' tabindex='0' aria-expanded='false'>${esc(cmd)}</span>`) +
       kv(t("th_cwd"), esc(cwd)) +
       (man ? kv(t("th_ctl"), ctl) : "");
     return `<tr><td>` +
-      `<div class='td-head'><span class='svc'>${esc(e.name)}</span>` +
       `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
       `<span class='svc-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}' aria-label='${t("act_copy_addr")}'>${icon("copy", 15)}</span>` +
       `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>${icon("ext", 15)}</a></div>` +
       `<div class='td-rows'>${rows}</div></td></tr>`;
   }
   return `<tr>
-    <td class='name'><span class='svc'>${esc(e.name)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
     <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
     <td class='addr' data-label='${t("th_addr")}'>${esc(ip)}${loop}</td>
     <td class='pid' data-label='PID'>${e.pids.join(", ")}</td>
     <td class='cmd' data-label='${t("th_cmd")}'>
-      <div class='cmd-cell'><span class='cmd-text'>${esc(cmd)}</span>${detailBtn}${ctl ? `<span class='cmd-ctl'>${ctl}</span>` : ""}</div></td>
+      <div class='cmd-cell'><span class='cmd-text'>${esc(cmd)}</span>${detailBtn({name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids})}${ctl ? `<span class='cmd-ctl'>${ctl}</span>` : ""}</div></td>
     <td class='cwd' data-label='${t("th_cwd")}'>
-      <div class='cmd-cell'><span class='cmd-text'>${esc(cwd)}</span>${detailBtn}${ctl ? `<span class='cmd-ctl'>${ctl}</span>` : ""}</div></td>
+      <div class='cmd-cell'><span class='cmd-text'>${esc(cwd)}</span>${detailBtn({name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids})}</div></td>
   </tr>`;
 }
 
