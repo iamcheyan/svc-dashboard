@@ -3223,8 +3223,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                  word-break: break-all; line-height: 1.45; }
   .gcard .grow { display: flex; justify-content: space-between; gap: 10px;
                  font-size: 12.5px; color: var(--text-soft); padding: 3px 0 0; }
-  /* 桌面首页网格: Web磁贴 / Goal摘要 / 最近活动 */
-  .hp-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
+  /* 桌面首页网格: Web磁贴(左 2fr) / Goal摘要(右 1fr); 最近活动/仓库在下方全宽 */
+  .hp-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
   .hp-grid .gpanel { margin-bottom: 0; }
   .hp-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
   .hp-tile { display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
@@ -3557,7 +3557,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     #log-filters::-webkit-scrollbar { display: none; }
     #log-filters .chip { flex: none; }
 
-    .sysbar { gap: 8px; margin-bottom: 10px; }
+    .sysbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }   /* 双列 2×N(桌面为 5 列 grid) */
     .stat { min-width: calc(50% - 6px); flex: 1 1 calc(50% - 6px); padding: 8px 12px;
             touch-action: manipulation; } /* 双击手势目标: 消除 300ms 缩放 */
     .stat .value { font-size: 12.5px; }
@@ -3568,6 +3568,14 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     .filters::-webkit-scrollbar { display: none; }
     .filters .spacer { display: none; }
     .chip { flex: none; font-size: 12.5px; }
+    /* 横滚 chips 容器左右渐隐: JS setupFiltersFade 按滚动位置加类, 仅溢出时生效 */
+    .filters.hf-ov { --hf: 22px; }
+    .filters.hf-ov.hf-r:not(.hf-l) { -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--hf)), transparent 100%);
+                                     mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--hf)), transparent 100%); }
+    .filters.hf-ov.hf-l:not(.hf-r) { -webkit-mask-image: linear-gradient(to left, #000 0, #000 calc(100% - var(--hf)), transparent 100%);
+                                     mask-image: linear-gradient(to left, #000 0, #000 calc(100% - var(--hf)), transparent 100%); }
+    .filters.hf-ov.hf-l.hf-r { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--hf), #000 calc(100% - var(--hf)), transparent 100%);
+                               mask-image: linear-gradient(to right, transparent 0, #000 var(--hf), #000 calc(100% - var(--hf)), transparent 100%); }
 
     /* 服务列表 → 卡片(头行右侧显式 44px 圆形 复制/打开 按钮, 无滑扫手势) */
     #svc thead { display: none; }
