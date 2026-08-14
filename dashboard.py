@@ -2848,7 +2848,10 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             .replace("{{TOOLCHIPS}}", "" if lite else render_toolchips(entries, host_header, lang))
             .replace("{{GOALS_PANEL}}",
                      '<div class="gpanel" id="goals"><h2>{{T:g_panel}} <span class="ghint">{{T:g_hint}}</span></h2>'
-                     '<div class="gcards"><div class="gempty">{{T:a_loading}}</div></div></div>' if lite
+                     '<div class="gcards">' + "".join(
+                         '<div class="skel"><div class="skel-line" style="width:86%"></div>'
+                         '<div class="skel-line" style="width:64%"></div></div>' for _ in range(3)
+                     ) + '</div></div>' if lite   # 轻首屏骨架占位(双端), /api/fragment 落地后替换
                      else render_goal_cards(scan_goals(), lang))
             .replace("{{EVENTS_PANEL}}",
                      '<div class="gpanel" id="events"><h2>{{T:ev_title}} <span class="ghint">{{T:ev_hint}}</span></h2>'
