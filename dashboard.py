@@ -2317,7 +2317,7 @@ def render_events(events, lang=DEFAULT_LANG):
     return (f'<div class="gpanel" id="events"><h2>{t(lang, "ev_title")} '
             f'<span class="ghint">{t(lang, "ev_hint")}</span></h2>{body}</div>')
 
-def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=None):
+def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=None, ts_mode=False):
     if sysdata is None:
         sysdata = sys_info()
     rows = []
@@ -2370,6 +2370,7 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
     hostname = socket.gethostname()
     body = (PAGE_TEMPLATE
             .replace("{{LANG}}", lang)
+            .replace("{{TS_MODE}}", "true" if ts_mode else "false")
             .replace("{{T_JSON}}", json.dumps(L10N.get(lang, L10N[DEFAULT_LANG]), ensure_ascii=False))
             .replace("{{HOST}}", escape(host_header))
             .replace("{{HOSTNAME}}", escape(hostname))
@@ -2989,6 +2990,9 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <script>
 const AUTO = {{AUTO}};
 const LANG = "{{LANG}}";
+const TS_MODE = {{TS_MODE}};
+const TS_HOST = "100.76.219.104";
+const linkHost = (h) => (TS_MODE && (h === "192.168.3.82")) ? TS_HOST : h;  // 来源为 tailscale(100.64.0.0/10) 时链接主机改用 tailscale IP
 const T = {{T_JSON}};
 const t = (k, p) => { let s = T[k] ?? k; if (p !== undefined) { for (const [a, b] of Object.entries(p)) s = s.split("{" + a + "}").join(b); } return s; };
 let autoOn = false;
@@ -3016,7 +3020,7 @@ function row(e, mobile) {
   else if (e.type === "systemd" && e.unit) detail = `<span class='detail' title='${t("detail_unit")}'>${e.unit}</span>`;
   const ip = e.ip;
   const loopback = ip.startsWith("127.") || ip === "::1" || ip.startsWith("::ffff:127.");
-  const link = loopback ? `http://127.0.0.1:${e.port}/` : `http://${location.hostname}:${e.port}/`;
+  const link = loopback ? `http://127.0.0.1:${e.port}/` : `http://${linkHost(location.hostname)}:${e.port}/`;
   const loop = loopback ? ' <span class="local">' + t("loopback") + '</span>' : "";
   const cmd = e.cmdline || "—";
   const cwd = e.cwd || "—";
@@ -3147,7 +3151,7 @@ function renderToolchips() {
   if (!el) return;
   const ports = new Set(services.map(s => s.port));
   const chips = TOOL_LINKS.filter(([n, p]) => ports.has(p)).map(([n, p]) =>
-    `<a class='chip tchip' href='http://${location.hostname}:${p}/' target='_blank' rel='noopener'>${n} :${p} ↗</a>`).join("");
+    `<a class='chip tchip' href='http://${linkHost(location.hostname)}:${p}/' target='_blank' rel='noopener'>${n} :${p} ↗</a>`).join("");
   el.innerHTML = chips;
   el.style.display = chips ? "" : "none";
 }
@@ -4314,6 +4318,21 @@ class Handler(BaseHTTPRequestHandler):
     def _host(self):
         return self.headers.get("Host") or f"localhost:{LISTEN_PORT}"
 
+    def _client_ip(self):
+        """客户端来源 IP：X-Forwarded-For 优先（反代场景），否则直连地址。"""
+        xff = self.headers.get("X-Forwarded-For")
+        if xff:
+            return xff.split(",")[0].strip()
+        return self.client_address[0] if self.client_address else ""
+
+    def _is_tailscale_client(self):
+        """来源在 Tailscale CGNAT 段 100.64.0.0/10 内 → 页面链接切到 tailscale 主机名。"""
+        try:
+            import ipaddress
+            return ipaddress.ip_address(self._client_ip()) in ipaddress.ip_network("100.64.0.0/10")
+        except ValueError:
+            return False
+
     def _send_json(self, code, obj):
         """发 JSON 响应,自带 no-store。任何异常都不让连接挂起。"""
         try:
@@ -4344,7 +4363,8 @@ class Handler(BaseHTTPRequestHandler):
                                urlparse(self.path).query)
             entries = gather()
             body = render_html(self._host(), entries, time.time(), lang,
-                               sysdata=sys_info()).encode("utf-8")
+                               sysdata=sys_info(),
+                               ts_mode=self._is_tailscale_client()).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
