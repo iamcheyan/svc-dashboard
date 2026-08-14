@@ -3657,7 +3657,8 @@ setInterval(() => { if (!document.hidden) refreshFreshness(); }, 20000);
 
 // 概要页交互: 状态卡→Goal页 / 状态栏→回概要 / 最近活动→日志页 / 告警操作
 $("statuscard").addEventListener("click", () => setPage(2));
-$("statusline").addEventListener("click", () => {
+const statuslineEl = $("statusline");   // header 状态栏已移除(85102dc), 此处判空防崩
+if (statuslineEl) statuslineEl.addEventListener("click", () => {
   setPage(0);
   const m = document.querySelector("main");
   if (m) m.scrollTo({ top: 0 });
