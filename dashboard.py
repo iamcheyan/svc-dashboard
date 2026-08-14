@@ -5859,7 +5859,7 @@ function renderHealth(h) {
   rows.push(row((s.mem || {}).percent >= 90 ? "bad" : (s.mem || {}).percent >= 75 ? "warn" : "",
     t("tl_h_mem"), `<b>${(s.mem || {}).percent}%</b> · ${fmtB((s.mem || {}).used)}/${fmtB((s.mem || {}).total)}`));
   const sw = s.swap || {};
-  rows.push(row("", t("tl_h_swap"), sw.total ? `<b>${sw.percent}%</b> · ${fmtB(sw.used)}/${fmtB(sw.total)}` : "—"));
+  rows.push(row(sw.percent >= 90 ? "bad" : sw.percent >= 50 ? "warn" : "", t("tl_h_swap"), sw.total ? `<b>${sw.percent}%</b> · ${fmtB(sw.used)}/${fmtB(sw.total)}` : "—"));
   const dk = s.disk || {};
   rows.push(row(dk.percent >= 90 ? "bad" : dk.percent >= 80 ? "warn" : "", t("tl_h_disk"),
     `<b>${dk.percent}%</b> · ${fmtB(dk.free)} ${t("tl_fs_dl") === "下载" ? "可用" : "free"}`));
