@@ -720,7 +720,7 @@ L10N = {
         "g_done": "已完成", "g_lost": "会话丢失",
         "g_ctx": "上下文", "g_ctx_high": "偏高", "g_ctx_stop": "建议停止",
         "g_last": "最近活动", "g_stalled": "可能 STALLED",
-        "g_copy": "复制 resume 命令", "g_copied": "已复制",
+        "g_copy": "复制 resume 命令", "g_copied": "已复制", "g_ignore": "标记忽略", "g_ignored": "已忽略",
         "g_none": "当前没有在跑的 goal",
         "g_done_fold": "已完成 goal（{n}）",
         "rp_title": "仓库", "rp_hint": "agent / goal 改动过的仓库",
@@ -865,7 +865,7 @@ L10N = {
         "g_done": "completed", "g_lost": "session lost",
         "g_ctx": "context", "g_ctx_high": "high", "g_ctx_stop": "consider stopping",
         "g_last": "last activity", "g_stalled": "maybe STALLED",
-        "g_copy": "Copy resume cmd", "g_copied": "copied",
+        "g_copy": "Copy resume cmd", "g_copied": "copied", "g_ignore": "Mark ignored", "g_ignored": "Ignored",
         "g_none": "No running goals",
         "g_done_fold": "Completed goals ({n})",
         "rp_title": "Repos", "rp_hint": "touched by agents / goals",
@@ -1013,6 +1013,7 @@ L10N = {
         "g_ctx": "コンテキスト", "g_ctx_high": "高め", "g_ctx_stop": "停止推奨",
         "g_last": "最終活動", "g_stalled": "STALLED の可能性",
         "g_none": "実行中の goal はありません",
+        "g_copy": "resume コマンドをコピー", "g_copied": "コピー済み", "g_ignore": "無視マーク", "g_ignored": "無視済み",
         "g_done_fold": "完了済み goal（{n}）",
         "rp_title": "リポジトリ", "rp_hint": "agent・goal が変更したリポジトリ",
         "rp_refresh": "統計を更新", "rp_empty": "該当リポジトリはありません",
@@ -2640,6 +2641,8 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
         if c["retry"]:
             extra.append(f'<div class="grow"><span>API</span>'
                          f'<span class="gretry">{t(lang, "g_retrying", n=c["retry"])}</span></div>')
+        else:
+            extra.append(f'<div class="grow"><span>API</span><span class="gtx">—</span></div>')
         if c["idle_sec"] is not None:
             ago = fmt_ago(c["idle_sec"], lang)
             stall = f' · {t(lang, "g_stalled")}' if c["stalled"] else ""
@@ -2666,11 +2669,20 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
         inner = head + idle_row
         if extra:
             inner += f'<div class="gextra">{"".join(extra)}</div>'
-        foot = ""
+        # 恒定行集: footer 无条件渲染(缺 resume 显 —, 底边 margin-top:auto 对齐);
+        # paused/lost 卡额外给"标记忽略"处置(前端接 ignoredSet, key 与 goalAlerts 一致)
+        foot = ['<div class="gfoot">']
         if c["resume_cmd"]:
-            foot = (f'<div class="gfoot"><span class="gcopy" role="button" tabindex="0" '
-                    f'data-cmd="{escape(c["resume_cmd"], quote=True)}">{icon("copy", 13)} {t(lang, "g_copy")}</span></div>')
-        inner += foot
+            foot.append(f'<span class="gcopy" role="button" tabindex="0" '
+                        f'data-cmd="{escape(c["resume_cmd"], quote=True)}">{icon("copy", 13)} {t(lang, "g_copy")}</span>')
+        else:
+            foot.append('<span class="gfoot-none">—</span>')
+        if c["light"] in ("paused", "lost"):
+            ign_key = f'{c["light"]}|{c["gid"] or c["session"] or c["name"]}'
+            foot.append(f'<span class="g-ignore-btn" role="button" tabindex="0" '
+                        f'data-ign-key="{escape(ign_key, quote=True)}">{t(lang, "g_ignore")}</span>')
+        foot.append("</div>")
+        inner += "".join(foot)
         # 复制 resume 命令 = 卡片内显式 .gcopy 按钮(无滑扫手势)
         out.append(f'<div class="gcard" data-light="{c["light"]}">{inner}</div>')
     body = "".join(out) if out else (
@@ -3223,11 +3235,20 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                   color: var(--text-dim); line-height: 1.55;
                   word-break: break-all;
                   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .gcard .gfoot { margin-top: auto; padding-top: 8px; }
+  .gcard .gfoot { margin-top: auto; padding-top: 8px; display: flex; align-items: center;
+                  gap: 8px; flex-wrap: wrap; }
+  .gfoot-none { color: var(--text-dead); font-size: 12px; }
   .gcopy { display: inline-flex; align-items: center; gap: 6px; background: var(--btn-soft-bg);
            border: 1px solid var(--btn-soft-border); color: var(--text); border-radius: 14px;
            padding: 6px 14px; font-size: 12.5px; cursor: pointer; user-select: none; }
   .gcopy:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
+  /* ---- 按钮两级收敛: primary=描边胶囊(.btn/.tl-run/.ctl-btn) ghost=文字链 ---- */
+  .ghost, .g-ignore-btn { display: inline-flex; align-items: center; gap: 4px; flex: none;
+           color: var(--c-blue); font-size: 12px; cursor: pointer; user-select: none; white-space: nowrap; }
+  .ghost:hover, .g-ignore-btn:hover { text-decoration: underline; }
+  .g-ignore-btn.ignored { color: var(--text-dim); text-decoration: none; cursor: default; }
+  .ghint.hp-more, .ghint.rc-more { color: var(--c-blue); cursor: pointer; }
+  .ghint.hp-more:hover, .ghint.rc-more:hover { text-decoration: underline; }
   .gempty { color: var(--text-faint); font-size: 12.5px; padding: 10px 0; }
   .gdone { margin-top: 12px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
   .gdone summary { cursor: pointer; color: var(--text-dim); font-size: 12.5px; user-select: none;
