@@ -3190,9 +3190,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .gcard .gname { font-weight: 600; color: var(--text-hi); font-size: 14px; word-break: break-all; }
   .gcard .gstate { color: var(--text-faint); font-size: 11.5px; }
   .g-detail-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; flex: none;
-                  cursor: pointer; color: var(--text-dim); font-size: 11px; padding: 3px 7px;
-                  border: 1px solid var(--btn-soft-border); border-radius: 999px; }
-  .g-detail-btn:hover, .g-detail-btn:focus-visible { color: var(--text-title); border-color: var(--btn-soft-hover-bd); }
+                  cursor: pointer; color: var(--c-blue); font-size: 11.5px; user-select: none; }
+  .g-detail-btn:hover, .g-detail-btn:focus-visible { text-decoration: underline; }
   .g-detail-body { max-height: min(68vh, 620px); overflow-y: auto; font-size: 12px; }
   .g-detail-section { margin: 0 0 14px; }
   .g-detail-section h3 { margin: 0 0 6px; color: var(--text-dim); font-size: 12px; font-weight: 600; }
@@ -3393,9 +3392,9 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .mnum { font-size: 22px; font-weight: 700; color: var(--text-title); font-variant-numeric: tabular-nums; }
   .mnum.alert { color: var(--c-warn); }
   .mlabel { font-size: 12px; color: var(--text-dim); }
-  .al-btn { background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border); color: var(--text);
-            border-radius: 14px; padding: 8px 12px; font-size: 12.5px; cursor: pointer; }
-  .al-btn:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
+  .al-btn:not(.gcopy) { display: inline-flex; align-items: center; color: var(--c-blue); background: none;
+            border: none; padding: 4px 6px; font-size: 12.5px; cursor: pointer; user-select: none; }
+  .al-btn:not(.gcopy):hover { text-decoration: underline; }
   .al-btn.ignore { color: var(--text-dim); }
   .alert-item { align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border-faint); }
   .alert-item:last-child { border-bottom: none; }
