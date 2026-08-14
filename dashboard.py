@@ -27,7 +27,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -667,6 +667,27 @@ L10N = {
         "evk_nudge": "催行", "evk_recover": "已恢复", "evk_pause": "暂停",
         "evk_cleanup": "清理", "evk_commit": "提交", "evk_other": "其他",
         "g_ago_d": "{d} 天前",
+        "tab_tools": "ツール",
+        "tl_health_title": "健康检查", "tl_health_run": "跑一次检查", "tl_health_loading": "检查中…",
+        "tl_h_load": "负载", "tl_h_cpu": "CPU", "tl_h_mem": "内存", "tl_h_swap": "Swap",
+        "tl_h_disk": "磁盘 /", "tl_h_temp": "温度", "tl_h_trend": "磁盘趋势",
+        "tl_h_trend_base": "已记基线, 明天起算增速", "tl_h_trend_days": "日增 {g} · 预计满盘 {d}",
+        "tl_h_procs": "关键进程", "tl_h_ports": "端口心跳", "tl_h_wd": "watchdog 1h 异常",
+        "tl_copy_ssh": "ssh 命令", "tl_copy_lan": "局域网 IP", "tl_copy_ts": "Tailscale IP",
+        "tl_fs_title": "文件浏览", "tl_fs_filter": "过滤…", "tl_fs_hidden": "隐藏文件",
+        "tl_fs_du": "计算大小", "tl_fs_du_run": "计算中…(5s)", "tl_fs_du_none": "非目录",
+        "tl_fs_dl": "下载", "tl_fs_empty": "空目录或全部被过滤",
+        "tl_clean_title": "垃圾清理", "tl_clean_scan": "扫描", "tl_clean_scanning": "扫描中…",
+        "tl_clean_exec": "执行清理", "tl_clean_confirm": "确认清理所选项目？此操作不可撤销",
+        "tl_clean_docker": "docker 磁盘占用", "tl_clean_docker_prune": "docker prune",
+        "tl_clean_docker_confirm": "确认 docker system prune？将删除所有悬空镜像/停止容器/未用网络",
+        "tl_clean_total": "可释放合计", "tl_clean_freed": "实际释放(df)",
+        "tl_net_title": "网络速测", "tl_net_run": "测一次", "tl_net_run_ing": "测速中…",
+        "tl_net_ext": "外网 HEAD", "tl_net_ts": "Tailscale 对端",
+        "tl_usvc_title": "用户服务(重启)", "tl_usvc_unlock": "解锁",
+        "tl_usvc_hint": "输入 I-KNOW 解锁重启按钮", "tl_usvc_wrong": "确认字符串不匹配",
+        "tl_usvc_restart": "重启", "tl_usvc_loading": "读取中…", "tl_usvc_none": "无用户级服务",
+        "tl_cron_title": "计划任务一览", "tl_g1_title": "工具直达",
     },
     "en": {
         "title": "Services", "github_repo": "GitHub repo",
@@ -775,6 +796,28 @@ L10N = {
         "evk_nudge": "nudge", "evk_recover": "recovered", "evk_pause": "paused",
         "evk_cleanup": "cleanup", "evk_commit": "commit", "evk_other": "other",
         "g_ago_d": "{d}d ago",
+        "tab_tools": "Tools",
+        "tl_health_title": "Health check", "tl_health_run": "Run check", "tl_health_loading": "Checking…",
+        "tl_h_load": "Load", "tl_h_cpu": "CPU", "tl_h_mem": "Memory", "tl_h_swap": "Swap",
+        "tl_h_disk": "Disk /", "tl_h_temp": "Temp", "tl_h_trend": "Disk trend",
+        "tl_h_trend_base": "baseline recorded; growth from tomorrow",
+        "tl_h_trend_days": "+{g}/day · full at {d}",
+        "tl_h_procs": "Key processes", "tl_h_ports": "Port heartbeat", "tl_h_wd": "watchdog 1h anomalies",
+        "tl_copy_ssh": "ssh command", "tl_copy_lan": "LAN IP", "tl_copy_ts": "Tailscale IP",
+        "tl_fs_title": "Files", "tl_fs_filter": "filter…", "tl_fs_hidden": "hidden files",
+        "tl_fs_du": "calc size", "tl_fs_du_run": "calculating…(5s)", "tl_fs_du_none": "not a dir",
+        "tl_fs_dl": "download", "tl_fs_empty": "empty or all filtered",
+        "tl_clean_title": "Cleanup", "tl_clean_scan": "Scan", "tl_clean_scanning": "Scanning…",
+        "tl_clean_exec": "Run cleanup", "tl_clean_confirm": "Clean selected items? Irreversible",
+        "tl_clean_docker": "docker disk usage", "tl_clean_docker_prune": "docker prune",
+        "tl_clean_docker_confirm": "Run docker system prune? Removes dangling images, stopped containers, unused networks",
+        "tl_clean_total": "total reclaimable", "tl_clean_freed": "freed (df)",
+        "tl_net_title": "Network test", "tl_net_run": "Run test", "tl_net_run_ing": "Testing…",
+        "tl_net_ext": "External HEAD", "tl_net_ts": "Tailscale peer",
+        "tl_usvc_title": "User services (restart)", "tl_usvc_unlock": "Unlock",
+        "tl_usvc_hint": "type I-KNOW to unlock restart buttons", "tl_usvc_wrong": "wrong confirm string",
+        "tl_usvc_restart": "restart", "tl_usvc_loading": "loading…", "tl_usvc_none": "no user services",
+        "tl_cron_title": "Scheduled tasks", "tl_g1_title": "Quick links",
     },
     "ja": {
         "title": "サービス一覧", "github_repo": "GitHub リポジトリ",
@@ -883,6 +926,28 @@ L10N = {
         "evk_nudge": "催促", "evk_recover": "復旧", "evk_pause": "一時停止",
         "evk_cleanup": "クリーンアップ", "evk_commit": "コミット", "evk_other": "その他",
         "g_ago_d": "{d} 日前",
+        "tab_tools": "ツール",
+        "tl_health_title": "ヘルスチェック", "tl_health_run": "チェック実行", "tl_health_loading": "チェック中…",
+        "tl_h_load": "負荷", "tl_h_cpu": "CPU", "tl_h_mem": "メモリ", "tl_h_swap": "Swap",
+        "tl_h_disk": "ディスク /", "tl_h_temp": "温度", "tl_h_trend": "ディスク推移",
+        "tl_h_trend_base": "ベースライン記録済み（明日から算出）",
+        "tl_h_trend_days": "日増 {g} · 満了予測 {d}",
+        "tl_h_procs": "重要プロセス", "tl_h_ports": "ポート死活", "tl_h_wd": "watchdog 1h 異常",
+        "tl_copy_ssh": "ssh コマンド", "tl_copy_lan": "LAN IP", "tl_copy_ts": "Tailscale IP",
+        "tl_fs_title": "ファイル", "tl_fs_filter": "絞り込み…", "tl_fs_hidden": "隠しファイル",
+        "tl_fs_du": "サイズ計算", "tl_fs_du_run": "計算中…(5s)", "tl_fs_du_none": "ディレクトリ以外",
+        "tl_fs_dl": "ダウンロード", "tl_fs_empty": "空 or 全て除外",
+        "tl_clean_title": "クリーンアップ", "tl_clean_scan": "スキャン", "tl_clean_scanning": "スキャン中…",
+        "tl_clean_exec": "クリーンアップ実行", "tl_clean_confirm": "選択項目を削除します。取り消せません",
+        "tl_clean_docker": "docker ディスク使用", "tl_clean_docker_prune": "docker prune",
+        "tl_clean_docker_confirm": "docker system prune を実行？未使用イメージ・停止コンテナ・未使用ネットワークを削除",
+        "tl_clean_total": "解放可能合計", "tl_clean_freed": "実解放(df)",
+        "tl_net_title": "ネットワーク計測", "tl_net_run": "計測", "tl_net_run_ing": "計測中…",
+        "tl_net_ext": "外部 HEAD", "tl_net_ts": "Tailscale 対向",
+        "tl_usvc_title": "ユーザーサービス(再起動)", "tl_usvc_unlock": "解除",
+        "tl_usvc_hint": "I-KNOW と入力して再起動ボタンを解除", "tl_usvc_wrong": "確認文字列が違います",
+        "tl_usvc_restart": "再起動", "tl_usvc_loading": "読み込み中…", "tl_usvc_none": "ユーザーサービスなし",
+        "tl_cron_title": "予定タスク一覧", "tl_g1_title": "ツール直行",
     },
 }
 
@@ -2372,6 +2437,7 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             .replace("{{LANG}}", lang)
             .replace("{{TS_MODE}}", "true" if ts_mode else "false")
             .replace("{{T_JSON}}", json.dumps(L10N.get(lang, L10N[DEFAULT_LANG]), ensure_ascii=False))
+            .replace("{{TL_CONF}}", json.dumps(tools_conf(), ensure_ascii=False))
             .replace("{{HOST}}", escape(host_header))
             .replace("{{HOSTNAME}}", escape(hostname))
             .replace("{{AUTO}}", str(AUTO_REFRESH_SEC))
@@ -2770,19 +2836,19 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
                   justify-content: center; border: 1.5px solid #141414; }
 
 
-    /* 两层结构: #pages(裁剪窗口) > #track(500% 轨道) > .pg(各 20% = 屏宽) */
+    /* 两层结构: #pages(裁剪窗口) > #track(600% 轨道) > .pg(各 1/6 = 屏宽) */
     #pages { display: block; width: 100%; overflow: hidden; }
     body { overscroll-behavior-x: none; }  /* 关掉浏览器右滑返回/左滑前进接管 */
     #pages, .swipe-fg { touch-action: pan-y; }  /* 横向留给 JS 手势 */
     .filters { touch-action: pan-x; }  /* 自身横滚的容器除外 */
-    #track { display: flex; align-items: flex-start; width: 500%;
+    #track { display: flex; align-items: flex-start; width: 600%;
              will-change: transform;
              transition: transform .26s cubic-bezier(.22,.61,.36,1); }
     #track.stick { transition: none; }
-    #track > .pg { flex: 0 0 20%; min-width: 20%; max-width: 20%; }
+    #track > .pg { flex: 0 0 16.6667%; min-width: 16.6667%; max-width: 16.6667%; }
     .skel { display: block; }
-    #chart-wrap, #logpage, #agents-page { display: block; }  /* 移动专用面板 */
-    #logpage[hidden], #agents-page[hidden] { display: none !important; }
+    #chart-wrap, #logpage, #agents-page, #toolspage { display: block; }  /* 移动专用面板 */
+    #logpage[hidden], #agents-page[hidden], #toolspage[hidden] { display: none !important; }
     /* 概要摘要组件(状态卡+指标2×2+需要处理+最近活动) */
     .statuscard { display: block; margin-bottom: 10px; }
     .mgrid4 { display: grid; margin-bottom: 12px; }
@@ -2876,6 +2942,79 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     #track, .swipe-fg, .gmore { transition: none !important; }
     .skel-line { animation: none; }
   }
+  /* ---------------- ツール页 ---------------- */
+  .toolspage .tl-sec + .tl-sec { border-top: 1px solid #222; margin-top: 14px; padding-top: 12px; }
+  .toolspage .tl-sec h3 { margin: 0 0 8px; font-size: 12.5px; color: #9a9a9a; font-weight: 500; }
+  .tl-sechead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tl-sechead h3 { margin: 0; flex: 1 1 auto; }
+  .tl-run { flex: none; cursor: pointer; user-select: none; }
+  .tl-row { display: flex; align-items: center; gap: 8px; padding: 5px 0;
+            font-size: 12.5px; border-bottom: 1px dashed #1c1c1c; }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #6ec89a; }
+  .tl-dot.warn { background: #e0a84c; }
+  .tl-dot.bad { background: #e06c6c; }
+  .tl-dot.off { background: #555; }
+  .tl-name { color: #c8c8c8; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-val { margin-left: auto; color: #8f8f8f; font-family: ui-monospace, monospace;
+            font-size: 11.5px; white-space: nowrap; }
+  .tl-val b { color: #e8e8e8; font-weight: 600; }
+  .tl-head-big { font-size: 15px; font-weight: 600; }
+  .tl-copyrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tl-copyrow .btn { font-size: 12px; padding: 6px 12px; }
+  .tl-fsbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+  .tl-crumbs { font-size: 12px; color: #8f8f8f; word-break: break-all; line-height: 1.7; }
+  .tl-crumbs a { color: #6ea8dc; text-decoration: none; cursor: pointer; }
+  .tl-crumbs a:hover { text-decoration: underline; }
+  .tl-crumbs .cur { color: #e8e8e8; }
+  .tl-fsctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tl-fsctl input[type="search"] { flex: 1 1 120px; background: #141414; color: #d6d6d6;
+      border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px 10px; font-size: 13px; min-height: 38px; }
+  .tl-switch { display: inline-flex; gap: 6px; align-items: center; font-size: 12px;
+               color: #8f8f8f; cursor: pointer; min-height: 38px; }
+  .tl-fslist { border: 1px solid #222; border-radius: 8px; overflow: hidden; }
+  .tl-fsrow { display: flex; align-items: center; gap: 8px; padding: 9px 10px; font-size: 13px;
+              border-bottom: 1px solid #1c1c1c; cursor: pointer; background: #131313; }
+  .tl-fsrow:hover { background: #191919; }
+  .tl-fsrow:last-child { border-bottom: none; }
+  .tl-fsrow .ico { flex: none; width: 18px; text-align: center; }
+  .tl-fsrow .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                  white-space: nowrap; }
+  .tl-fsrow .mt { flex: none; color: #666; font-size: 11px; font-family: ui-monospace, monospace; }
+  .tl-fsrow .sz { flex: none; color: #8f8f8f; font-size: 11.5px; font-family: ui-monospace, monospace;
+                 min-width: 56px; text-align: right; }
+  .tl-fsrow .du { color: #6ea8dc; }
+  .tl-cleanrow { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 12.5px;
+                 border-bottom: 1px dashed #1c1c1c; }
+  .tl-cleanrow:last-child { border-bottom: none; }
+  .tl-cleanrow input[type="checkbox"] { flex: none; width: 16px; height: 16px; accent-color: #2e7d4f; }
+  .tl-cleanrow .lbl { flex: 1 1 auto; min-width: 0; }
+  .tl-cleanrow .lbl small { display: block; color: #666; font-size: 11px; margin-top: 1px;
+                            word-break: break-all; }
+  .tl-cleanrow .sz { flex: none; color: #e8e8e8; font-family: ui-monospace, monospace; font-size: 12px; }
+  .tl-docker-pre { background: #101010; border: 1px solid #222; border-radius: 8px;
+                   padding: 8px 10px; font: 11px ui-monospace, monospace; color: #9a9a9a;
+                   overflow-x: auto; white-space: pre; margin: 8px 0; }
+  #tl-lightbox, #tl-textview { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.92);
+      display: flex; align-items: center; justify-content: center; flex-direction: column; }
+  #tl-lightbox img { max-width: 96vw; max-height: 88vh; object-fit: contain; }
+  .tl-lb-close { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 12px;
+      width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+      font-size: 18px; color: #ccc; background: #1c1c1c; border: 1px solid #333;
+      border-radius: 50%; cursor: pointer; }
+  #tl-textview { align-items: stretch; }
+  .tl-tv-head { display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; font-size: 13px; color: #9a9a9a; position: relative; }
+  .tl-tv-head .tl-lb-close { position: static; }
+  #tl-tv-pre { flex: 1 1 auto; margin: 0; padding: 0 14px 16px; overflow: auto;
+      font: 12px/1.6 ui-monospace, monospace; color: #d6d6d6; white-space: pre-wrap;
+      word-break: break-all; }
+  .tl-usvc-unlock { display: inline-flex; gap: 6px; align-items: center; }
+  .tl-usvc-unlock input { width: 110px; background: #141414; color: #d6d6d6;
+      border: 1px solid #2a2a2a; border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+  .tl-netrow { display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 12.5px; }
+  .tl-netrow .tl-val { margin-left: 0; }
+  .tl-netrow .sep { flex: 1 1 auto; border-bottom: 1px dotted #333; }
 </style>
 </head>
 <body>
@@ -2975,6 +3114,85 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   </div>
   <div id="logbody"></div>
 </div>
+<div class="gpanel toolspage" id="toolspage" hidden>
+  <h2>{{T:tab_tools}}</h2>
+
+  <!-- F2 健康检查 -->
+  <div class="tl-sec" id="tl-health">
+    <div class="tl-sechead">
+      <h3>{{T:tl_health_title}}</h3>
+      <span class="btn tl-run" id="tl-health-run" role="button" tabindex="0">{{T:tl_health_run}}</span>
+    </div>
+    <div id="tl-health-body"><div class="gempty">{{T:st_loading}}</div></div>
+  </div>
+
+  <!-- F4 快速复制组(JS 填充) -->
+  <div class="tl-sec" id="tl-copy">
+    <div id="tl-copy-body" class="tl-copyrow"></div>
+  </div>
+
+  <!-- G1 工具直达 chips(JS 填充) -->
+  <div class="tl-sec" id="tl-g1sec">
+    <h3>{{T:tl_g1_title}}</h3>
+    <div class="filters toolchips" id="tl-g1"></div>
+  </div>
+
+  <!-- F1 文件浏览 -->
+  <div class="tl-sec" id="tl-fs">
+    <div class="tl-sechead">
+      <h3>{{T:tl_fs_title}}</h3>
+      <span class="btn tl-run" id="tl-fs-du" role="button" tabindex="0">{{T:tl_fs_du}}</span>
+    </div>
+    <div class="tl-fsbar">
+      <div class="tl-crumbs" id="tl-fs-crumbs"></div>
+      <div class="tl-fsctl">
+        <input type="search" id="tl-fs-filter" placeholder="{{T:tl_fs_filter}}" autocomplete="off">
+        <label class="tl-switch"><input type="checkbox" id="tl-fs-hidden"><span>{{T:tl_fs_hidden}}</span></label>
+      </div>
+    </div>
+    <div id="tl-fs-list" class="tl-fslist"></div>
+  </div>
+  <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">✕</div></div>
+  <div id="tl-textview" hidden><div class="tl-tv-head"><span id="tl-tv-name"></span><span class="tl-lb-close" role="button" tabindex="0">✕</span></div><pre id="tl-tv-pre"></pre></div>
+
+  <!-- F3 垃圾清理 -->
+  <div class="tl-sec" id="tl-clean">
+    <div class="tl-sechead">
+      <h3>{{T:tl_clean_title}}</h3>
+      <span class="btn tl-run" id="tl-clean-scan" role="button" tabindex="0">{{T:tl_clean_scan}}</span>
+      <span class="btn tl-run" id="tl-clean-exec" role="button" tabindex="0" hidden>{{T:tl_clean_exec}}</span>
+    </div>
+    <div id="tl-clean-body"><div class="gempty">{{T:tl_clean_scan}} →</div></div>
+  </div>
+
+  <!-- G3 网络速测 -->
+  <div class="tl-sec" id="tl-net">
+    <div class="tl-sechead">
+      <h3>{{T:tl_net_title}}</h3>
+      <span class="btn tl-run" id="tl-net-run" role="button" tabindex="0">{{T:tl_net_run}}</span>
+    </div>
+    <div id="tl-net-body"><div class="gempty">—</div></div>
+  </div>
+
+  <!-- G2 用户级服务重启(I-KNOW 护栏, 默认锁) -->
+  <div class="tl-sec" id="tl-usvc">
+    <div class="tl-sechead">
+      <h3>{{T:tl_usvc_title}}</h3>
+      <span class="tl-usvc-unlock" id="tl-usvc-unlockwrap" hidden>
+        <input type="text" id="tl-usvc-code" placeholder="I-KNOW" autocomplete="off">
+        <span class="btn tl-run" id="tl-usvc-unlock" role="button" tabindex="0">{{T:tl_usvc_unlock}}</span>
+      </span>
+      <span class="btn tl-run" id="tl-usvc-showlock" role="button" tabindex="0">🔒</span>
+    </div>
+    <div id="tl-usvc-body"></div>
+  </div>
+
+  <!-- G4 计划任务一览(只读) -->
+  <div class="tl-sec" id="tl-cron">
+    <h3>{{T:tl_cron_title}}</h3>
+    <div id="tl-cron-body"><div class="gempty">{{T:st_loading}}</div></div>
+  </div>
+</div>
 </div>
 </main>
 <nav id="tabbar" aria-label="{{T:title}}">
@@ -2988,6 +3206,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg><span class="tlabel">{{T:tab_svc}}</span></span>
   <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_model}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M6 1.5v2M10 1.5v2M6 12.5v2M10 12.5v2M1.5 6h2M1.5 10h2M12.5 6h2M12.5 10h2"/></svg><span class="tlabel">{{T:tab_model}}</span></span>
+  <span class="tab" data-p="5" role="button" tabindex="0" aria-label="{{T:tab_tools}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9.5 1.5 3 8l-1.5 5 5-1.5 6.5-6.5a2.1 2.1 0 0 0-3-3z"/><path d="M9.5 1.5 12.5 4.5"/></svg><span class="tlabel">{{T:tab_tools}}</span></span>
 </nav>
 <script>
 const AUTO = {{AUTO}};
@@ -3844,7 +4064,7 @@ const isMobile = () => mqMobile.matches;
 const haptic = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 // 触摸互斥: 一次触摸只属于一个手势(分页/滑动露按钮/边缘返回)
 const gesture = { claimed: null };
-// 移动端把各分区装进 5 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
+// 移动端把各分区装进 6 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
   ["#statuscard", ".mgrid4", "#alerts", "#recent", "#sysbar", "#loadline", "#chart-wrap", "#toolchips"],
@@ -3852,6 +4072,7 @@ const PAGE_GROUPS = [
   ["#goals"],
   ["#filters", "#tasks", "#svc"],
   ["#agents-page"],
+  ["#toolspage"],
 ];
 let pagesHomeOrder = null, pgWrappers = null, trackEl = null;
 function regroupPages() {
@@ -3881,17 +4102,17 @@ function regroupPages() {
 }
 mqMobile.addEventListener("change", () => { regroupPages(); drawChart(); });
 
-// --- 分页(概览/日志/Goal/服务/模型) ---
+// --- 分页(概览/日志/Goal/服务/模型/ツール) ---
 const pages = $("pages");
-const N_PAGES = 5;
+const N_PAGES = 6;
+const PAGE_W = 100 / N_PAGES;   // 轨道宽 600%, 每页位移 = 轨道的 1/6
 var page = 0;   // var: 挂到 window, 便于外部调试/测试读取
-function pageLabels() { return [t("tab_home"), t("tab_log"), t("tab_goal"), t("tab_svc"), t("tab_model")]; }
+function pageLabels() { return [t("tab_home"), t("tab_log"), t("tab_goal"), t("tab_svc"), t("tab_model"), t("tab_tools")]; }
 function applyPagesX(withTransition) {
   const tr = trackEl; // 移动端才有轨道
   if (!tr) return;
-  tr.classList.toggle("stick", !withTransition);
-  // 轨道宽 500%: 每页位移 = 轨道的 20%
-  tr.style.transform = `translate3d(${-page * 20}%,0,0)`;
+  // 轨道宽 600%: 每页位移 = 轨道的 1/6
+  tr.style.transform = `translate3d(${-page * PAGE_W}%,0,0)`;
   if (!withTransition) requestAnimationFrame(() => tr.classList.remove("stick"));
 }
 function setPage(i, opts) {
@@ -3910,6 +4131,7 @@ function setPage(i, opts) {
 function activatePage(i) {
   if (i === 1) { initLogPage(); renderLogTimeline(); }  // 日志页: agent 选择器 + 事件时间线
   if (i === 4) initAgentsPage();     // 模型页: 拉取 OMP/Codex 卡片
+  if (i === 5) initToolsPage();      // ツール页: 惰性初始化(健康/文件/清理/速测/服务/任务)
   if (i === 3 && isMobile()) {       // 服务页: 骨架 → 渲染
     const tbody = $("svc").querySelector("tbody");
     if (!tbody.children.length) tbody.innerHTML = mobileSkel(4);
@@ -4141,7 +4363,7 @@ if (TOUCH) (function setupGestures() {
       g.dx = pct;
       if (!trackEl) return;
       trackEl.classList.add("stick");
-      trackEl.style.transform = `translate3d(calc(${-page * 20}% + ${pct}vw),0,0)`;
+      trackEl.style.transform = `translate3d(calc(${-page * PAGE_W}% + ${pct}vw),0,0)`;
       g.lastX = t.clientX;
     }
   }, { passive: false });
@@ -4299,14 +4521,400 @@ applyAutoSec();
 // --- 日志页选择器变化 ---
 if ($("logagent-sel")) $("logagent-sel").addEventListener("change", loadLogView);
 
+// ================================================================
+// ツール页: 健康检查 / 文件浏览 / 垃圾清理 / 网络速测 / 用户服务 / 计划任务
+// ================================================================
+const TL_CONF = {{TL_CONF}};
+let toolsInited = false;
+
+function fmtB(n) {
+  if (n == null) return "—";
+  if (n < 1024) return n + " B";
+  const u = ["K", "M", "G", "T"];
+  let i = -1;
+  do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+  return n.toFixed(n >= 100 ? 0 : 1) + " " + u[i];
+}
+
+async function tlGet(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.msg || ("HTTP " + r.status));
+  return d;
+}
+async function tlPost(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body), cache: "no-store" });
+  return r.json().catch(() => ({ ok: false, msg: "bad json" }));
+}
+
+// --- F2 健康检查 ---
+async function runHealth() {
+  const btn = $("tl-health-run"), body = $("tl-health-body");
+  btn.textContent = t("tl_health_loading");
+  try {
+    const h = await tlGet("/api/health");
+    renderHealth(h);
+  } catch (e) {
+    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+  }
+  btn.textContent = t("tl_health_run");
+}
+
+function renderHealth(h) {
+  const body = $("tl-health-body");
+  const big = h.overall === "ok" ? "✅" : h.overall === "warn" ? "⚠️" : "❌";
+  const rows = [];
+  const row = (cls, name, val) =>
+    `<div class='tl-row'><span class='tl-dot ${cls}'></span><span class='tl-name'>${escHtml(name)}</span><span class='tl-val'>${val}</span></div>`;
+  const s = h.sys || {};
+  const la = s.loadavg || [];
+  rows.push(row(la[2] > (s.cpu_count || 1) ? "warn" : "", t("tl_h_load"),
+    `<b>${la.join(" / ") || "—"}</b> / ${s.cpu_count || "?"}`));
+  rows.push(row(s.cpu_usage > 90 ? "warn" : "", t("tl_h_cpu"), `<b>${s.cpu_usage}%</b>`));
+  rows.push(row((s.mem || {}).percent >= 90 ? "bad" : (s.mem || {}).percent >= 75 ? "warn" : "",
+    t("tl_h_mem"), `<b>${(s.mem || {}).percent}%</b> · ${fmtB((s.mem || {}).used)}/${fmtB((s.mem || {}).total)}`));
+  const sw = s.swap || {};
+  rows.push(row("", t("tl_h_swap"), sw.total ? `<b>${sw.percent}%</b> · ${fmtB(sw.used)}/${fmtB(sw.total)}` : "—"));
+  const dk = s.disk || {};
+  rows.push(row(dk.percent >= 90 ? "bad" : dk.percent >= 80 ? "warn" : "", t("tl_h_disk"),
+    `<b>${dk.percent}%</b> · ${fmtB(dk.free)} ${t("tl_fs_dl") === "下载" ? "可用" : "free"}`));
+  if (h.temp) rows.push(row(h.temp.c >= 80 ? "bad" : h.temp.c >= 65 ? "warn" : "",
+    `${t("tl_h_temp")} (${escHtml(h.temp.type)})`, `<b>${h.temp.c}°C</b>`));
+  const dt = h.disk_trend || {};
+  let trendTxt = t("tl_h_trend_base");
+  if (dt.eta_full) trendTxt = t("tl_h_trend_days", { g: fmtB(dt.growth_per_day), d: escHtml(dt.eta_full) });
+  else if (dt.days > 1) trendTxt = t("tl_h_trend_base") + ` (${dt.days}d)`;
+  rows.push(row(dt.days_left != null && dt.days_left < 30 ? "warn" : "", t("tl_h_trend"), trendTxt));
+  (h.procs || []).forEach(p => rows.push(row(p.alive ? "" : "bad", `${t("tl_h_procs")} · ${escHtml(p.name)}`,
+    p.alive ? `PID ${p.pid}` : "DOWN")));
+  const ports = h.ports || [];
+  const up = ports.filter(x => x.up).length;
+  rows.push(row(up === ports.length ? "" : "warn", t("tl_h_ports"),
+    `<b>${up}/${ports.length}</b> up`));
+  rows.push(row((h.watchdog_1h || {}).count > 0 ? "warn" : "", t("tl_h_wd"), `<b>${(h.watchdog_1h || {}).count}</b>`));
+  const headTxt = h.overall === "ok" ? t("st_all_ok") : `${t("tl_h_ports")} ${up}/${ports.length} · ${t("tl_h_wd")} ${(h.watchdog_1h || {}).count}`;
+  body.innerHTML = `<div class='tl-row tl-head-big'><span>${big}</span><span class='tl-name'>${headTxt}</span></div>` + rows.join("") +
+    (ports.length ? `<div class='tl-docker-pre' id='tl-ports-pre'>${ports.map(x =>
+      `${x.up ? "●" : "○"} :${x.port} ${escHtml(x.name)}`).join("\\n")}</div>` : "");
+}
+
+// --- F4 快速复制组 ---
+function renderCopyGroup() {
+  const hosts = TL_CONF.hosts || {};
+  const sshHost = hosts.tailscale || hosts.lan || hosts.hostname || "host";
+  const items = [
+    [t("tl_copy_ssh"), `ssh tetsuya@${sshHost}`],
+    [t("tl_copy_ts"), hosts.tailscale || "—"],
+    [t("tl_copy_lan"), hosts.lan || "—"],
+  ];
+  $("tl-copy-body").innerHTML = items.map(([lbl, val]) =>
+    `<span class='btn gcopy' data-copy='${escAttr(val)}' role='button' tabindex='0'>${escHtml(lbl)}: <b>${escHtml(val)}</b></span>`).join("");
+}
+
+async function renderG1() {
+  const el = $("tl-g1");
+  const host = linkHost(location.hostname);
+  try {
+    const d = await tlGet("/api/toolports");
+    const alive = new Set(d.alive || []);
+    el.innerHTML = (TL_CONF.g1 || []).map(([n, p]) => alive.has(p)
+      ? `<a class='chip tchip' href='http://${host}:${p}/' target='_blank' rel='noopener'>${n} :${p} ↗</a>`
+      : `<span class='chip tchip' style='opacity:.35;cursor:default'>${n} :${p}</span>`).join("");
+  } catch (e) {
+    el.innerHTML = "";
+  }
+}
+
+// --- F1 文件浏览 ---
+let fsCwd = null;
+let fsEntries = [];
+let fsDuMap = {};
+
+function fsRootMenu() {
+  return (TL_CONF.fs_roots || []).map(r =>
+    `<span class='chip' data-root='${escAttr(r)}' role='button' tabindex="0">${escHtml(r)}</span>`).join("");
+}
+
+function fsCrumbHtml(path) {
+  const roots = TL_CONF.fs_roots || [];
+  const root = roots.find(r => path === r || path.startsWith(r + "/")) || "/";
+  const parts = path === root ? [] : path.slice(root.length + 1).split("/");
+  let h = `<a data-crumb='${escAttr(root)}'>${escHtml(root)}</a>`;
+  let acc = root;
+  parts.forEach(p => {
+    acc += "/" + p;
+    h += ` / <a data-crumb='${escAttr(acc)}'>${escHtml(p)}</a>`;
+  });
+  return h;
+}
+
+function fsRender() {
+  const list = $("tl-fs-list");
+  if (!fsCwd) {
+    $("tl-fs-crumbs").innerHTML = "";
+    list.innerHTML = `<div class='filters' style='border:none;padding:0'>${fsRootMenu()}</div>`;
+    return;
+  }
+  $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd);
+  const q = ($("tl-fs-filter").value || "").toLowerCase();
+  const showHidden = $("tl-fs-hidden").checked;
+  const rows = fsEntries
+    .filter(e => (showHidden || !e.name.startsWith(".")) && (!q || e.name.toLowerCase().includes(q)))
+    .map(e => {
+      const isDir = e.type === "dir";
+      const du = fsDuMap[e.name];
+      const sz = isDir ? (du != null ? `<span class='du'>${fmtB(du)}</span>` : "—")
+                       : fmtB(e.size);
+      return `<div class='tl-fsrow' data-name='${escAttr(e.name)}' data-type='${e.type}' role='button' tabindex="0">` +
+        `<span class='ico'>${isDir ? "📁" : "📄"}</span><span class='nm'>${escHtml(e.name)}</span>` +
+        `<span class='mt'>${new Date(e.mtime * 1000).toLocaleDateString()}</span><span class='sz'>${sz}</span></div>`;
+    }).join("");
+  list.innerHTML = rows || `<div class='gempty'>${t("tl_fs_empty")}</div>`;
+}
+
+async function fsOpen(path) {
+  const list = $("tl-fs-list");
+  list.innerHTML = `<div class='gempty'>${t("st_loading")}</div>`;
+  try {
+    const d = await tlGet("/api/fs/list?path=" + encodeURIComponent(path));
+    fsCwd = d.path;
+    fsEntries = d.entries || [];
+    fsDuMap = {};
+    fsRender();
+  } catch (e) {
+    fsCwd = null; fsEntries = [];
+    list.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)} — ${t("tl_fs_title")}</div>`;
+    fsRender();
+  }
+}
+
+async function fsDu() {
+  if (!fsCwd) return;
+  const btn = $("tl-fs-du");
+  btn.textContent = t("tl_fs_du_run");
+  try {
+    const d = await tlGet("/api/fs/du?path=" + encodeURIComponent(fsCwd));
+    if (d.ok) {
+      fsDuMap = { "": 0 };
+      fsDuMap[""] = null;
+      const el = $("tl-fs-crumbs");
+      el.innerHTML = fsCrumbHtml(fsCwd) + ` · du: <b>${fmtB(d.size)}</b>`;
+    } else {
+      $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd) + ` · du ✗ ${escHtml(d.msg || "")}`;
+    }
+  } catch (e) {
+    $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd) + ` · du ✗`;
+  }
+  btn.textContent = t("tl_fs_du");
+}
+
+function fsUrl(name, mode) {
+  return "/api/fs/file?path=" + encodeURIComponent(fsCwd + "/" + name) + "&mode=" + mode;
+}
+
+async function fsOpenFile(name) {
+  const ext = name.split(".").pop().toLowerCase();
+  if (["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) {
+    $("tl-lightbox-img").src = fsUrl(name, "view");
+    $("tl-lightbox").hidden = false;
+    return;
+  }
+  if (["md", "py", "js", "ts", "json", "log", "txt", "yaml", "yml", "toml", "cs", "rs", "sh", "xml", "html", "css", "ini", "conf", "csv"].includes(ext)) {
+    try {
+      const d = await tlGet(fsUrl(name, "view"));
+      $("tl-tv-name").textContent = `${name} (${fmtB((d.text || "").length)})`;
+      $("tl-tv-pre").textContent = d.text || "";
+      $("tl-textview").hidden = false;
+      return;
+    } catch (e) { /* 大文件/失败 → 下载 */ }
+  }
+  location.href = fsUrl(name, "download");   // 其他 → 下载
+}
+
+// --- F3 垃圾清理 ---
+const CLEAN_IDS = ["journal", "apt", "tmp_old", "hermes_cache", "omp_jsonl", "binobj"];
+let cleanItems = [];
+
+async function cleanScan() {
+  const btn = $("tl-clean-scan"), body = $("tl-clean-body");
+  btn.textContent = t("tl_clean_scanning");
+  body.innerHTML = `<div class='gempty'>${t("tl_clean_scanning")}</div>`;
+  try {
+    const d = await tlPost("/api/cleanup", { dry_run: true });
+    cleanItems = (d.items || []).filter(x => !x.display_only);
+    const docker = (d.items || []).find(x => x.display_only);
+    let h = cleanItems.map(x => {
+      const def = x.safe === false;
+      return `<div class='tl-cleanrow'>` +
+        `<input type='checkbox' data-clean='${x.id}' ${def ? "" : "checked"}>` +
+        `<span class='lbl'>${escHtml(x.detail || x.id)}${x.error ? ` <small style='color:#e06c6c'>${escHtml(x.error)}</small>` : ""}</span>` +
+        `<span class='sz'>${fmtB(x.size)}</span></div>`;
+    }).join("");
+    h += `<div class='tl-row'><span class='tl-dot off'></span><span class='tl-name'>${t("tl_clean_total")}</span>` +
+      `<span class='tl-val'><b>${fmtB(cleanItems.reduce((a, x) => a + (x.size || 0), 0))}</b></span></div>`;
+    if (docker && docker.raw) {
+      h += `<h3 style='margin-top:12px'>${t("tl_clean_docker")}</h3><div class='tl-docker-pre'>${escHtml(docker.raw)}</div>` +
+        `<span class='btn tl-run' id='tl-clean-docker' role='button' tabindex='0'>${t("tl_clean_docker_prune")}</span>`;
+    }
+    body.innerHTML = h;
+    $("tl-clean-exec").hidden = false;
+    const dp = $("tl-clean-docker");
+    if (dp) dp.addEventListener("click", async () => {
+      if (!confirm(t("tl_clean_docker_confirm"))) return;
+      dp.textContent = "…";
+      const r = await tlPost("/api/cleanup", { action: "docker_prune" });
+      dp.textContent = (r.ok ? "✓ " : "✗ ") + t("tl_clean_docker_prune");
+      alert(r.msg || "");
+    });
+  } catch (e) {
+    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+  }
+  btn.textContent = t("tl_clean_scan");
+}
+
+async function cleanExec() {
+  const ids = [...document.querySelectorAll("input[data-clean]:checked")].map(x => x.dataset.clean);
+  if (!ids.length) return;
+  if (!confirm(t("tl_clean_confirm"))) return;
+  const btn = $("tl-clean-exec"), body = $("tl-clean-body");
+  btn.textContent = "…";
+  const d = await tlPost("/api/cleanup", { dry_run: false, items: ids });
+  const rows = (d.results || []).map(r =>
+    `<div class='tl-cleanrow'><span class='tl-dot ${r.ok ? "" : "bad"}'></span>` +
+    `<span class='lbl'>${escHtml(r.id)}<small>${escHtml(r.msg || "")}</small></span>` +
+    `<span class='sz'>${fmtB(r.freed)}</span></div>`).join("");
+  body.innerHTML = rows +
+    `<div class='tl-row'><span class='tl-dot off'></span><span class='tl-name'>${t("tl_clean_freed")}</span>` +
+    `<span class='tl-val'><b>${fmtB(d.df_freed)}</b></span></div>`;
+  btn.textContent = t("tl_clean_exec");
+  btn.hidden = true;
+}
+
+// --- G3 网络速测 ---
+async function netRun() {
+  const btn = $("tl-net-run"), body = $("tl-net-body");
+  btn.textContent = t("tl_net_run_ing");
+  body.innerHTML = `<div class='gempty'>${t("tl_net_run_ing")}</div>`;
+  try {
+    const d = await tlGet("/api/nettest");
+    const ts = d.tailscale || {};
+    body.innerHTML =
+      `<div class='tl-netrow'><span class='tl-name'>${t("tl_net_ext")} (min ${d.samples.length})</span><span class='sep'></span><span class='tl-val'><b>${d.latency_ms != null ? d.latency_ms + " ms" : "✗"}</b> ${escHtml(d.error || "")}</span></div>` +
+      `<div class='tl-netrow'><span class='tl-name'>${t("tl_net_ts")}${ts.peer ? " · " + escHtml(ts.peer) : ""}</span><span class='sep'></span><span class='tl-val'><b>${ts.rtt_ms != null ? ts.rtt_ms + " ms" : escHtml(ts.msg || "—")}</b></span></div>`;
+  } catch (e) {
+    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+  }
+  btn.textContent = t("tl_net_run");
+}
+
+// --- G2 用户级服务重启(I-KNOW 护栏) ---
+async function usvcLoad() {
+  const body = $("tl-usvc-body");
+  body.innerHTML = `<div class='gempty'>${t("tl_usvc_loading")}</div>`;
+  try {
+    const d = await tlGet("/api/uservice");
+    const unlocked = localStorage.getItem("svc-usvc") === "I-KNOW";
+    body.innerHTML = (d.units || []).length ? (d.units || []).map(u => {
+      const act = u.active === "active";
+      return `<div class='tl-row'><span class='tl-dot ${act ? "" : "warn"}'></span>` +
+        `<span class='tl-name'>${escHtml(u.unit)}<br><small style='color:#666'>${escHtml(u.desc)}</small></span>` +
+        (unlocked ? `<span class='btn tl-run' data-usvc='${escAttr(u.unit)}' role='button' tabindex='0'>${t("tl_usvc_restart")}</span>` : "") +
+        `</div>`;
+    }).join("") : `<div class='gempty'>${t("tl_usvc_none")}</div>`;
+    body.querySelectorAll("[data-usvc]").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm(`${t("tl_usvc_restart")} ${b.dataset.usvc}?`)) return;
+      b.textContent = "…";
+      const r = await tlPost("/api/uservice", { unit: b.dataset.usvc, action: "restart" });
+      b.textContent = (r.ok ? "✓ " : "✗ ") + t("tl_usvc_restart");
+      setTimeout(usvcLoad, 1500);
+    }));
+  } catch (e) {
+    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+  }
+}
+
+function usvcUnlock() {
+  const v = ($("tl-usvc-code").value || "").trim();
+  if (v !== "I-KNOW") { alert(t("tl_usvc_wrong")); return; }
+  localStorage.setItem("svc-usvc", "I-KNOW");
+  $("tl-usvc-showlock").hidden = false;
+  $("tl-usvc-unlockwrap").hidden = true;
+  usvcLoad();
+}
+
+// --- G4 计划任务一览(只读, 复用 /api/tasks 的 cron 枚举) ---
+async function cronLoad() {
+  const body = $("tl-cron-body");
+  try {
+    const d = await tlGet("/api/tasks?lang=" + encodeURIComponent(LANG));
+    body.innerHTML = (d.tasks || []).length ? (d.tasks || []).map(x =>
+      `<div class='tl-row'><span class='tl-dot off'></span>` +
+      `<span class='tl-name'>${escHtml(x.name)}</span>` +
+      `<span class='tl-val'>${escHtml(x.schedule)}</span></div>`).join("")
+      : `<div class='gempty'>—</div>`;
+  } catch (e) {
+    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+  }
+}
+
+// --- ツール页初始化(首次进入触发) ---
+function initToolsPage() {
+  $("toolspage").hidden = false;
+  if (!toolsInited) {
+    toolsInited = true;
+    renderCopyGroup();
+    renderG1();
+    runHealth();
+    cronLoad();
+    fsRender();
+    if (localStorage.getItem("svc-usvc") === "I-KNOW") usvcLoad();
+  }
+  // 事件绑定(一次性)
+  if (!initToolsPage._bound) {
+    initToolsPage._bound = true;
+    $("tl-health-run").addEventListener("click", runHealth);
+    $("tl-fs-du").addEventListener("click", fsDu);
+    $("tl-fs-filter").addEventListener("input", fsRender);
+    $("tl-fs-hidden").addEventListener("change", fsRender);
+    $("tl-clean-scan").addEventListener("click", cleanScan);
+    $("tl-clean-exec").addEventListener("click", cleanExec);
+    $("tl-net-run").addEventListener("click", netRun);
+    $("tl-usvc-unlock").addEventListener("click", usvcUnlock);
+    $("tl-usvc-showlock").addEventListener("click", () => {
+      $("tl-usvc-showlock").hidden = true;
+      $("tl-usvc-unlockwrap").hidden = false;
+    });
+    $("tl-fs-list").addEventListener("click", (e) => {
+      const root = e.target.closest("[data-root]");
+      if (root) { fsOpen(root.dataset.root); return; }
+      const crumb = e.target.closest("[data-crumb]");
+      if (crumb) { fsOpen(crumb.dataset.crumb); return; }
+      const row = e.target.closest(".tl-fsrow");
+      if (!row) return;
+      if (row.dataset.type === "dir") fsOpen(fsCwd + "/" + row.dataset.name);
+      else fsOpenFile(row.dataset.name);
+    });
+    $("tl-fs-crumbs").addEventListener("click", (e) => {
+      const crumb = e.target.closest("[data-crumb]");
+      if (crumb) fsOpen(crumb.dataset.crumb);
+    });
+    const closeViews = () => { $("tl-lightbox").hidden = true; $("tl-textview").hidden = true; };
+    $("tl-lightbox").addEventListener("click", closeViews);
+    $("tl-textview").querySelector(".tl-lb-close").addEventListener("click", (e) => { e.stopPropagation(); closeViews(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeViews(); });
+  }
+}
+
 // --- 启动 ---
-regroupPages();          // 手机: 分组进 5 页; 桌面: 保持原序
+regroupPages();          // 手机: 分组进 6 页; 桌面: 保持原序
 if (isMobile()) {
   setPage(0, { first: true });
   applyAutoSec();
 } else {
   $("logpage").hidden = true;
   $("agents-page").hidden = true;
+  initToolsPage();   // 桌面无页签: 工具面板直接展开在页面流里(内部会解除 hidden)
 }
 load(true);
 </script>
@@ -4314,6 +4922,661 @@ load(true);
 </html>
 """
 
+
+# ================= ツール页: 文件浏览 / 健康检查 / 垃圾清理 / 网络速测 / 用户服务 =================
+# 全部纯标准库; 写操作只限下方枚举路径(红线: 用户媒体/System.db/git 历史/.env 永不触碰)。
+
+HOME_DIR = "/home/tetsuya"   # svc-dashboard 以 root 运行(systemd 系统级), 不能用 expanduser
+
+# --- F1 文件浏览 ---
+FS_ROOTS = [os.path.join(HOME_DIR, "development"),
+            os.path.join(HOME_DIR, "NAS"),
+            "/tmp",
+            os.path.join(HOME_DIR, ".omp", "logs")]
+# 敏感文件名: .env / *key* / *secret* / id_rsa* / *.pem —— 列表隐藏 + 直接访问 404
+_FS_SENSITIVE = re.compile(r"\.env$|key|secret|^id_rsa|\.pem$", re.I)
+_FS_IMAGE = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_FS_TEXT = {".md", ".py", ".js", ".ts", ".json", ".log", ".txt", ".yaml", ".yml",
+            ".toml", ".cs", ".rs", ".sh", ".xml", ".html", ".css", ".ini", ".conf", ".csv"}
+_FS_TEXT_MAX = 1 << 20   # 文本 >1MB 只给下载
+
+
+def fs_sensitive(name):
+    return bool(_FS_SENSITIVE.search(name))
+
+
+def fs_resolve(path_param):
+    """用户路径 -> 白名单根内 realpath; 越界/敏感/非法返回 None。
+    os.path.realpath 递归解析全部符号链接后复检前缀, 天然覆盖"跟随一层再复检"。"""
+    p = (path_param or "").strip()
+    if not p or "\x00" in p:
+        return None
+    p = os.path.expanduser(p)
+    if not p.startswith("/"):
+        return None
+    real = os.path.realpath(p)
+    for root in FS_ROOTS:
+        rroot = os.path.realpath(root)
+        if real == rroot or real.startswith(rroot + os.sep):
+            return None if fs_sensitive(os.path.basename(real)) else real
+    return None
+
+
+def fs_list(path_param):
+    """目录列表(名称/大小/mtime/类型), 敏感名直接跳过, 文件夹优先。"""
+    real = fs_resolve(path_param)
+    if not real or not os.path.isdir(real):
+        return {"ok": False, "msg": "not found"}
+    out = []
+    try:
+        with os.scandir(real) as it:
+            for e in it:
+                try:
+                    if fs_sensitive(e.name):
+                        continue
+                    is_dir = e.is_dir(follow_symlinks=True)
+                    if not is_dir and not e.is_file(follow_symlinks=True):
+                        continue   # socket/fifo 等跳过
+                    st = e.stat(follow_symlinks=True)
+                    out.append({"name": e.name, "type": "dir" if is_dir else "file",
+                                "size": None if is_dir else st.st_size,
+                                "mtime": int(st.st_mtime)})
+                except OSError:
+                    continue
+    except OSError as ex:
+        return {"ok": False, "msg": str(ex)}
+    out.sort(key=lambda x: (x["type"] != "dir", x["name"].lower()))
+    return {"ok": True, "path": real, "entries": out}
+
+
+def fs_meta(real):
+    """文件预览类型 + MIME: 图片直显 / 小文本渲染 / 其他下载。"""
+    ext = os.path.splitext(real)[1].lower()
+    size = os.path.getsize(real)
+    if ext in _FS_IMAGE:
+        return "image", {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                         "webp": "image/webp", "gif": "image/gif"}.get(ext[1:], "application/octet-stream")
+    if ext in _FS_TEXT and size <= _FS_TEXT_MAX:
+        return "text", "text/plain; charset=utf-8"
+    return "binary", "application/octet-stream"
+
+
+def fs_du(path_param):
+    """单目录 du(5s 超时放弃, 负载友好)。"""
+    real = fs_resolve(path_param)
+    if not real or not os.path.isdir(real):
+        return {"ok": False, "msg": "not found"}
+    try:
+        p = subprocess.run(["du", "-sb", real], capture_output=True, text=True, timeout=5)
+        if p.returncode != 0:
+            return {"ok": False, "msg": p.stderr.strip()[:120] or "du failed"}
+        return {"ok": True, "size": int(p.stdout.split()[0])}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "msg": "timeout(5s)"}
+    except Exception as ex:
+        return {"ok": False, "msg": str(ex)[:120]}
+
+
+# --- F2 健康检查 ---
+HEALTH_PROCS = [   # (显示名, 匹配串) 可配置列表
+    ("ServerCore (dotnet)", "ServerCore"),
+    ("syncthing", "syncthing"),
+    ("tailscaled", "tailscaled"),
+    ("immich-server", "immich"),
+]
+DISK_HISTORY_PATH = "/tmp/svc-disk-history.json"
+_WD_BAD = re.compile(r"stalled|error|panic|timeout|fail|kill", re.I)
+
+
+def _proc_alive(pattern):
+    """关键进程存活: comm/cmdline 含 pattern -> pid, 否则 None。"""
+    pat = pattern.lower()
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/comm", "rb") as f:
+                if pat in f.read().decode("utf-8", "replace").lower():
+                    return int(pid)
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                if pat in f.read().decode("utf-8", "replace").replace("\x00", " ").lower():
+                    return int(pid)
+        except OSError:
+            continue
+    return None
+
+
+def swap_info():
+    total = free = 0
+    for line in read("/proc/meminfo").splitlines():
+        p = line.split()
+        if p[0] == "SwapTotal:":
+            total = int(p[1]) * 1024
+        elif p[0] == "SwapFree:":
+            free = int(p[1]) * 1024
+    used = total - free
+    return {"total": total, "used": used,
+            "percent": round(100 * used / total, 1) if total else 0.0}
+
+
+def thermal_read():
+    """取温度最高 zone(/sys/class/thermal, VM 可能没有 -> None)。"""
+    best = None
+    try:
+        zones = sorted(os.listdir("/sys/class/thermal"))
+    except OSError:
+        return None
+    for z in zones:
+        if not z.startswith("thermal_zone"):
+            continue
+        try:
+            with open(f"/sys/class/thermal/{z}/type") as f:
+                typ = f.read().strip()
+            with open(f"/sys/class/thermal/{z}/temp") as f:
+                v = int(f.read().strip())
+        except (OSError, ValueError):
+            continue
+        if v > 0:
+            c = round(v / 1000.0, 1)
+            if best is None or c > best[1]:
+                best = (typ, c)
+    return {"type": best[0], "c": best[1]} if best else None
+
+
+def disk_trend(disk):
+    """磁盘用量历史: 每次检查落当天一条(保留 30 天), 线性外推预计满盘日期。"""
+    today = time.strftime("%Y-%m-%d")
+    hist = []
+    try:
+        with open(DISK_HISTORY_PATH) as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            hist = [h for h in data if isinstance(h, dict) and "d" in h and "u" in h]
+    except (OSError, ValueError):
+        hist = []
+    hist = [h for h in hist if h.get("d") != today]     # 当天覆盖
+    hist.append({"d": today, "u": disk["used"], "t": disk["total"]})
+    hist.sort(key=lambda h: h["d"])
+    hist = hist[-30:]
+    try:
+        with open(DISK_HISTORY_PATH + ".tmp", "w") as f:
+            json.dump(hist, f)
+        os.replace(DISK_HISTORY_PATH + ".tmp", DISK_HISTORY_PATH)
+    except OSError:
+        pass
+    out = {"days": len(hist), "growth_per_day": None, "eta_full": None, "days_left": None}
+    if len(hist) >= 2 and disk["total"]:
+        first, last = hist[0], hist[-1]
+        try:
+            span = max(1.0, (datetime.strptime(last["d"], "%Y-%m-%d") -
+                             datetime.strptime(first["d"], "%Y-%m-%d")).days)
+        except ValueError:
+            return out
+        growth = (last["u"] - first["u"]) / span
+        out["growth_per_day"] = round(growth)
+        if growth > 0:
+            days_left = max(0.0, (disk["total"] - last["u"]) / growth)
+            out["days_left"] = int(days_left)
+            out["eta_full"] = (datetime.now() + timedelta(days=days_left)).strftime("%Y-%m-%d")
+    return out
+
+
+def port_heartbeat(entries):
+    """已注册服务端口逐个 TCP connect(500ms 超时)标 up/down。"""
+    seen, out = set(), []
+    for e in entries:
+        port = e.get("port")
+        if not port or port in seen:
+            continue
+        seen.add(port)
+        up = False
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                up = True
+        except OSError:
+            up = False
+        out.append({"port": port, "name": e.get("name") or "?", "up": up})
+    out.sort(key=lambda x: x["port"])
+    return out
+
+
+def watchdog_anomalies():
+    """最近 1h watchdog 异常计数(只解析 goal-watchdog.log 尾部 256K)。"""
+    now = time.time()
+    n, sample = 0, []
+    try:
+        with open(WATCHDOG_LOG, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 256 * 1024))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return {"count": 0, "sample": []}
+    for raw in lines:
+        m = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", raw)
+        if not m:
+            continue
+        try:
+            ts = time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M:%S"))
+        except ValueError:
+            continue
+        if now - ts > 3600 or not _WD_BAD.search(raw):
+            continue
+        n += 1
+        if len(sample) < 5:
+            sample.append(raw[m.end():].strip()[:120])
+    return {"count": n, "sample": sample}
+
+
+def local_hosts():
+    """F4 复制组: 局域网 IP + tailscale IP(UDP connect 探测, 不实际发包)。"""
+    lan = ts_ip = None
+    for target, out_key in ((("8.8.8.8", 80), "lan"), (("100.100.100.100", 53), "tailscale")):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(target)
+            ip = s.getsockname()[0]
+            s.close()
+        except OSError:
+            continue
+        if out_key == "lan" and not ip.startswith("127."):
+            lan = ip
+        elif out_key == "tailscale" and ip.startswith("100."):
+            ts_ip = ip
+    return {"lan": lan, "tailscale": ts_ip, "hostname": socket.gethostname()}
+
+
+def health_check():
+    """一次性快检: 系统指标 + 磁盘趋势 + 温度 + 关键进程 + 端口心跳 + watchdog 异常。"""
+    s = sys_info()
+    s["swap"] = swap_info()
+    procs = []
+    for name, pat in HEALTH_PROCS:
+        pid = _proc_alive(pat)
+        procs.append({"name": name, "alive": pid is not None, "pid": pid})
+    h = {"ok": True, "ts": time.time(), "sys": s, "temp": thermal_read(),
+         "procs": procs, "ports": port_heartbeat(gather()),
+         "watchdog_1h": watchdog_anomalies(), "hosts": local_hosts()}
+    h["disk_trend"] = disk_trend(s["disk"]) if s.get("disk") else {
+        "days": 0, "growth_per_day": None, "eta_full": None, "days_left": None}
+    disk_p = s["disk"]["percent"] if s.get("disk") else 0
+    mem_p = s["mem"]["percent"]
+    if disk_p >= 90 or mem_p >= 95 or any(not p["alive"] for p in procs):
+        h["overall"] = "bad"
+    elif disk_p >= 80 or mem_p >= 85 or h["watchdog_1h"]["count"] > 0:
+        h["overall"] = "warn"
+    else:
+        h["overall"] = "ok"
+    return h
+
+
+# --- F3 垃圾清理(先扫后清, dry_run 默认 true) ---
+JOURNAL_KEEP = "200M"
+TMP_OLD_DAYS = 7
+TMP_EXCLUDE = ("godot-mono", "dbeditor", "map_links")   # in-use 排除
+HERMES_OLD_DAYS = 3
+OMP_JSONL_OLD_DAYS = 30
+
+
+def _run(cmd, timeout=10):
+    """跑外部命令(免密 sudo 场景), 超时保护, 不抛异常。"""
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return 124, "", "timeout"
+    except FileNotFoundError:
+        return 127, "", "not installed"
+    except Exception as ex:
+        return 1, "", str(ex)[:120]
+
+
+def _parse_size(s):
+    m = re.search(r"([\d.]+)\s*([KMGT]?)", s or "", re.I)
+    if not m:
+        return 0
+    return int(float(m.group(1)) *
+               {"": 1, "K": 1024, "M": 1024 ** 2, "G": 1024 ** 3, "T": 1024 ** 4}[m.group(2).upper()])
+
+
+def _dir_size(path, deadline, cap=8000):
+    """受截止时间约束的目录大小(超时/超量即停, 单线程)。"""
+    total = n = 0
+    for root, _dirs, files in os.walk(path):
+        if time.time() > deadline:
+            break
+        for f in files:
+            n += 1
+            if n > cap:
+                return total
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total
+
+
+def _scan_journal():
+    rc, out, err = _run(["sudo", "-n", "journalctl", "--disk-usage"], timeout=10)
+    used = _parse_size(out) if rc == 0 else 0
+    over = max(0, used - 200 * 1024 ** 2)
+    return {"size": over, "count": 1 if over else 0,
+            "detail": (out or err).splitlines()[0][:120] if (out or err) else "—"}
+
+
+def _scan_apt():
+    total = n = 0
+    d = "/var/cache/apt/archives"
+    try:
+        for f in os.listdir(d):
+            if f.endswith(".deb"):
+                try:
+                    total += os.path.getsize(os.path.join(d, f))
+                    n += 1
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return {"size": total, "count": n, "detail": f"/var/cache/apt/archives ({n} .deb)"}
+
+
+def _tmp_old_paths():
+    """/tmp 顶层 >7 天旧项(排除 in-use 名与当天文件)。"""
+    deadline = time.time() + 5
+    cutoff = time.time() - TMP_OLD_DAYS * 86400
+    items = []
+    try:
+        names = os.listdir("/tmp")
+    except OSError:
+        return items
+    for name in names:
+        if time.time() > deadline:
+            break
+        if any(x in name for x in TMP_EXCLUDE):
+            continue
+        p = os.path.join("/tmp", name)
+        try:
+            st = os.lstat(p)
+        except OSError:
+            continue
+        if st.st_mtime > cutoff or time.strftime("%Y-%m-%d", time.localtime(st.st_mtime)) == time.strftime("%Y-%m-%d"):
+            continue
+        if os.path.islink(p) or not os.path.isdir(p):
+            items.append((p, st.st_size))
+        else:
+            items.append((p, _dir_size(p, deadline)))
+    return items
+
+
+def _aged_paths(dirpath, days, suffix=None, recursive=False):
+    """目录下(可递归)>N 天的文件。"""
+    cutoff = time.time() - days * 86400
+    items = []
+    if recursive:
+        for root, _dirs, files in os.walk(dirpath):
+            for f in files:
+                p = os.path.join(root, f)
+                try:
+                    st = os.lstat(p)
+                except OSError:
+                    continue
+                if st.st_mtime <= cutoff and (suffix is None or f.endswith(suffix)):
+                    items.append((p, st.st_size))
+    else:
+        try:
+            names = os.listdir(dirpath)
+        except OSError:
+            return items
+        for name in names:
+            p = os.path.join(dirpath, name)
+            try:
+                st = os.lstat(p)
+            except OSError:
+                continue
+            if st.st_mtime <= cutoff:
+                items.append((p, st.st_size if not os.path.isdir(p) else _dir_size(p, time.time() + 3)))
+    return items
+
+
+def _binobj_paths():
+    """~/development 各仓库 bin/obj 构建产物。"""
+    deadline = time.time() + 5
+    found = []
+    for root, dirs, _files in os.walk(os.path.join(HOME_DIR, "development")):
+        if time.time() > deadline:
+            break
+        dirs[:] = [d for d in dirs if d not in (".git", "node_modules", ".venv", "venv")]
+        for d in list(dirs):
+            if d in ("bin", "obj"):
+                p = os.path.join(root, d)
+                found.append((p, _dir_size(p, deadline)))
+                dirs.remove(d)
+    return found
+
+
+def _scan_docker():
+    rc, out, err = _run(["docker", "system", "df"], timeout=10)
+    return {"size": 0, "count": 0, "display_only": True, "raw": (out or err)[:1500],
+            "detail": "docker system df(只读, prune 单独按钮)"}
+
+
+def _wrap_scan(sid, paths_fn, detail_fmt):
+    def scan():
+        items = paths_fn()
+        return {"size": sum(sz for _p, sz in items), "count": len(items),
+                "detail": detail_fmt.format(n=len(items))}
+    return scan
+
+
+CLEANUP_SCANS = [
+    ("journal", _scan_journal, "journalctl 占用超 200M 的部分"),
+    ("apt", _scan_apt, "apt 下载缓存(.deb)"),
+    ("tmp_old", _wrap_scan("tmp_old", _tmp_old_paths, "/tmp 超 7 天旧文件({n} 项, 已排除 in-use)"), None),
+    ("hermes_cache", _wrap_scan("hermes_cache", lambda: _aged_paths(
+        os.path.join(HOME_DIR, ".hermes", "cache", "terminal-output"), HERMES_OLD_DAYS),
+        "~/.hermes 终端输出缓存 >3 天({n} 项)"), None),
+    ("omp_jsonl", _wrap_scan("omp_jsonl", lambda: _aged_paths(
+        os.path.join(HOME_DIR, ".omp", "agent"), OMP_JSONL_OLD_DAYS, suffix=".jsonl", recursive=True),
+        "~/.omp 会话 jsonl >30 天({n} 个)"), None),
+    ("binobj", _wrap_scan("binobj", _binobj_paths, "仓库构建产物 bin/obj({n} 个, 清后触发重建)"), None),
+    ("docker", _scan_docker, "docker 磁盘占用(只读)"),
+]
+
+
+def cleanup_scan():
+    items = []
+    for sid, scan, _lbl in CLEANUP_SCANS:
+        try:
+            it = scan()
+        except Exception as ex:
+            it = {"size": 0, "count": 0, "error": str(ex)[:120]}
+        it["id"] = sid
+        if sid == "binobj":
+            it["safe"] = False   # 默认不勾: 会触发重建
+        items.append(it)
+    return {"ok": True, "dry_run": True, "items": items,
+            "df_free": shutil.disk_usage("/").free}
+
+
+def _clean_journal():
+    before = _scan_journal()["size"]
+    rc, out, err = _run(["sudo", "-n", "journalctl", "--vacuum-size", JOURNAL_KEEP], timeout=30)
+    freed = max(0, before - _scan_journal()["size"])
+    return freed, (out or err or f"rc={rc}")[-160:]
+
+
+def _clean_apt():
+    before = _scan_apt()["size"]
+    rc, out, err = _run(["sudo", "-n", "apt-get", "clean"], timeout=30)
+    freed = max(0, before - _scan_apt()["size"])
+    return freed, (err or out or f"rc={rc}")[-160:]
+
+
+def _make_path_cleaner(paths_fn):
+    def run():
+        """执行时服务端重扫(绝不信任客户端路径), 逐路径删除, 单个失败继续。"""
+        freed, errs = 0, 0
+        for p, sz in paths_fn():
+            try:
+                if os.path.islink(p) or os.path.isfile(p):
+                    os.remove(p)
+                elif os.path.isdir(p):
+                    shutil.rmtree(p)
+                else:
+                    continue
+                freed += sz
+            except OSError:
+                errs += 1
+        return freed, ("done" if not errs else f"done, {errs} 项失败(权限)")
+    return run
+
+
+CLEANUP_RUNNERS = {
+    "journal": _clean_journal,
+    "apt": _clean_apt,
+    "tmp_old": _make_path_cleaner(_tmp_old_paths),
+    "hermes_cache": _make_path_cleaner(lambda: _aged_paths(
+        os.path.join(HOME_DIR, ".hermes", "cache", "terminal-output"), HERMES_OLD_DAYS)),
+    "omp_jsonl": _make_path_cleaner(lambda: _aged_paths(
+        os.path.join(HOME_DIR, ".omp", "agent"), OMP_JSONL_OLD_DAYS, suffix=".jsonl", recursive=True)),
+    "binobj": _make_path_cleaner(_binobj_paths),
+}
+
+
+def cleanup_run(ids):
+    """逐项真清: 任何一项失败不影响其他项; 附 df 前后对比。"""
+    free_before = shutil.disk_usage("/").free
+    results = []
+    for sid in ids:
+        fn = CLEANUP_RUNNERS.get(sid)
+        if not fn:
+            results.append({"id": sid, "ok": False, "freed": 0, "msg": "unknown item"})
+            continue
+        try:
+            freed, msg = fn()
+            results.append({"id": sid, "ok": True, "freed": freed, "msg": msg})
+        except Exception as ex:
+            results.append({"id": sid, "ok": False, "freed": 0, "msg": str(ex)[:160]})
+    free_after = shutil.disk_usage("/").free
+    return {"ok": True, "dry_run": False, "results": results,
+            "df_freed": max(0, free_after - free_before)}
+
+
+def docker_prune():
+    """docker system prune -f(悬空资源; prune 按钮单独, 前端二次确认)。"""
+    rc, out, err = _run(["docker", "system", "prune", "-f"], timeout=120)
+    return {"ok": rc == 0, "msg": (out or err or f"rc={rc}")[-400:]}
+
+
+# --- G3 网络速测 ---
+NET_TEST_URL = "https://github.com/git/git/releases/latest"
+
+
+def _tailscale(cmd, timeout=8):
+    rc, out, err = _run(cmd, timeout=timeout)
+    if rc != 0 and not out:   # 权限不足 → 免密 sudo 重试
+        rc2, out2, _e2 = _run(["sudo", "-n"] + cmd, timeout=timeout)
+        if rc2 == 0:
+            return 0, out2, ""
+    return rc, out, err
+
+
+def ts_ping():
+    """tailscale status 取对端, tailscale ping 测对端延迟。"""
+    rc, out, err = _tailscale(["tailscale", "status"])
+    if rc != 0:
+        return {"ok": False, "peer": None, "rtt_ms": None, "msg": (err or f"rc={rc}")[:120]}
+    peer = None
+    for line in out.splitlines()[1:]:
+        parts = line.split()
+        if parts and parts[0].count(".") == 3 and not parts[0].startswith("100.100.100.100"):
+            peer = parts[0].split(":")[0]
+            break
+    if not peer:
+        return {"ok": True, "peer": None, "rtt_ms": None, "msg": "no peers"}
+    rc, out, err = _tailscale(["tailscale", "ping", "--timeout", "3s", "-c", "1", peer])
+    m = re.search(r"in ([\d.]+)\s*(ms|s)\b", out)
+    if m:
+        return {"ok": True, "peer": peer,
+                "rtt_ms": round(float(m.group(1)) * (1000 if m.group(2) == "s" else 1), 1)}
+    return {"ok": False, "peer": peer, "rtt_ms": None, "msg": (out or err or f"rc={rc}")[:120]}
+
+
+def net_test():
+    """外网 HEAD 延迟(3 次取最小) + tailscale 对端 ping。"""
+    import urllib.request
+    lat, err = [], ""
+    for _ in range(3):
+        t0 = time.time()
+        try:
+            req = urllib.request.Request(
+                NET_TEST_URL, method="HEAD",
+                headers={"User-Agent": f"svc-dashboard/{server_ver()}"})
+            with urllib.request.urlopen(req, timeout=8):
+                pass
+            lat.append(round((time.time() - t0) * 1000))
+        except Exception as ex:
+            err = str(ex)[:120]
+            break
+    return {"ok": bool(lat), "latency_ms": min(lat) if lat else None,
+            "samples": lat, "error": err, "tailscale": ts_ping()}
+
+
+def server_ver():
+    return Handler.server_version.split("/")[1]
+
+
+# --- G2 用户级服务重启(默认隐藏, 前端 I-KNOW 解锁) ---
+
+
+def _usvc_cmd(args, timeout):
+    return _run(["sudo", "-n", "-u", "tetsuya", "env",
+                 "XDG_RUNTIME_DIR=/run/user/1000"] + args, timeout=timeout)
+
+
+def user_services():
+    rc, out, _err = _usvc_cmd(["systemctl", "--user", "list-units", "--type=service",
+                               "--all", "--no-legend", "--plain"], timeout=6)
+    units = []
+    for line in out.splitlines():
+        parts = line.split(None, 4)
+        if len(parts) >= 4 and parts[0].endswith(".service"):
+            if "svc-dashboard" in parts[0]:   # 自身除外(且自身为系统级服务)
+                continue
+            units.append({"unit": parts[0], "active": parts[2], "sub": parts[3],
+                          "desc": parts[4].strip() if len(parts) > 4 else ""})
+    return units
+
+
+def user_service_action(unit, action):
+    if action not in ("restart", "start", "stop"):
+        return {"ok": False, "msg": "bad action"}
+    if not unit.endswith(".service") or "svc-dashboard" in unit:
+        return {"ok": False, "msg": "unit not allowed"}
+    if unit not in {u["unit"] for u in user_services()}:
+        return {"ok": False, "msg": "unknown unit"}
+    rc, out, err = _usvc_cmd(["systemctl", "--user", action, unit], timeout=20)
+    return {"ok": rc == 0, "msg": (out or err or ("ok" if rc == 0 else f"rc={rc}"))[:200]}
+
+
+
+def tool_ports_alive():
+    """G1 chips 端口存活(服务端 TCP connect 300ms, 浏览器端零 console 噪声)。"""
+    alive = []
+    for _name, port in tools_conf()["g1"]:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.3):
+                alive.append(port)
+        except OSError:
+            pass
+    return {"ok": True, "alive": alive}
+
+def tools_conf():
+    """页面内嵌工具配置: 白名单根 + 主机地址 + G1 chips 端口表。"""
+    return {"fs_roots": FS_ROOTS,
+            "hosts": local_hosts(),
+            "g1": [["dbeditor", 8810], ["mapviewer", 8899], ["wilviewer", 8765],
+                   ["uieditor", 8820], ["dbviewer", 8800], ["webclient", 8822],
+                   ["yomu", 8830], ["fudoki", 8831]]}
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "svc-dashboard/1.0"
@@ -4417,13 +5680,80 @@ class Handler(BaseHTTPRequestHandler):
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             self._send_json(200, {"events": scan_agent_log(sid, lang) if sid else [],
                     "capture": _tmux_capture(tmx)})
+        elif path == "/api/fs/list":
+            qs = parse_qs(urlparse(self.path).query)
+            p = (qs.get("path") or [""])[0]
+            data = fs_list(p)
+            if not data.get("ok"):
+                self.log_message("fs/list rejected %r -> 404", p[:160])
+                self._send_json(404, data)
+            else:
+                self._send_json(200, data)
+        elif path == "/api/fs/file":
+            self._fs_file()
+        elif path == "/api/fs/du":
+            qs = parse_qs(urlparse(self.path).query)
+            self._send_json(200, fs_du((qs.get("path") or [""])[0]))
+        elif path == "/api/health":
+            self._send_json(200, health_check())
+        elif path == "/api/nettest":
+            self._send_json(200, net_test())
+        elif path == "/api/toolports":
+            self._send_json(200, tool_ports_alive())
+        elif path == "/api/uservice":
+            self._send_json(200, {"ok": True, "units": user_services()})
         else:
             self.send_error(404)
 
+    def _fs_file(self):
+        """GET /api/fs/file?path=&mode=view|download
+        view+text -> JSON; 图片直显; download/二进制 -> attachment 流式。"""
+        qs = parse_qs(urlparse(self.path).query)
+        p = (qs.get("path") or [""])[0]
+        mode = (qs.get("mode") or ["view"])[0]
+        real = fs_resolve(p)
+        if not real or not os.path.isfile(real):
+            self.log_message("fs/file rejected %r mode=%s -> 404", p[:160], mode)
+            self.send_error(404)
+            return
+        kind, mime = fs_meta(real)
+        if mode == "view" and kind == "text":
+            try:
+                with open(real, "rb") as f:
+                    text = f.read().decode("utf-8", "replace")
+                self._send_json(200, {"ok": True, "name": os.path.basename(real),
+                                      "size": len(text), "text": text[:512 * 1024]})
+            except OSError as ex:
+                self._send_json(500, {"ok": False, "msg": str(ex)})
+            return
+        try:
+            size = os.path.getsize(real)
+            self.send_response(200)
+            ctype = mime if (mode != "download" and kind == "image") else "application/octet-stream"
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(size))
+            self.send_header("Cache-Control", "no-store")
+            if mode == "download" or kind == "binary":
+                fn = os.path.basename(real)
+                safe = re.sub(r"[^A-Za-z0-9._-]", "_", fn) or "download"
+                from urllib.parse import quote
+                self.send_header("Content-Disposition",
+                                 f'attachment; filename="{safe}"; filename*=UTF-8\'\'{quote(fn)}')
+            self.end_headers()
+            with open(real, "rb") as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+        except (OSError, BrokenPipeError) as ex:
+            self.log_message("fs/file stream error: %s", ex)
+
     def do_POST(self):
-        """管理端点: POST /api/manage  body={"unit": id, "action": start|stop|restart|pause|resume}"""
+        """写端点: /api/manage(服务管理) /api/cleanup(dry_run 默认 true)
+        /api/uservice(用户级服务重启, 前端 I-KNOW 护栏)"""
         path = urlparse(self.path).path
-        if path != "/api/manage":
+        if path not in ("/api/manage", "/api/cleanup", "/api/uservice"):
             self.send_error(404)
             return
         try:
@@ -4434,14 +5764,37 @@ class Handler(BaseHTTPRequestHandler):
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             self._send_json(400, {"ok": False, "msg": t(lang, "m_badreq", e=str(e))})
             return
-        unit = str(body.get("unit") or "")
-        action = str(body.get("action") or "")
-        self.log_message("manage %s %s", unit, action)
         lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
-        try:
-            self._send_json(200, manage_action(unit, action, lang))
-        except Exception as e:
-            self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        if path == "/api/manage":
+            unit = str(body.get("unit") or "")
+            action = str(body.get("action") or "")
+            self.log_message("manage %s %s", unit, action)
+            try:
+                self._send_json(200, manage_action(unit, action, lang))
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/cleanup":
+            dry = body.get("dry_run", True) is not False   # 默认 dry_run!
+            action = str(body.get("action") or "")
+            items = [str(x) for x in (body.get("items") or [])][:16] if isinstance(body.get("items"), list) else []
+            self.log_message("cleanup action=%s dry_run=%s items=%s", action, dry, items)
+            try:
+                if action == "docker_prune":
+                    self._send_json(200, docker_prune())
+                elif dry:
+                    self._send_json(200, cleanup_scan())
+                else:
+                    self._send_json(200, cleanup_run(items))
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/uservice":
+            unit = str(body.get("unit") or "")
+            action = str(body.get("action") or "")
+            self.log_message("uservice %s %s", unit, action)
+            try:
+                self._send_json(200, user_service_action(unit, action))
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[%s] %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
