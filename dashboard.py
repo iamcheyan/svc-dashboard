@@ -4748,6 +4748,7 @@ async function hydrateFragments() {
       console.error("fragment hydrate failed: " + part, err);
     }
   }));
+  remeasureTrack();   // P0-1: fragment 落地改变当前页高度, 立即重测(RO 兜底其余异步)
 }
 
 async function load(alsoSys) {
@@ -5204,6 +5205,7 @@ function regroupPages() {
       pagesHomeOrder.forEach(el => pages.appendChild(el));
       if (trackEl) { trackEl.remove(); trackEl = null; }
       pgWrappers = null;
+      watchPageHeights();   // P0-1: 桌面撤轨道, 解除高度观察
     }
     return;
   }
@@ -5225,6 +5227,7 @@ function regroupPages() {
   // 每页高度跟随自身内容; 轨道高=当前页(scrollHeight 含每页自己的 padding-bottom 预留)
   pgWrappers.forEach(w => { w.style.height = "auto"; });
   applyPagesX(false);
+  watchPageHeights();   // P0-1: 内容尺寸变化自动重测
 }
 mqMobile.addEventListener("change", () => {
   regroupPages(); drawChart();
@@ -5246,9 +5249,26 @@ function applyPagesX(withTransition) {
   tr.style.transform = `translate3d(${-page * PAGE_W}%,0,0)`;
   // 每页各自高度: 轨道高度跟随当前页内容(flex 容器默认拉伸到最高页 = 高页拖矮页)
   const cur = tr.children[page];
-  if (cur) tr.style.height = cur.scrollHeight + "px";
+  // P0-1: rect 含 .pg padding-bottom(底栏预留)且无取整截断, 比 scrollHeight 精确
+  if (cur) tr.style.height = Math.ceil(cur.getBoundingClientRect().height) + "px";
   if (!withTransition) requestAnimationFrame(() => tr.classList.remove("stick"));
 }
+
+// --- P0-1: 轨道高度重测 ---
+// 当前页内容异步变化(骨架→数据/折叠展开/图片字体加载)都会改变 .pg 高度;
+// ResizeObserver 盯住每页包裹容器, 一变就按当前页重设 #track 高度,
+// 否则 #pages(overflow:hidden) 按旧高度裁掉底部内容(被悬浮底栏遮挡的根因)。
+function remeasureTrack() { if (trackEl) applyPagesX(false); }
+let trackRO = null;
+function watchPageHeights() {
+  if (trackRO) { trackRO.disconnect(); trackRO = null; }
+  if (!trackEl || !pgWrappers || !("ResizeObserver" in window)) return;
+  trackRO = new ResizeObserver(() => remeasureTrack());
+  pgWrappers.forEach(w => trackRO.observe(w));
+}
+// 字体加载完成与整页资源 load 后各补测一次(RO 兜底其余异步时机)
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(remeasureTrack);
+window.addEventListener("load", remeasureTrack);
 function setPage(i, opts) {
   i = Math.max(0, Math.min(N_PAGES - 1, i));
   const first = (opts && opts.first) === true;
