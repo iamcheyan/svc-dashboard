@@ -589,6 +589,17 @@ ICONS = {
               '<path d="M8 1.2v1.8M8 13v1.8M1.2 8H3M13 8h1.8M3.2 3.2l1.3 1.3M11.5 11.5l1.3 1.3M12.8 3.2l-1.3 1.3M4.5 11.5l-1.3 1.3"/>',
     "moon":   '<path d="M13.4 10.4A5.8 5.8 0 0 1 5.6 2.6a6 6 0 1 0 7.8 7.8Z"/>',
     "auto":   '<circle cx="8" cy="8" r="6.4"/><path d="M8 1.6a6.4 6.4 0 0 1 0 12.8Z" fill="currentColor" stroke="none"/>',
+    "home":  '<path d="M2.2 7.6 8 2.2l5.8 5.4"/><path d="M4 6.6v5.6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V6.6"/>'
+             '<path d="M6.5 13.2V9.4h3v3.8"/>',
+    "back":  '<path d="m10 3.2-4.8 4.8 4.8 4.8"/>',
+    "search":'<circle cx="7" cy="7" r="4.4"/><path d="m10.4 10.4 3.2 3.2"/>',
+    "sort":  '<path d="M3.6 4.6h8.8M3.6 8h5.6M3.6 11.4h2.4"/>',
+    "doc":   '<path d="M4 1.8h5.2L12.4 5v9.2H4Z"/><path d="M9 1.8V5h3.4M6 8h4M6 10.6h4"/>',
+    "code":  '<path d="m5.4 5.2-3 2.8 3 2.8M10.6 5.2l3 2.8-3 2.8M9.2 3.2 6.8 12.8"/>',
+    "img":   '<rect x="2" y="3.4" width="12" height="9.2" rx="1.2"/><circle cx="5.5" cy="6.5" r="1"/>'
+             '<path d="m2.6 11.4 3.8-3 2.4 2 2-1.6 2.6 2.6"/>',
+    "zip":   '<rect x="2.4" y="2.4" width="11.2" height="3" rx="1"/>'
+             '<path d="M3.4 5.4v7.2a1 1 0 0 0 1 1h7.2a1 1 0 0 0 1-1V5.4"/><path d="M6.6 8.6h2.8"/>',
 }
 
 _ICO_PAT = re.compile(r"\{\{ICO:([a-z0-9_]+)(?::(\d+))?\}\}")
@@ -744,9 +755,21 @@ L10N = {
         "lf_3d": "3天", "lf_7d": "7天",
         "ev_loop": "循环 ×{n}", "ev_empty": "该时间范围内没有事件",
         "ev_commit": "提交",
-        "evk_complete": "完成", "evk_restart": "重启(进程死亡)",
-        "evk_nudge": "催行", "evk_recover": "已恢复", "evk_pause": "暂停",
-        "evk_cleanup": "清理", "evk_commit": "提交", "evk_other": "其他",
+        "tl_fs_title": "文件浏览", "tl_fs_filter": "过滤当前目录…", "tl_fs_hidden": "显示隐藏文件",
+        "tl_fs_dl": "下载", "tl_fs_empty": "没有匹配的文件",
+        "fs_entry_title": "文件", "fs_entry_sub": "浏览服务器文件",
+        "fs_back": "返回", "fs_home_btn": "回到主目录", "fs_sort": "排序",
+        "fs_sort_name": "按名称", "fs_sort_time": "按时间", "fs_sort_size": "按大小",
+        "fs_sort_type": "按类型", "fs_items": "{n} 项", "fs_empty_dir": "空文件夹",
+        "fs_retry": "重试", "fs_copy_path": "复制路径", "fs_open_fail": "打不开此目录",
+        "fsv_big": "文件较大，仅预览前 2MB", "fsv_binary": "二进制文件，不支持预览，可下载查看",
+        "fsv_lines_cap": "行数过多，仅渲染前 {n} 行", "fsv_wrap": "自动换行", "fsv_lineno": "行号",
+        "fsv_copy_all": "复制全文", "fsv_copy_url": "复制链接",
+        "fsv_search_ph": "文件内搜索…", "fsv_none": "无匹配",
+        "fsv_gb_hint": "检测到可能的 GB18030 编码（乱码）", "fsv_gb": "以 GB18030 重开",
+        "fsv_utf8": "以 UTF-8 重开", "fsv_more": "更多",
+        "fs_rel_now": "刚刚", "fs_rel_s": "{n} 秒前", "fs_rel_m": "{n} 分钟前",
+        "fs_rel_h": "{n} 小时前", "fs_rel_d": "{n} 天前", "fs_rel_y": "昨天",
         "g_ago_d": "{d} 天前",
         "tab_tools": "ツール",
         "tl_health_title": "健康检查", "tl_health_run": "跑一次检查", "tl_health_loading": "检查中…",
@@ -879,9 +902,21 @@ L10N = {
         "evk_complete": "complete", "evk_restart": "relaunch (dead)",
         "evk_nudge": "nudge", "evk_recover": "recovered", "evk_pause": "paused",
         "evk_cleanup": "cleanup", "evk_commit": "commit", "evk_other": "other",
-        "g_ago_d": "{d}d ago",
-        "tab_tools": "Tools",
-        "tl_health_title": "Health check", "tl_health_run": "Run check", "tl_health_loading": "Checking…",
+        "tl_fs_title": "Files", "tl_fs_filter": "filter this folder…", "tl_fs_hidden": "show hidden files",
+        "tl_fs_dl": "download", "tl_fs_empty": "no matching files",
+        "fs_entry_title": "Files", "fs_entry_sub": "Browse server files",
+        "fs_back": "Back", "fs_home_btn": "Back to home", "fs_sort": "Sort",
+        "fs_sort_name": "By name", "fs_sort_time": "By time", "fs_sort_size": "By size",
+        "fs_sort_type": "By type", "fs_items": "{n} items", "fs_empty_dir": "Empty folder",
+        "fs_retry": "Retry", "fs_copy_path": "Copy path", "fs_open_fail": "Cannot open this folder",
+        "fsv_big": "Large file — previewing first 2MB", "fsv_binary": "Binary file — no preview, download instead",
+        "fsv_lines_cap": "Too many lines — rendering first {n}", "fsv_wrap": "Wrap lines", "fsv_lineno": "Line numbers",
+        "fsv_copy_all": "Copy all", "fsv_copy_url": "Copy link",
+        "fsv_search_ph": "Find in file…", "fsv_none": "no match",
+        "fsv_gb_hint": "Possible GB18030 encoding (mojibake)", "fsv_gb": "Reopen as GB18030",
+        "fsv_utf8": "Reopen as UTF-8", "fsv_more": "More",
+        "fs_rel_now": "just now", "fs_rel_s": "{n}s ago", "fs_rel_m": "{n}m ago",
+        "fs_rel_h": "{n}h ago", "fs_rel_d": "{n}d ago", "fs_rel_y": "yesterday",
         "tl_h_load": "Load", "tl_h_cpu": "CPU", "tl_h_mem": "Memory", "tl_h_swap": "Swap",
         "tl_h_disk": "Disk /", "tl_h_temp": "Temp", "tl_h_trend": "Disk trend",
         "tl_h_trend_base": "baseline recorded; growth from tomorrow",
@@ -1004,9 +1039,21 @@ L10N = {
         "rc_title": "最近の活動", "rc_more": "すべて →",
         "lf_status": "状態", "lf_source": "ソース", "lf_time": "期間",
         "lf_all": "すべて", "lf_success": "成功", "lf_warn": "注意",
-        "lf_fail": "失敗", "lf_recover": "復旧",
-        "lf_wd": "watchdog", "lf_done": "完了", "lf_commit": "commit",
-        "lf_3d": "3日", "lf_7d": "7日",
+        "tl_fs_title": "ファイル", "tl_fs_filter": "このフォルダを絞り込み…", "tl_fs_hidden": "隠しファイル表示",
+        "tl_fs_dl": "ダウンロード", "tl_fs_empty": "該当なし",
+        "fs_entry_title": "ファイル", "fs_entry_sub": "サーバーのファイルを見る",
+        "fs_back": "戻る", "fs_home_btn": "ホームへ", "fs_sort": "並べ替え",
+        "fs_sort_name": "名前順", "fs_sort_time": "日時順", "fs_sort_size": "サイズ順",
+        "fs_sort_type": "種類順", "fs_items": "{n} 項目", "fs_empty_dir": "空のフォルダ",
+        "fs_retry": "再試行", "fs_copy_path": "パスをコピー", "fs_open_fail": "開けません",
+        "fsv_big": "大きいファイル — 先頭2MBのみプレビュー", "fsv_binary": "バイナリファイル — プレビュー不可・ダウンロード可",
+        "fsv_lines_cap": "行数が多いため先頭 {n} 行のみ表示", "fsv_wrap": "折り返し", "fsv_lineno": "行番号",
+        "fsv_copy_all": "全文コピー", "fsv_copy_url": "リンクをコピー",
+        "fsv_search_ph": "ファイル内検索…", "fsv_none": "該当なし",
+        "fsv_gb_hint": "GB18030 の可能性（文字化け）", "fsv_gb": "GB18030で開き直す",
+        "fsv_utf8": "UTF-8で開き直す", "fsv_more": "その他",
+        "fs_rel_now": "たった今", "fs_rel_s": "{n}秒前", "fs_rel_m": "{n}分前",
+        "fs_rel_h": "{n}時間前", "fs_rel_d": "{n}日前", "fs_rel_y": "昨日",
         "ev_loop": "循環 ×{n}", "ev_empty": "この期間のイベントはありません",
         "ev_commit": "コミット",
         "evk_complete": "完了", "evk_restart": "再始動(プロセス死亡)",
@@ -2714,23 +2761,29 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                        border-radius: 50%; background: var(--c-warn); color: var(--bg);
                        display: none; align-items: center; justify-content: center; }
   #refresh.locked .ic-badge { display: inline-flex; }
-  /* 移动端下拉刷新指示器；默认完全收起，桌面端不注册事件。 */
-  #ptr-indicator { position: fixed; top: 0; left: 50%; z-index: 30;
-    width: 132px; height: 48px; margin-left: -66px; margin-top: -48px;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    background: var(--bg-elev); border: 1px solid var(--border-strong, var(--chip-border)); border-top: 0;
-    border-radius: 0 0 12px 12px; color: var(--text-soft); font-size: 12px;
-    transform: translateY(0); transition: transform .22s ease, color .15s ease; }
-  #ptr-indicator .ptr-arrow { display: inline-flex; line-height: 1;
-    transform: rotate(0deg); transition: transform .12s linear; }
-  #ptr-indicator .ptr-arrow svg { display: block; }
-  #ptr-indicator.ready { color: var(--c-blue); }
-  #ptr-indicator.loading { color: var(--c-green); }
-  #ptr-indicator.loading .ptr-arrow { animation: ptr-spin .8s linear infinite; }
+  /* 移动端下拉刷新指示器: iOS 风格圆形悬浮(36px), 圆环随进度描边, 加载时旋转。桌面端不注册事件。 */
+  #ptr-indicator { position: fixed; top: 8px; left: 50%; z-index: 30;
+    width: 36px; height: 36px; margin-left: -18px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg-elev); border: 1px solid var(--border-strong, var(--chip-border));
+    border-radius: 50%; color: var(--text-soft);
+    box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none;
+    transform: translateY(0) scale(.6); transition: transform .22s ease, opacity .18s ease, color .15s ease; }
+  #ptr-indicator.on { opacity: 1; }
+  #ptr-indicator svg { display: block; }
+  #ptr-indicator .ptr-ring { position: absolute; inset: -1px; transform: rotate(-90deg); }
+  #ptr-indicator .ptr-ring circle { fill: none; stroke: var(--c-blue); stroke-width: 2.5;
+    stroke-linecap: round; }
+  #ptr-indicator.ready { color: var(--c-blue); border-color: var(--c-blue); }
+  #ptr-indicator.ready .ptr-ring circle { stroke-width: 3; }
+  #ptr-indicator.loading { color: var(--c-green); border-color: var(--c-green); }
+  #ptr-indicator.loading .ptr-core { animation: ptr-spin .8s linear infinite; }
+  #ptr-indicator.loading .ptr-ring circle { stroke: var(--c-green); }
   @keyframes ptr-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
-    #ptr-indicator, #ptr-indicator .ptr-arrow { transition: none; }
-    #ptr-indicator.loading .ptr-arrow { animation: none; }
+    #ptr-indicator { transition: none; }
+    #ptr-indicator.loading .ptr-core { animation: none; }
   }
   .btn[aria-disabled="true"], .btn.disabled { opacity: .5; cursor: default; pointer-events: none; }
   .btn:focus-visible, .chip:focus-visible, .tcol:focus-visible,
@@ -3190,28 +3243,179 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .tl-copyrow { display: flex; gap: 8px; flex-wrap: wrap; }
   .tl-copyrow .btn { font-size: 12px; padding: 6px 12px; }
   .themechips { margin-bottom: 0; }
-  .tl-fsbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
-  .tl-crumbs { font-size: 12px; color: var(--text-faint); word-break: break-all; line-height: 1.7; }
-  .tl-crumbs a { color: var(--link-blue); text-decoration: none; cursor: pointer; }
-  .tl-crumbs a:hover { text-decoration: underline; }
-  .tl-crumbs .cur { color: var(--text-hi); }
-  .tl-fsctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .tl-fsctl input[type="search"] { flex: 1 1 120px; background: var(--bg-input); color: var(--text);
-      border: 1px solid var(--chip-border); border-radius: 8px; padding: 8px 10px; font-size: 13px; min-height: 38px; }
-  .tl-switch { display: inline-flex; gap: 6px; align-items: center; font-size: 12px;
-               color: var(--text-faint); cursor: pointer; min-height: 38px; }
-  .tl-fslist { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  .tl-fsrow { display: flex; align-items: center; gap: 8px; padding: 9px 10px; font-size: 13px;
-              border-bottom: 1px solid var(--border-faint); cursor: pointer; background: var(--bg-panel); }
-  .tl-fsrow:hover { background: var(--bg-hover); }
-  .tl-fsrow:last-child { border-bottom: none; }
-  .tl-fsrow .ico { flex: none; width: 18px; display: inline-flex; align-items: center; justify-content: center; }
-  .tl-fsrow .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-                  white-space: nowrap; }
-  .tl-fsrow .mt { flex: none; color: var(--text-dead); font-size: 11px; font-family: ui-monospace, monospace; }
-  .tl-fsrow .sz { flex: none; color: var(--text-faint); font-size: 11.5px; font-family: ui-monospace, monospace;
-                 min-width: 56px; text-align: right; }
-  .tl-fsrow .du { color: var(--link-blue); }
+  /* ---- 文件浏览: 入口卡(工具页) + 独立全屏视图 + 文本预览 ---- */
+  .fs-entry { display: flex; align-items: center; gap: 14px; padding: 15px 16px; border-radius: 12px;
+              background: var(--bg-elev); border: 1px solid var(--border); cursor: pointer;
+              transition: transform .12s ease, background .12s ease; }
+  .fs-entry:hover { background: var(--bg-hover); }
+  .fs-entry:active { transform: scale(.98); background: var(--bg-active); }
+  .fs-entry .fs-eico { width: 44px; height: 44px; border-radius: 12px; flex: none;
+              display: inline-flex; align-items: center; justify-content: center;
+              background: var(--accent-blue-bg); color: var(--accent-blue-tx); border: 1px solid var(--accent-blue-bd); }
+  .fs-entry .fs-etxt { min-width: 0; }
+  .fs-entry .fs-etxt h3 { margin: 0 0 2px; font-size: 15.5px; font-weight: 600; color: var(--text-title); }
+  .fs-entry .fs-etxt p { margin: 0; font-size: 12px; color: var(--text-dim); }
+  .fs-entry .fs-earr { margin-left: auto; color: var(--text-dead); flex: none; }
+  .fs-sheet { position: fixed; inset: 0; z-index: 70; background: var(--bg);
+              display: flex; flex-direction: column; }
+  #fs-view { z-index: 72; }
+  .fs-left { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+  .fs-top { display: flex; align-items: center; gap: 8px;
+            padding: calc(8px + env(safe-area-inset-top)) 12px 6px; }
+  .fs-iconbtn { width: 38px; height: 38px; flex: none; border-radius: 50%;
+              display: inline-flex; align-items: center; justify-content: center;
+              background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border);
+              color: var(--text-mid); cursor: pointer; font-weight: 600; letter-spacing: .5px;
+              transition: transform .12s ease, background .12s ease; }
+  html.fs-noscroll, html.fs-noscroll body { overflow: hidden; }   /* 全屏浏览页打开时锁底层滚动 */
+  .fs-iconbtn:active { transform: scale(.92); background: var(--btn-press); }
+  .fs-subtitle { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .fs-dirname { font-size: 19px; font-weight: 700; color: var(--text-title); line-height: 1.15;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fs-crumbs-wrap { position: relative; min-width: 0; }
+  .fs-crumbs { display: flex; align-items: center; overflow-x: auto; white-space: nowrap;
+              scrollbar-width: none; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y;
+              font-size: 11.5px; color: var(--text-faint); }
+  .fs-crumbs::-webkit-scrollbar { display: none; }
+  .fs-crumbs-wrap::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 26px;
+              background: linear-gradient(90deg, transparent, var(--bg)); pointer-events: none; }
+  .fs-crumbs a { color: var(--link-blue); text-decoration: none; padding: 1px 1px; cursor: pointer; flex: none; }
+  .fs-crumbs a:hover { text-decoration: underline; }
+  .fs-crumbs .cur { color: var(--text-dim); flex: none; }
+  .fs-crumbs .csep { color: var(--text-dead); padding: 0 3px; flex: none; }
+  .fs-crumbs a svg { vertical-align: -2px; }
+  .fs-searchrow { padding: 0 12px 8px; display: flex; gap: 8px; }
+  .fs-search { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; min-height: 40px;
+              background: var(--bg-input); border: 1px solid var(--chip-border);
+              border-radius: 10px; padding: 0 10px; color: var(--text-dim); }
+  .fs-search input { flex: 1 1 auto; min-width: 0; background: none; border: none; outline: none;
+              color: var(--text); font-size: 14px; min-height: 38px; }
+  .fs-search input::placeholder { color: var(--text-dead); }
+  .fs-list { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+              padding: 0 10px calc(24px + env(safe-area-inset-bottom)); }
+  .fs-skrow { border-radius: 12px; background: var(--bg-panel); border: 1px solid var(--border-faint);
+              padding: 12px 14px; margin-bottom: 8px; }
+  .fs-row { border-radius: 12px; margin-bottom: 6px; }
+  .fs-row .swipe-fg { display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+              border-radius: 12px; border: 1px solid var(--border-faint);
+              transition: transform .18s ease, background .12s ease; }
+  .fs-row .swipe-fg:active { background: var(--bg-active); }
+  @media (hover: hover) { .fs-row .swipe-fg:hover { background: var(--bg-hover); } }
+  .fs-fico { width: 36px; height: 36px; flex: none; border-radius: 9px;
+              display: inline-flex; align-items: center; justify-content: center; }
+  .fs-ico-dir { background: var(--accent-blue-bg); color: var(--accent-blue-tx); }
+  .fs-ico-txt { background: var(--c-green-bg); color: var(--c-green); }
+  .fs-ico-code { background: var(--tbadge-rd-bg); color: var(--tbadge-rd-tx); }
+  .fs-ico-img { background: var(--c-warn-bg); color: var(--c-warn); }
+  .fs-ico-zip { background: var(--tbadge-sc-bg); color: var(--tbadge-sc-tx); }
+  .fs-ico-bin { background: var(--bg-deep); color: var(--text-dead); }
+  .fs-row .fs-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .fs-row .fs-nm { font-size: 14px; color: var(--text-hi); overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+  .fs-row .fs-meta { display: flex; gap: 6px; align-items: center; font-size: 11.5px;
+              color: var(--text-faint); font-family: ui-monospace, monospace; }
+  .fs-row .fs-meta .dot { color: var(--text-dead); }
+  .fs-row .fs-hoveract { display: none; gap: 5px; flex: none; }
+  .fs-hact { width: 34px; height: 34px; border-radius: 9px; display: inline-flex;
+              align-items: center; justify-content: center; background: var(--btn-soft-bg);
+              border: 1px solid var(--btn-soft-border); color: var(--text-mid); cursor: pointer; }
+  .fs-hact:hover { background: var(--bg-hover); color: var(--text-hi); }
+  .fs-hact:active { transform: scale(.92); }
+  @media (hover: hover) and (min-width: 769px) {
+    .fs-row .swipe-bg { display: none; }
+    .fs-row .fs-hoveract { display: flex; }
+  }
+  .fs-note { display: flex; flex-direction: column; align-items: center; gap: 12px;
+              padding: 56px 20px; color: var(--text-dim); font-size: 13.5px; text-align: center; }
+  .fs-note svg { opacity: .38; }
+  .fs-errcard { margin: 12px 4px; padding: 13px 14px; border-radius: 12px; display: flex;
+              align-items: center; gap: 10px; flex-wrap: wrap; background: var(--c-red-bg);
+              border: 1px solid var(--c-red); color: var(--c-red); font-size: 13px; }
+  .fs-errcard span { min-width: 0; word-break: break-all; }
+  /* 文本预览 */
+  .fsv-top { display: flex; align-items: center; gap: 8px;
+              padding: calc(8px + env(safe-area-inset-top)) 12px 6px; }
+  .fsv-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .fsv-name { font-size: 15px; font-weight: 600; color: var(--text-title);
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fsv-sub { font-size: 11px; color: var(--text-faint); font-family: ui-monospace, monospace; }
+  .fsv-searchrow { display: flex; gap: 6px; align-items: center; padding: 0 12px 6px; }
+  .fsv-find { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px;
+              min-height: 36px; background: var(--bg-input); border: 1px solid var(--chip-border);
+              border-radius: 10px; padding: 0 10px; color: var(--text-dim); }
+  .fsv-find input { flex: 1 1 auto; min-width: 0; background: none; border: none; outline: none;
+              color: var(--text); font-size: 13.5px; min-height: 34px; }
+  .fsv-find input::placeholder { color: var(--text-dead); }
+  .fsv-count { flex: none; min-width: 48px; text-align: right; font-size: 11.5px;
+              color: var(--text-faint); font-family: ui-monospace, monospace; }
+  .fsv-nav { width: 32px; height: 32px; }
+  .fsv-tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 0 12px 8px; }
+  .fsv-tbtn { height: 32px; padding: 0 11px; border-radius: 9px; display: inline-flex;
+              align-items: center; gap: 5px; font-size: 12.5px; background: var(--btn-soft-bg);
+              border: 1px solid var(--btn-soft-border); color: var(--text-mid); cursor: pointer; }
+  .fsv-tbtn:hover { background: var(--bg-hover); color: var(--text-hi); }
+  .fsv-tbtn:active { transform: scale(.95); }
+  .fsv-tbtn.on { background: var(--accent-blue-bg); border-color: var(--accent-blue-bd);
+              color: var(--accent-blue-tx); }
+  .fsv-banner { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 8px; }
+  .fsv-banner > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+              padding: 8px 12px; border-radius: 10px; font-size: 12.5px;
+              background: var(--c-warn-bg); border: 1px solid var(--c-warn-border); color: var(--c-warn); }
+  .fsv-banner .btn { min-height: 30px; padding: 4px 12px; font-size: 12px; }
+  .fsv-body { flex: 1 1 auto; overflow: auto; background: var(--bg-deep);
+              border-top: 1px solid var(--border-faint); -webkit-overflow-scrolling: touch; }
+  .fsv-code { margin: 0; padding: 8px 0 28px; width: max-content; min-width: 100%;
+              font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+              font-size: var(--fsv-fs, 13px); line-height: 1.55; }
+  .fsl { display: flex; width: max-content; min-width: 100%; }
+  .fsl:hover { background: var(--bg-hover); }
+  .fsln { flex: none; width: 3.4em; padding: 0 10px 0 14px; text-align: right;
+              color: var(--text-dead); user-select: none; -webkit-user-select: none; font-size: .9em; }
+  .fst { padding-right: 18px; white-space: pre; color: var(--text); }
+  #fs-view.wrap .fst { white-space: pre-wrap; word-break: break-all; }
+  #fs-view.nonum .fsln { display: none; }
+  .fsl.cur { background: var(--accent-blue-hover); }
+  mark.fsv-mark { background: var(--c-warn); color: var(--bg); border-radius: 2px; padding: 0 1px; }
+  .tk-k { color: var(--ch-swap); }                       /* 关键字 */
+  .tk-s { color: var(--c-warn); }                        /* 字符串 */
+  .tk-c { color: var(--text-dead); font-style: italic; } /* 注释 */
+  .tk-n { color: var(--c-blue); }                        /* 数字 */
+  .tk-h { color: var(--c-blue); font-weight: 700; }      /* 标题/段落 */
+  .tk-l { color: var(--link-blue); }                     /* 链接 */
+  .tk-b { color: var(--text-hi); font-weight: 700; }     /* 加粗 */
+  .tk-p { color: var(--text-faint); }                    /* 标点 */
+  .fsv-status { flex: none; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+              padding: 7px 14px calc(7px + env(safe-area-inset-bottom)); font-size: 11px;
+              color: var(--text-faint); background: var(--bg-elev);
+              border-top: 1px solid var(--border-faint); font-family: ui-monospace, monospace; }
+  .fsv-status .dot { color: var(--text-dead); }
+  /* 弹出菜单(排序/···) */
+  .fs-menu { position: fixed; z-index: 78; min-width: 200px; background: var(--bg-elev);
+              border: 1px solid var(--border); border-radius: 12px; padding: 6px;
+              box-shadow: 0 10px 32px rgba(0,0,0,.3); }
+  .fs-menu .mi { display: flex; align-items: center; gap: 9px; padding: 10px 12px;
+              border-radius: 8px; font-size: 13.5px; color: var(--text-mid); cursor: pointer; }
+  .fs-menu .mi:hover { background: var(--bg-hover); }
+  .fs-menu .mi.on { color: var(--c-blue); }
+  .fs-menu .mi .chk { margin-left: auto; opacity: 0; color: var(--c-blue); }
+  .fs-menu .mi.on .chk { opacity: 1; }
+  .fs-menu hr { border: none; border-top: 1px solid var(--border-faint); margin: 5px 4px; }
+  /* 转场: 进目录 push/返回 pop/预览 fade+slide-up; 降级见 prefers-reduced-motion 块 */
+  @media (prefers-reduced-motion: no-preference) {
+    .fs-list.push { animation: fs-push .24s ease both; }
+    .fs-list.pop { animation: fs-pop .24s ease both; }
+    #fs-view.opening { animation: fs-view-in .28s cubic-bezier(.32,.72,.35,1) both; }
+  }
+  @keyframes fs-push { from { transform: translateX(30px); opacity: .35; } }
+  @keyframes fs-pop { from { transform: translateX(-30px); opacity: .35; } }
+  @keyframes fs-view-in { from { transform: translateY(26px); opacity: 0; } }
+  /* 桌面 ≥1024: 左列表右预览双栏 */
+  @media (min-width: 1024px) {
+    #fs-app { flex-direction: row; }
+    .fs-left { flex: 1 1 46%; max-width: 46%; border-right: 1px solid var(--border); }
+    #fs-view { position: static; z-index: auto; flex: 1 1 54%; min-width: 0; }
+    #fs-view.opening { animation: none; }
+  }
   .tl-cleanrow { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 12.5px;
                  border-bottom: 1px dashed var(--border-faint); }
   .tl-cleanrow:last-child { border-bottom: none; }
@@ -3223,7 +3427,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .tl-docker-pre { background: var(--bg-deep); border: 1px solid var(--border); border-radius: 8px;
                    padding: 8px 10px; font: 11px ui-monospace, monospace; color: var(--text-dim);
                    overflow-x: auto; white-space: pre; margin: 8px 0; }
-  #tl-lightbox, #tl-textview { position: fixed; inset: 0; z-index: 80; background: var(--scrim);
+  #tl-lightbox { position: fixed; inset: 0; z-index: 80; background: var(--scrim);
       display: flex; align-items: center; justify-content: center; flex-direction: column; }
   #tl-lightbox img { max-width: 96vw; max-height: 88vh; object-fit: contain; }
   .tl-lb-close { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 12px;
@@ -3231,13 +3435,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       font-size: 18px; color: var(--text-mid); background: var(--btn-soft-bg);
       border: 1px solid var(--chip-border);
       border-radius: 50%; cursor: pointer; }
-  #tl-textview { align-items: stretch; }
-  .tl-tv-head { display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 14px; font-size: 13px; color: var(--text-dim); position: relative; }
-  .tl-tv-head .tl-lb-close { position: static; }
-  #tl-tv-pre { flex: 1 1 auto; margin: 0; padding: 0 14px 16px; overflow: auto;
-      font: 12px/1.6 ui-monospace, monospace; color: var(--text); white-space: pre-wrap;
-      word-break: break-all; }
   .tl-usvc-unlock { display: inline-flex; gap: 6px; align-items: center; }
   .tl-usvc-unlock input { width: 110px; background: var(--bg-input); color: var(--text);
       border: 1px solid var(--chip-border); border-radius: 8px; padding: 7px 10px; font-size: 13px; }
@@ -3261,7 +3458,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <span class="btn icon-btn" id="refresh" role="button" tabindex="0"
         title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:17}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
 </header>
-<div id="ptr-indicator" aria-hidden="true"><span class="ptr-arrow">{{ICO:down:20}}</span><span class="ptr-label">{{T:ptr_pull}}</span></div>
+<div id="ptr-indicator" aria-hidden="true"><svg class="ptr-ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="16.5"/></svg><span class="ptr-core">{{ICO:refresh:18}}</span></div>
 <main>
 <div id="pages">
 <div class="statuscard" id="statuscard" role="button" tabindex="0">
@@ -3374,23 +3571,14 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <div class="filters toolchips" id="tl-g1"></div>
   </div>
 
-  <!-- F1 文件浏览 -->
+  <!-- F1 文件浏览: 入口卡 → 全屏独立浏览页(遮罩为 body 直接子级, 避开 #track transform) -->
   <div class="tl-sec" id="tl-fs">
-    <div class="tl-sechead">
-      <h3>{{T:tl_fs_title}}</h3>
-      <span class="btn tl-run" id="tl-fs-du" role="button" tabindex="0">{{T:tl_fs_du}}</span>
+    <div class="fs-entry" id="fs-entry" role="button" tabindex="0">
+      <span class="fs-eico">{{ICO:folder:24}}</span>
+      <span class="fs-etxt"><h3>{{T:fs_entry_title}}</h3><p>{{T:fs_entry_sub}}</p></span>
+      <span class="fs-earr">{{ICO:chev:18}}</span>
     </div>
-    <div class="tl-fsbar">
-      <div class="tl-crumbs" id="tl-fs-crumbs"></div>
-      <div class="tl-fsctl">
-        <input type="search" id="tl-fs-filter" placeholder="{{T:tl_fs_filter}}" autocomplete="off">
-        <label class="tl-switch"><input type="checkbox" id="tl-fs-hidden"><span>{{T:tl_fs_hidden}}</span></label>
-      </div>
-    </div>
-    <div id="tl-fs-list" class="tl-fslist"></div>
   </div>
-  <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
-  <div id="tl-textview" hidden><div class="tl-tv-head"><span id="tl-tv-name"></span><span class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</span></div><pre id="tl-tv-pre"></pre></div>
 
   <!-- F3 垃圾清理 -->
   <div class="tl-sec" id="tl-clean">
@@ -3446,6 +3634,48 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <span class="tab" data-p="5" role="button" tabindex="0" aria-label="{{T:tab_tools}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9.5 1.5 3 8l-1.5 5 5-1.5 6.5-6.5a2.1 2.1 0 0 0-3-3z"/><path d="M9.5 1.5 12.5 4.5"/></svg><span class="tlabel">{{T:tab_tools}}</span></span>
 </nav>
+<!-- 文件浏览全屏页(body 直接子级): 左=浏览主体(推入列表), 右=文本/图片预览; 桌面双栏并列 -->
+<div class="fs-sheet" id="fs-app" hidden>
+  <div class="fs-left">
+    <div class="fs-top">
+      <span class="fs-iconbtn" id="fs-back" role="button" tabindex="0" aria-label="{{T:fs_back}}">{{ICO:back:20}}</span>
+      <span class="fs-iconbtn" id="fs-home" role="button" tabindex="0" aria-label="{{T:fs_home_btn}}">{{ICO:home:19}}</span>
+      <div class="fs-subtitle">
+        <div class="fs-dirname" id="fs-dirname"></div>
+        <div class="fs-crumbs-wrap"><nav class="fs-crumbs" id="fs-crumbs" aria-label="path"></nav></div>
+      </div>
+      <span class="fs-iconbtn" id="fs-sortbtn" role="button" tabindex="0" aria-label="{{T:fs_sort}}">{{ICO:sort:18}}</span>
+      <span class="fs-iconbtn" id="fs-more" role="button" tabindex="0" aria-label="{{T:fsv_more}}">···</span>
+    </div>
+    <div class="fs-searchrow">
+      <label class="fs-search">{{ICO:search:16}}<input type="search" id="fs-filter" placeholder="{{T:tl_fs_filter}}" autocomplete="off"></label>
+    </div>
+    <div class="fs-list" id="fs-list"></div>
+  </div>
+<div class="fs-sheet" id="fs-view" hidden>
+  <div class="fsv-top">
+    <span class="fs-iconbtn" id="fsv-back" role="button" tabindex="0" aria-label="{{T:fs_back}}">{{ICO:back:20}}</span>
+    <div class="fsv-title"><span class="fsv-name" id="fsv-name"></span><span class="fsv-sub" id="fsv-sub"></span></div>
+    <span class="fs-iconbtn" id="fsv-more" role="button" tabindex="0" aria-label="{{T:fsv_more}}">···</span>
+  </div>
+  <div class="fsv-searchrow">
+    <label class="fsv-find">{{ICO:search:15}}<input type="search" id="fsv-find" placeholder="{{T:fsv_search_ph}}" autocomplete="off"></label>
+    <span class="fsv-count" id="fsv-count"></span>
+    <span class="fs-iconbtn fsv-nav" id="fsv-prev" role="button" tabindex="0" aria-label="↑">{{ICO:up:16}}</span>
+    <span class="fs-iconbtn fsv-nav" id="fsv-next" role="button" tabindex="0" aria-label="↓">{{ICO:down:16}}</span>
+  </div>
+  <div class="fsv-tools">
+    <span class="fsv-tbtn" id="fsv-t-wrap" role="button" tabindex="0">{{T:fsv_wrap}}</span>
+    <span class="fsv-tbtn" id="fsv-t-num" role="button" tabindex="0">{{T:fsv_lineno}}</span>
+    <span class="fsv-tbtn" id="fsv-t-minus" role="button" tabindex="0">A−</span>
+    <span class="fsv-tbtn" id="fsv-t-plus" role="button" tabindex="0">A+</span>
+  </div>
+  <div class="fsv-banner" id="fsv-banner"></div>
+  <div class="fsv-body" id="fsv-body"></div>
+  <div class="fsv-status" id="fsv-status"></div>
+</div>
+</div>
+<div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
 <script>
 const AUTO = {{AUTO}};
 const LANG = "{{LANG}}";
@@ -4953,110 +5183,340 @@ async function renderG1() {
   }
 }
 
-// --- F1 文件浏览 ---
-let fsCwd = null;
-let fsEntries = [];
-let fsDuMap = {};
+// --- F1 文件浏览: 独立全屏页(home 起点), 移动单栏 / 桌面≥1024 双栏 ---
+const FS_HOME = TL_CONF.fs_home || "/home/tetsuya";
+const fsState = { cwd: null, parent: null, name: "", entries: [], err: "",
+  sort: localStorage.getItem("svc-fs-sort") || "name",
+  hidden: localStorage.getItem("svc-fs-hidden") === "1",
+  seq: 0 };
+const FS_SORTS = [["name", "fs_sort_name"], ["time", "fs_sort_time"],
+                  ["size", "fs_sort_size"], ["type", "fs_sort_type"]];
+const FS_ICONS = [["dir", "folder", "fs-ico-dir"], ["img", "img", "fs-ico-img"],
+  ["zip", "zip", "fs-ico-zip"], ["code", "code", "fs-ico-code"],
+  ["txt", "doc", "fs-ico-txt"], ["bin", "file", "fs-ico-bin"]];
 
-function fsRootMenu() {
-  return (TL_CONF.fs_roots || []).map(r =>
-    `<span class='chip' data-root='${escAttr(r)}' role='button' tabindex="0">${escHtml(r)}</span>`).join("");
+function fsExt(name) { const i = name.lastIndexOf("."); return i > 0 ? name.slice(i + 1).toLowerCase() : ""; }
+function fsKind(e) {
+  if (e.type === "dir") return "dir";
+  const ext = fsExt(e.name);
+  if (["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico"].includes(ext)) return "img";
+  if (["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "zst"].includes(ext)) return "zip";
+  if (["py", "js", "ts", "cs", "rs", "go", "c", "h", "cpp", "java", "sh", "css", "html", "htm", "xml", "sql", "lua", "rb", "php"].includes(ext)) return "code";
+  return "txt";
 }
 
-function fsCrumbHtml(path) {
-  const roots = TL_CONF.fs_roots || [];
-  const root = roots.find(r => path === r || path.startsWith(r + "/")) || "/";
-  const parts = path === root ? [] : path.slice(root.length + 1).split("/");
-  let h = `<a data-crumb='${escAttr(root)}'>${escHtml(root)}</a>`;
-  let acc = root;
-  parts.forEach(p => {
+function fsRelTime(ts) {
+  const d = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (d < 50) return t("fs_rel_now");
+  if (d < 3600) return t("fs_rel_m", { n: Math.round(d / 60) });
+  if (d < 86400) return t("fs_rel_h", { n: Math.round(d / 3600) });
+  if (d < 172800) return t("fs_rel_y");
+  const dt = new Date(ts * 1000);
+  const sameYear = dt.getFullYear() === new Date().getFullYear();
+  const opt = { month: "short", day: "numeric" };
+  if (!sameYear) opt.year = "numeric";
+  return dt.toLocaleDateString(LANG === "zh" ? "zh-CN" : LANG === "ja" ? "ja-JP" : "en-US", opt);
+}
+
+function fsCrumbsHtml(path) {
+  const parts = path.split("/").filter(Boolean);
+  let h = `<a data-crumb='/'><svg width='13' height='13' viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round">`
+    + (ICONS["home"] || "") + `</svg></a>`;
+  let acc = "";
+  parts.forEach((p, i) => {
     acc += "/" + p;
-    h += ` / <a data-crumb='${escAttr(acc)}'>${escHtml(p)}</a>`;
+    h += `<span class='csep'>/</span>`;
+    h += i === parts.length - 1 ? `<span class='cur'>${escHtml(p)}</span>`
+                                : `<a data-crumb='${escAttr(acc)}'>${escHtml(p)}</a>`;
   });
   return h;
 }
 
-function fsRender() {
-  const list = $("tl-fs-list");
-  if (!fsCwd) {
-    $("tl-fs-crumbs").innerHTML = "";
-    list.innerHTML = `<div class='filters' style='border:none;padding:0'>${fsRootMenu()}</div>`;
-    return;
-  }
-  $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd);
-  const q = ($("tl-fs-filter").value || "").toLowerCase();
-  const showHidden = $("tl-fs-hidden").checked;
-  const rows = fsEntries
-    .filter(e => (showHidden || !e.name.startsWith(".")) && (!q || e.name.toLowerCase().includes(q)))
-    .map(e => {
-      const isDir = e.type === "dir";
-      const du = fsDuMap[e.name];
-      const sz = isDir ? (du != null ? `<span class='du'>${fmtB(du)}</span>` : "—")
-                       : fmtB(e.size);
-      return `<div class='tl-fsrow' data-name='${escAttr(e.name)}' data-type='${e.type}' role='button' tabindex="0">` +
-        `<span class='ico'>${icon(isDir ? "folder" : "file", 15)}</span><span class='nm'>${escHtml(e.name)}</span>` +
-        `<span class='mt'>${new Date(e.mtime * 1000).toLocaleDateString()}</span><span class='sz'>${sz}</span></div>`;
-    }).join("");
-  list.innerHTML = rows || `<div class='gempty'>${t("tl_fs_empty")}</div>`;
+function fsApplySort(list) {
+  const s = fsState.sort;
+  const key = { name: e => e.name.toLowerCase(), time: e => e.mtime,
+                size: e => (e.size == null ? -1 : e.size), type: e => fsKind(e) + e.name.toLowerCase() }[s];
+  return [...list].sort((a, b) => (a.type === b.type ? 0 : a.type === "dir" ? -1 : 1)
+    || (s === "time" || s === "size" ? key(b) - key(a) : (key(a) > key(b) ? 1 : key(a) < key(b) ? -1 : 0)));
 }
 
-async function fsOpen(path) {
-  const list = $("tl-fs-list");
-  list.innerHTML = `<div class='gempty'>${t("st_loading")}</div>`;
+function fsRender() {
+  const list = $("fs-list");
+  const q = ($("fs-filter").value || "").trim().toLowerCase();
+  $("fs-dirname").textContent = fsState.name || FS_HOME;
+  $("fs-crumbs").innerHTML = fsCrumbsHtml(fsState.cwd || FS_HOME);
+  $("fs-crumbs").parentElement.scrollLeft = 1e4;
+  const rows = fsApplySort(fsState.entries)
+    .filter(e => (fsState.hidden || !e.name.startsWith(".")) && (!q || e.name.toLowerCase().includes(q)));
+  const html = rows.map(e => {
+    const kind = fsKind(e), ico = FS_ICONS.find(x => x[0] === kind);
+    const sub = e.type === "dir"
+      ? `${e.count != null ? t("fs_items", { n: e.count }) : "—"}</span>`
+      : `${fmtB(e.size)}</span>`;
+    return `<div class='fs-row swipe-item' data-kind='${kind}' data-type='${e.type}' data-name='${escAttr(e.name)}'>` +
+      `<div class='swipe-bg'><span class='swipe-act' role='button' tabindex='0' data-copy='${escAttr((fsState.cwd || FS_HOME) + "/" + e.name)}'>${icon("copy", 13)} ${t("fs_copy_path")}</span></div>` +
+      `<div class='swipe-fg'><span class='fs-fico ${ico[2]}'>${icon(ico[1], 19)}</span>` +
+      `<span class='fs-main'><span class='fs-nm'>${escHtml(e.name)}</span>` +
+      `<span class='fs-meta'><span>${sub}<span class='dot'> · </span>${fsRelTime(e.mtime)}</span></span></span>` +
+      (e.type === "dir" ? `<span class='fs-earr' style='color:var(--text-dead)'>${icon("chev", 15)}</span>`
+                        : `<span class='fs-hoveract'>` +
+                          `<span class='fs-hact' data-ha='copy' role='button' tabindex='0' title='${t("fs_copy_path")}'>${icon("copy", 15)}</span>` +
+                          `<span class='fs-hact' data-ha='dl' role='button' tabindex='0' title='${t("tl_fs_dl")}'>${icon("down", 15)}</span></span>`) +
+      `</div></div>`;
+  }).join("");
+  list.innerHTML = html
+    || (fsState.err ? `<div class='fs-errcard'>${icon("err", 16)}<span>${escHtml(fsState.err)}</span>` +
+        `<span class='btn fs-retry' role='button' tabindex='0'>${t("fs_retry")}</span></div>`
+       : `<div class='fs-note'>${icon("folder", 44)}<span>${q ? t("tl_fs_empty") : t("fs_empty_dir")}</span></div>`);
+}
+
+async function fsOpen(path, dir) {
+  const seq = ++fsState.seq;
+  if (fsState.cwd) {
+    const list = $("fs-list");
+    list.classList.remove("push", "pop");
+    void list.offsetWidth;
+    list.classList.add(dir === "up" ? "pop" : "push");
+  }
+  $("fs-list").innerHTML = Array.from({ length: 7 }, () =>
+    "<div class='fs-skrow'><div class='skel-line' style='width:70%'></div><div class='skel-line' style='width:42%;margin-bottom:0'></div></div>").join("");
   try {
     const d = await tlGet("/api/fs/list?path=" + encodeURIComponent(path));
-    fsCwd = d.path;
-    fsEntries = d.entries || [];
-    fsDuMap = {};
-    fsRender();
+    if (seq !== fsState.seq) return;
+    fsState.cwd = d.path; fsState.parent = d.parent || null; fsState.name = d.name;
+    fsState.entries = d.entries || []; fsState.err = "";
   } catch (e) {
-    fsCwd = null; fsEntries = [];
-    list.innerHTML = `<div class='gempty t-red'>${icon("err", 13)} ${escHtml(e.message)} — ${t("tl_fs_title")}</div>`;
-    fsRender();
+    if (seq !== fsState.seq) return;
+    fsState.err = e.message || String(e);
+    if (!fsState.cwd) fsState.cwd = FS_HOME;
   }
+  fsRender();
 }
 
-async function fsDu() {
-  if (!fsCwd) return;
-  const btn = $("tl-fs-du");
-  btn.textContent = t("tl_fs_du_run");
-  try {
-    const d = await tlGet("/api/fs/du?path=" + encodeURIComponent(fsCwd));
-    if (d.ok) {
-      fsDuMap = { "": 0 };
-      fsDuMap[""] = null;
-      const el = $("tl-fs-crumbs");
-      el.innerHTML = fsCrumbHtml(fsCwd) + ` · du: <b>${fmtB(d.size)}</b>`;
-    } else {
-      $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd) + ` · du <span class="t-red">${icon("err", 11)}</span> ${escHtml(d.msg || "")}`;
-    }
-  } catch (e) {
-    $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd) + ` · du <span class="t-red">${icon("err", 11)}</span>`;
-  }
-  btn.textContent = t("tl_fs_du");
+function fsFileUrl(path, mode, enc) {
+  let u = "/api/fs/file?path=" + encodeURIComponent(path) + "&mode=" + mode;
+  if (enc) u += "&enc=" + enc;
+  return u;
 }
 
-function fsUrl(name, mode) {
-  return "/api/fs/file?path=" + encodeURIComponent(fsCwd + "/" + name) + "&mode=" + mode;
-}
-
-async function fsOpenFile(name) {
-  const ext = name.split(".").pop().toLowerCase();
-  if (["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) {
-    $("tl-lightbox-img").src = fsUrl(name, "view");
+function fsOpenFile(name) {
+  const path = (fsState.cwd || FS_HOME) + "/" + name;
+  const kind = fsKind({ name, type: "file" });
+  haptic(8);
+  if (kind === "img") {          // 图片: 复用现有 lightbox
+    $("tl-lightbox-img").src = fsFileUrl(path, "view");
     $("tl-lightbox").hidden = false;
     return;
   }
-  if (["md", "py", "js", "ts", "json", "log", "txt", "yaml", "yml", "toml", "cs", "rs", "sh", "xml", "html", "css", "ini", "conf", "csv"].includes(ext)) {
-    try {
-      const d = await tlGet(fsUrl(name, "view"));
-      $("tl-tv-name").textContent = `${name} (${fmtB((d.text || "").length)})`;
-      $("tl-tv-pre").textContent = d.text || "";
-      $("tl-textview").hidden = false;
-      return;
-    } catch (e) { /* 大文件/失败 → 下载 */ }
+  fsvOpen(path, name);           // 其余全部走文本预览(含二进制提示)
+}
+
+function fsPopupMenu(items, anchor) {
+  fsCloseMenu();
+  const m = document.createElement("div");
+  m.className = "fs-menu"; m.id = "fs-menu";
+  m.innerHTML = items.map((x, i) => x === "-" ? "<hr>"
+    : `<div class='mi ${x.on ? "on" : ""}' data-mi='${i}' role='button' tabindex='0'>${x.ico ? icon(x.ico, 15) : ""}` +
+      `<span>${escHtml(x.label)}</span><span class='chk'>${icon("ok", 14)}</span></div>`).join("");
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.top = Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 10) + "px";
+  m.style.left = Math.max(8, Math.min(r.left, innerWidth - m.offsetWidth - 8)) + "px";
+  m.addEventListener("click", (e) => {
+    const mi = e.target.closest("[data-mi]");
+    if (mi) { fsCloseMenu(); items[+mi.dataset.mi].act(); }
+  });
+}
+function fsCloseMenu() { const m = $("fs-menu"); if (m) m.remove(); }
+
+function fsOpenBrowser() {
+  $("fs-app").hidden = false;
+  document.documentElement.classList.add("fs-noscroll");
+  if (!fsState.cwd) fsOpen(FS_HOME);
+  else fsRender();
+}
+function fsCloseBrowser() {
+  $("fs-app").hidden = true; $("fs-view").hidden = true;
+  document.documentElement.classList.remove("fs-noscroll");
+}
+
+// --- F1b 文本预览: 语法高亮(自写零依赖)/行号/搜索/换行/字号/GB18030 重开 ---
+const fsvState = { path: null, name: "", enc: "utf-8", altEnc: null, data: null,
+  wrap: localStorage.getItem("svc-fsv-wrap") !== "0",
+  lineNo: localStorage.getItem("svc-fsv-num") !== "0",
+  font: clampFont(+(localStorage.getItem("svc-fsv-font") || 13)),
+  lines: [], marks: [], cur: 0 };
+function clampFont(px) { return Math.max(10, Math.min(22, px)); }
+
+/* 轻量高亮: 输入必须是 escHtml 后的文本(已无 < > &), 只产出 <span class=tk-*>。
+   够用即可: json/yaml/toml 值色, md 结构色, 代码类 关键字/字符串/注释 三色。 */
+const FSV_MD_HEAD = /^#{1,6} .*$|^={3,}$|^-{3,}$/;
+function hlLine(line, lang) {
+  let out = line;
+  const wrap = (re, cls) => { out = out.replace(re, (m) => `\\u0001${cls}\\u0002${m}\\u0003`); };
+  if (lang === "md") {
+    if (FSV_MD_HEAD.test(line)) wrap(/^.*$/, "h");
+    else {
+      wrap(/`[^`]+`/g, "s");
+      wrap(/\\*\\*[^*]+\\*\\*/g, "b");
+      wrap(/\\[[^\\]]*\\]\\([^)]*\\)/g, "l");
+      wrap(/^ *([-*+]|\\d+\\.) /, "p");
+    }
+  } else if (lang === "json") {
+    if (!line.startsWith("//")) {
+      wrap(/"(?:[^"\\\\]|\\\\)*"(?= *:)/g, "k");
+      wrap(/"(?:[^"\\\\]|\\\\)*"/g, "s");
+      wrap(/\\b(?:true|false|null)\\b/g, "k");
+      wrap(/-?\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b/g, "n");
+    }
+  } else if (lang === "yaml" || lang === "toml" || lang === "ini") {
+    wrap(/^[^:=#]+?(?= *[:=])/g, "k");
+    wrap(/(["']).*?\\1/g, "s");
+    wrap(/\\b\\d+(?:\\.\\d+)?\\b/g, "n");
+  } else if (lang === "code") {
+    wrap(/(#.*$|\\/\\/.*$)/g, "c");
+    wrap(/(["']).*?(?:\\1|$)/g, "s");
+    wrap(/\\b(0x[0-9a-fA-F]+|\\d+(?:\\.\\d+)?)\\b/g, "n");
+    wrap(/\\b(?:def|class|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|import|from|as|with|try|except|finally|raise|lambda|yield|pass|break|continue|global|async|await|const|let|var|function|new|typeof|instanceof|this|self|super|static|public|private|protected|void|int|float|double|string|bool|char|struct|enum|match|fn|impl|trait|pub|mut|use|where|select|insert|update|delete|create|table|case|switch|do|throw|catch|namespace|using|template|virtual|override)\\b/g, "k");
+  } else if (lang === "log") {
+    wrap(/\\b\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z?\\b/g, "n");
+    wrap(/\\b(?:ERROR|FATAL|WARN|WARNING)\\b/g, "k");
   }
-  location.href = fsUrl(name, "download");   // 其他 → 下载
+  out = out.replace(/\\u0001([A-Za-z0-9_-]+)\\u0002((?:[^\\u0001\\u0003])*)\\u0003/g,
+    (m0, cls, body) => `<span class='tk-${cls}'>${body}</span>`);
+  return out;
+}
+function hlLang(name, kind) {
+  if (kind === "img") return "";
+  const ext = fsExt(name);
+  if (ext === "md" || ext === "markdown") return "md";
+  if (ext === "json") return "json";
+  if (["yaml", "yml", "toml", "ini", "conf", "env", "properties"].includes(ext)) return ext === "yml" ? "yaml" : ext;
+  if (kind === "code") return "code";
+  if (ext === "log") return "log";
+  return "plain";
+}
+
+const FSV_MAX_LINES = 5000;   // 行数上限: 超出提示截断(大文件保护第二道)
+function fsvRender() {
+  const d = fsvState.data;
+  const body = $("fsv-body");
+  $("fs-view").classList.toggle("wrap", fsvState.wrap);
+  $("fs-view").classList.toggle("nonum", !fsvState.lineNo);
+  $("fs-view").style.setProperty("--fsv-fs", fsvState.font + "px");
+  $("fsv-t-wrap").classList.toggle("on", fsvState.wrap);
+  $("fsv-t-num").classList.toggle("on", fsvState.lineNo);
+  if (!d || d.binary) { body.innerHTML = ""; return; }
+  const lang = hlLang(fsvState.name, fsKind({ name: fsvState.name, type: "file" }));
+  const lines = fsvState.lines;
+  const capped = lines.length > FSV_MAX_LINES;
+  const shown = capped ? lines.slice(0, FSV_MAX_LINES) : lines;
+  let h = "<pre class='fsv-code'>";
+  for (let i = 0; i < shown.length; i++)
+    h += `<div class='fsl' data-ln='${i}'><span class='fsln'>${i + 1}</span><span class='fst'>${hlLine(escHtml(shown[i]), lang) || ""}</span></div>`;
+  h += "</pre>";
+  if (capped) h += `<div class='fs-note' style='padding:18px'>${icon("warn", 20)}<span>${t("fsv_lines_cap", { n: FSV_MAX_LINES.toLocaleString() })}</span></div>`;
+  body.innerHTML = h;
+  body.scrollTop = 0;
+}
+
+function fsvBanner() {
+  const d = fsvState.data, el = $("fsv-banner");
+  if (!d || d.binary) { el.innerHTML = ""; return; }
+  let h = "";
+  if (d.truncated) h += `<div>${icon("warn", 14)}<span>${t("fsv_big")}</span>` +
+    `<a class='btn' href='${fsFileUrl(fsvState.path, "download")}' download>${t("tl_fs_dl")}</a></div>`;
+  if (fsvState.altEnc) h += `<div>${icon("warn", 14)}<span>${t("fsv_gb_hint")}</span>` +
+    `<span class='btn' id='fsv-reenc' role='button' tabindex='0'>${t(fsvState.enc === "gb18030" ? "fsv_utf8" : "fsv_gb")}</span></div>`;
+  el.innerHTML = h;
+  const rb = $("fsv-reenc");
+  if (rb) rb.addEventListener("click", () => fsvLoad(fsvState.path, fsvState.name, fsvState.enc === "gb18030" ? "" : fsvState.altEnc));
+}
+
+async function fsvLoad(path, name, enc) {
+  $("fsv-name").textContent = name;
+  $("fsv-sub").textContent = "…";
+  $("fsv-banner").innerHTML = "";
+  $("fsv-body").innerHTML = "<div class='fs-note'><div class='skel-line' style='width:60%'></div><div class='skel-line' style='width:80%'></div><div class='skel-line' style='width:48%'></div></div>";
+  try {
+    const d = await tlGet(fsFileUrl(path, "view", enc));
+    fsvState.path = path; fsvState.name = name;
+    fsvState.enc = d.encoding || "utf-8";
+    fsvState.altEnc = d.alt_enc || null;
+    fsvState.data = d;
+    fsvState.lines = d.binary ? [] : (d.text || "").split("\\n");
+    fsvState.marks = []; fsvState.cur = 0;
+    if (d.binary) {
+      $("fsv-body").innerHTML = `<div class='fs-note'>${icon("box", 44)}<span>${t("fsv_binary")}</span>` +
+        `<a class='btn' href='${fsFileUrl(path, "download")}' download>${icon("down", 13)} ${t("tl_fs_dl")}</a></div>`;
+      $("fsv-sub").textContent = fmtB(d.size);
+      $("fsv-status").innerHTML = `${fmtB(d.size)}<span class='dot'>·</span>${new Date(d.mtime * 1000).toLocaleString()}`;
+    } else {
+      fsvRender(); fsvBanner(); fsvStatus();
+      fsvSearch(($("fsv-find").value || "").trim());
+    }
+  } catch (e) {
+    $("fsv-body").innerHTML = `<div class='fs-errcard'>${icon("err", 16)}<span>${escHtml(e.message)}</span>` +
+      `<a class='btn' href='${fsFileUrl(path, "download")}' download>${t("tl_fs_dl")}</a></div>`;
+  }
+}
+
+function fsvStatus() {
+  const d = fsvState.data;
+  $("fsv-sub").textContent = `${fmtB(d.size)} · ${d.encoding || "?"}`;
+  $("fsv-status").innerHTML =
+    `${fsvState.lines.length.toLocaleString()} 行<span class='dot'>·</span>${fmtB(d.size)}` +
+    `<span class='dot'>·</span>${escHtml(d.encoding || "?")}` +
+    `${d.alt_enc ? ` <span class='btn' id='fsv-reenc2' role='button' tabindex='0' style='min-height:22px;padding:2px 8px;font-size:11px'>${t("fsv_gb")}</span>` : ""}` +
+    `<span class='dot'>·</span>${new Date(d.mtime * 1000).toLocaleString()}`;
+  const b = $("fsv-reenc2");
+  if (b) b.addEventListener("click", () => fsvLoad(fsvState.path, fsvState.name, fsvState.altEnc));
+}
+
+function fsvOpen(path, name) {
+  const v = $("fs-view");
+  v.hidden = false;
+  v.classList.remove("opening"); void v.offsetWidth; v.classList.add("opening");
+  $("fsv-find").value = ""; $("fsv-count").textContent = "";
+  fsvLoad(path, name, "");
+}
+
+function fsvClose() { $("fs-view").hidden = true; }
+
+function fsvSearch(q, step) {
+  const d = fsvState.data;
+  if (!d || d.binary) return;
+  const cnt = $("fsv-count");
+  if (!q) {   // 清除高亮: 恢复原始高亮行
+    cnt.textContent = "";
+    fsvRender();
+    return;
+  }
+  const ql = q.toLowerCase();
+  if (!fsvState.marks.length || fsvState.lastQ !== q) {
+    const lines = fsvState.lines, marks = [];
+    for (let i = 0; i < lines.length; i++)
+      if (lines[i].toLowerCase().includes(ql)) marks.push(i);
+    fsvState.marks = marks; fsvState.lastQ = q; fsvState.cur = 0;
+    const lang = hlLang(fsvState.name, fsKind({ name: fsvState.name, type: "file" }));
+    const body = $("fsv-body");
+    body.querySelectorAll(".fsl").forEach((el) => {
+      const ln = +el.dataset.ln;
+      if (fsvState.lines[ln].toLowerCase().includes(ql)) {
+        const re = new RegExp(q.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&"), "gi");
+        el.querySelector(".fst").innerHTML = escHtml(fsvState.lines[ln]).replace(re, (m) => `<mark class='fsv-mark'>${m}</mark>`);
+      } else if (el.querySelector(".fst").innerHTML.includes("fsv-mark")) {
+        el.querySelector(".fst").innerHTML = hlLine(fsvState.lines[ln], lang) || "";
+      }
+    });
+  }
+  fsvState.cur = step ? (fsvState.cur + step + fsvState.marks.length) % fsvState.marks.length : 0;
+  const ln = fsvState.marks[fsvState.cur];
+  cnt.textContent = `${fsvState.cur + 1}/${fsvState.marks.length}`;
+  const body2 = $("fsv-body");
+  body2.querySelectorAll(".fsl.cur").forEach((e) => e.classList.remove("cur"));
+  const row = body2.querySelector(`.fsl[data-ln='${ln}']`);
+  if (row) { row.classList.add("cur"); row.scrollIntoView({ block: "center" }); }
 }
 
 // --- F3 垃圾清理 ---
@@ -5193,16 +5653,12 @@ function initToolsPage() {
     renderG1();
     runHealth();
     cronLoad();
-    fsRender();
     if (localStorage.getItem("svc-usvc") === "I-KNOW") usvcLoad();
   }
   // 事件绑定(一次性)
   if (!initToolsPage._bound) {
     initToolsPage._bound = true;
     $("tl-health-run").addEventListener("click", runHealth);
-    $("tl-fs-du").addEventListener("click", fsDu);
-    $("tl-fs-filter").addEventListener("input", fsRender);
-    $("tl-fs-hidden").addEventListener("change", fsRender);
     $("tl-clean-scan").addEventListener("click", cleanScan);
     $("tl-clean-exec").addEventListener("click", cleanExec);
     $("tl-net-run").addEventListener("click", netRun);
@@ -5211,24 +5667,102 @@ function initToolsPage() {
       $("tl-usvc-showlock").hidden = true;
       $("tl-usvc-unlockwrap").hidden = false;
     });
-    $("tl-fs-list").addEventListener("click", (e) => {
-      const root = e.target.closest("[data-root]");
-      if (root) { fsOpen(root.dataset.root); return; }
+    // 文件浏览独立页(惰性: 首次打开才请求)
+    $("fs-entry").addEventListener("click", fsOpenBrowser);
+    $("fs-back").addEventListener("click", () => { haptic(6); fsCloseBrowser(); });
+    $("fs-home").addEventListener("click", () => { haptic(6); fsOpen(FS_HOME); });
+    $("fs-filter").addEventListener("input", fsRender);
+    $("fs-list").addEventListener("click", (e) => {
       const crumb = e.target.closest("[data-crumb]");
-      if (crumb) { fsOpen(crumb.dataset.crumb); return; }
-      const row = e.target.closest(".tl-fsrow");
+      if (crumb) { fsOpen(crumb.dataset.crumb, crumb.dataset.crumb === fsState.parent ? "up" : "down"); return; }
+      const ha = e.target.closest("[data-ha]");
+      if (ha) {   // 桌面 hover 按钮
+        const row = ha.closest(".fs-row");
+        const path = fsState.cwd + "/" + row.dataset.name;
+        if (ha.dataset.ha === "copy") copyText(path, ha);
+        else location.href = fsFileUrl(path, "download");
+        return;
+      }
+      const retry = e.target.closest(".fs-retry");
+      if (retry) { fsOpen(fsState.cwd || FS_HOME); return; }
+      const row = e.target.closest(".fs-row");
       if (!row) return;
-      if (row.dataset.type === "dir") fsOpen(fsCwd + "/" + row.dataset.name);
+      if (e.target.closest(".swipe-act, .swipe-bg")) return;
+      if (row.dataset.type === "dir") { haptic(6); fsOpen(fsState.cwd + "/" + row.dataset.name); }
       else fsOpenFile(row.dataset.name);
     });
-    $("tl-fs-crumbs").addEventListener("click", (e) => {
+    $("fs-crumbs").addEventListener("click", (e) => {
       const crumb = e.target.closest("[data-crumb]");
-      if (crumb) fsOpen(crumb.dataset.crumb);
+      if (crumb) { haptic(6); fsOpen(crumb.dataset.crumb, crumb.dataset.crumb === fsState.parent ? "up" : "down"); }
     });
-    const closeViews = () => { $("tl-lightbox").hidden = true; $("tl-textview").hidden = true; };
-    $("tl-lightbox").addEventListener("click", closeViews);
-    $("tl-textview").querySelector(".tl-lb-close").addEventListener("click", (e) => { e.stopPropagation(); closeViews(); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeViews(); });
+    $("fs-sortbtn").addEventListener("click", (e) => {
+      e.stopPropagation();   // 不冒泡: 防触发 document 级"菜单外点击收起"
+      fsPopupMenu(FS_SORTS.map(([k, lbl]) => ({ label: t(lbl), on: fsState.sort === k, act: () => {
+        fsState.sort = k; localStorage.setItem("svc-fs-sort", k); fsRender();
+      } })), e.currentTarget);
+    });
+    $("fs-more").addEventListener("click", (e) => {
+      e.stopPropagation();
+      fsPopupMenu([
+        { label: t("tl_fs_hidden"), ico: "folder", on: fsState.hidden, act: () => {
+          fsState.hidden = !fsState.hidden;
+          localStorage.setItem("svc-fs-hidden", fsState.hidden ? "1" : "0");
+          fsRender();
+        } },
+        "-",
+        { label: t("fs_home_btn"), ico: "home", act: () => fsOpen(FS_HOME) },
+      ], e.currentTarget);
+    });
+    // 文本预览
+    $("fsv-back").addEventListener("click", () => { haptic(6); fsvClose(); });
+    $("fsv-t-wrap").addEventListener("click", () => {
+      fsvState.wrap = !fsvState.wrap;
+      localStorage.setItem("svc-fsv-wrap", fsvState.wrap ? "1" : "0");
+      fsvRender(); fsvSearch(($("fsv-find").value || "").trim());
+    });
+    $("fsv-t-num").addEventListener("click", () => {
+      fsvState.lineNo = !fsvState.lineNo;
+      localStorage.setItem("svc-fsv-num", fsvState.lineNo ? "1" : "0");
+      fsvRender(); fsvSearch(($("fsv-find").value || "").trim());
+    });
+    $("fsv-t-minus").addEventListener("click", () => {
+      fsvState.font = clampFont(fsvState.font - 1);
+      localStorage.setItem("svc-fsv-font", fsvState.font); fsvRender();
+    });
+    $("fsv-t-plus").addEventListener("click", () => {
+      fsvState.font = clampFont(fsvState.font + 1);
+      localStorage.setItem("svc-fsv-font", fsvState.font); fsvRender();
+    });
+    let fsvSearchTimer = null;
+    $("fsv-find").addEventListener("input", (e) => {
+      clearTimeout(fsvSearchTimer);
+      fsvSearchTimer = setTimeout(() => fsvSearch(e.target.value.trim()), 220);
+    });
+    $("fsv-find").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); fsvSearch(e.target.value.trim(), e.shiftKey ? -1 : 1); }
+    });
+    $("fsv-prev").addEventListener("click", () => fsvSearch(($("fsv-find").value || "").trim(), -1));
+    $("fsv-next").addEventListener("click", () => fsvSearch(($("fsv-find").value || "").trim(), 1));
+    $("fsv-more").addEventListener("click", (e) => {
+      e.stopPropagation();
+      fsPopupMenu([
+        { label: t("fsv_copy_all"), ico: "copy", act: () => copyText(fsvState.data.text || "", e.currentTarget) },
+        { label: t("fs_copy_path"), ico: "copy", act: () => copyText(fsvState.path || "", e.currentTarget) },
+        "-",
+        { label: t("fsv_copy_url"), ico: "ext", act: () => copyText(location.origin + fsFileUrl(fsvState.path, "view"), e.currentTarget) },
+        { label: t("tl_fs_dl"), ico: "down", act: () => { location.href = fsFileUrl(fsvState.path, "download"); } },
+      ], e.currentTarget);
+    });
+    // 全局: 菜单外点收起 / Esc 层级退出 / lightbox 复用
+    document.addEventListener("click", (e) => { if (!e.target.closest(".fs-menu")) fsCloseMenu(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if ($("fs-menu")) { fsCloseMenu(); return; }
+      if (!$("tl-lightbox").hidden) { $("tl-lightbox").hidden = true; return; }
+      if (!$("fs-view").hidden) { fsvClose(); return; }
+      if (!$("fs-app").hidden) fsCloseBrowser();
+    });
+    $("tl-lightbox").addEventListener("click", () => { $("tl-lightbox").hidden = true; });
   }
 }
 
@@ -5255,20 +5789,20 @@ load(true);
 HOME_DIR = "/home/tetsuya"   # svc-dashboard 以 root 运行(systemd 系统级), 不能用 expanduser
 
 # --- F1 文件浏览 ---
-FS_ROOTS = [os.path.join(HOME_DIR, "development"),
-            os.path.join(HOME_DIR, "NAS"),
-            "/tmp",
-            os.path.join(HOME_DIR, ".omp", "logs")]
-# 敏感文件名: .env / *key* / *secret* / id_rsa* / *.pem —— 列表隐藏 + 直接访问 404
-_FS_SENSITIVE = re.compile(r"\.env$|key|secret|^id_rsa|\.pem$", re.I)
+# 红线: 根白名单 = home 全树 + /tmp; realpath 越界一律 404; 只读(无上传/删除/改名)。
+FS_HOME = HOME_DIR
+FS_ROOTS = [HOME_DIR, "/tmp"]
+# 敏感文件名: .env* / *key* / *secret* / id_rsa* / *.pem / credentials* / known_hosts / .git
+# 列表直接不显示 + 访问 404(与历史实现一致: 隐藏而非仅拦截)。
+_FS_SENSITIVE = re.compile(r"\.env|key|secret|^id_rsa|\.pem$|^credentials|known_hosts", re.I)
 _FS_IMAGE = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
-_FS_TEXT = {".md", ".py", ".js", ".ts", ".json", ".log", ".txt", ".yaml", ".yml",
-            ".toml", ".cs", ".rs", ".sh", ".xml", ".html", ".css", ".ini", ".conf", ".csv"}
-_FS_TEXT_MAX = 1 << 20   # 文本 >1MB 只给下载
+# 文本预览上限: 超过只服务前 2MB 并标记 truncated(前端提示"仅预览前 2MB")
+_FS_TEXT_MAX = 2 << 20
 
 
 def fs_sensitive(name):
-    return bool(_FS_SENSITIVE.search(name))
+    """.git 按路径组件整目录拒绝(config/hooks 等全部不可见)。"""
+    return name == ".git" or bool(_FS_SENSITIVE.search(name))
 
 
 def fs_resolve(path_param):
@@ -5281,6 +5815,8 @@ def fs_resolve(path_param):
     if not p.startswith("/"):
         return None
     real = os.path.realpath(p)
+    if any(part == ".git" for part in real.split(os.sep)):
+        return None
     for root in FS_ROOTS:
         rroot = os.path.realpath(root)
         if real == rroot or real.startswith(rroot + os.sep):
@@ -5289,11 +5825,13 @@ def fs_resolve(path_param):
 
 
 def fs_list(path_param):
-    """目录列表(名称/大小/mtime/类型), 敏感名直接跳过, 文件夹优先。"""
+    """目录列表(名称/大小/mtime/类型/目录项数), 敏感名直接跳过, 文件夹优先。
+    目录项数带 0.4s 总预算, 超时停数(前端显示 —)。parent 供面包屑跳级。"""
     real = fs_resolve(path_param)
     if not real or not os.path.isdir(real):
         return {"ok": False, "msg": "not found"}
     out = []
+    deadline = time.monotonic() + 0.4
     try:
         with os.scandir(real) as it:
             for e in it:
@@ -5304,43 +5842,71 @@ def fs_list(path_param):
                     if not is_dir and not e.is_file(follow_symlinks=True):
                         continue   # socket/fifo 等跳过
                     st = e.stat(follow_symlinks=True)
-                    out.append({"name": e.name, "type": "dir" if is_dir else "file",
-                                "size": None if is_dir else st.st_size,
-                                "mtime": int(st.st_mtime)})
+                    ent = {"name": e.name, "type": "dir" if is_dir else "file",
+                           "size": None if is_dir else st.st_size,
+                           "mtime": int(st.st_mtime)}
+                    if is_dir and time.monotonic() < deadline:
+                        try:
+                            ent["count"] = len(os.listdir(e.path))
+                        except OSError:
+                            pass
+                    out.append(ent)
                 except OSError:
                     continue
     except OSError as ex:
         return {"ok": False, "msg": str(ex)}
     out.sort(key=lambda x: (x["type"] != "dir", x["name"].lower()))
-    return {"ok": True, "path": real, "entries": out}
+    at_root = any(real == os.path.realpath(r) for r in FS_ROOTS)
+    try:
+        d_mtime = int(os.stat(real).st_mtime)
+    except OSError:
+        d_mtime = 0
+    return {"ok": True, "path": real, "name": os.path.basename(real) or real,
+            "parent": None if at_root else os.path.dirname(real),
+            "mtime": d_mtime, "entries": out}
 
 
 def fs_meta(real):
-    """文件预览类型 + MIME: 图片直显 / 小文本渲染 / 其他下载。"""
+    """预览类型 + MIME: 图片直显; 其余走文本探测(NUL -> 二进制提示)。"""
     ext = os.path.splitext(real)[1].lower()
-    size = os.path.getsize(real)
-    if ext in _FS_IMAGE:
-        return "image", {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-                         "webp": "image/webp", "gif": "image/gif"}.get(ext[1:], "application/octet-stream")
-    if ext in _FS_TEXT and size <= _FS_TEXT_MAX:
-        return "text", "text/plain; charset=utf-8"
-    return "binary", "application/octet-stream"
+    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+            "webp": "image/webp", "gif": "image/gif"}.get(ext[1:], "application/octet-stream")
+    return ("image" if ext in _FS_IMAGE else "text"), mime
 
 
-def fs_du(path_param):
-    """单目录 du(5s 超时放弃, 负载友好)。"""
-    real = fs_resolve(path_param)
-    if not real or not os.path.isdir(real):
-        return {"ok": False, "msg": "not found"}
+def fs_read_text(real, enc=""):
+    """文本预览读取: 前 2MB 截断 / NUL 前探测二进制 / UTF-8 为主 + GB18030 候选。
+    utf-8 严格解码失败而 gb18030 严格通过 -> alt_enc=gb18030(前端给"重开"按钮)。"""
     try:
-        p = subprocess.run(["du", "-sb", real], capture_output=True, text=True, timeout=5)
-        if p.returncode != 0:
-            return {"ok": False, "msg": p.stderr.strip()[:120] or "du failed"}
-        return {"ok": True, "size": int(p.stdout.split()[0])}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "msg": "timeout(5s)"}
-    except Exception as ex:
-        return {"ok": False, "msg": str(ex)[:120]}
+        st = os.stat(real)
+        with open(real, "rb") as f:
+            raw = f.read(_FS_TEXT_MAX + 1)
+    except OSError as ex:
+        return {"ok": False, "msg": str(ex)}
+    truncated = len(raw) > _FS_TEXT_MAX
+    if truncated:
+        raw = raw[:_FS_TEXT_MAX]
+    name = os.path.basename(real)
+    if b"\x00" in raw[:8192]:
+        return {"ok": True, "binary": True, "name": name, "path": real,
+                "size": st.st_size, "mtime": int(st.st_mtime)}
+    if enc == "gb18030":
+        text, used, alt = raw.decode("gb18030", "replace"), "gb18030", None
+    else:
+        used = "utf-8"
+        try:
+            text = raw.decode("utf-8")
+            alt = None
+        except UnicodeDecodeError:
+            text = raw.decode("utf-8", "replace")
+            try:
+                raw.decode("gb18030")
+                alt = "gb18030"
+            except UnicodeDecodeError:
+                alt = None
+    return {"ok": True, "binary": False, "name": name, "path": real, "size": st.st_size,
+            "mtime": int(st.st_mtime), "text": text, "truncated": truncated,
+            "encoding": used, "alt_enc": alt}
 
 
 # --- F2 健康检查 ---
@@ -5897,8 +6463,8 @@ def tool_ports_alive():
     return {"ok": True, "alive": alive}
 
 def tools_conf():
-    """页面内嵌工具配置: 白名单根 + 主机地址 + G1 chips 端口表。"""
-    return {"fs_roots": FS_ROOTS,
+    """页面内嵌工具配置: 文件浏览起点 + 主机地址 + G1 chips 端口表。"""
+    return {"fs_home": FS_HOME,
             "hosts": local_hosts(),
             "g1": [["dbeditor", 8810], ["mapviewer", 8899], ["wilviewer", 8765],
                    ["uieditor", 8820], ["dbviewer", 8800], ["webclient", 8822],
@@ -6017,9 +6583,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, data)
         elif path == "/api/fs/file":
             self._fs_file()
-        elif path == "/api/fs/du":
-            qs = parse_qs(urlparse(self.path).query)
-            self._send_json(200, fs_du((qs.get("path") or [""])[0]))
         elif path == "/api/health":
             self._send_json(200, health_check())
         elif path == "/api/nettest":
@@ -6032,25 +6595,25 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def _fs_file(self):
-        """GET /api/fs/file?path=&mode=view|download
-        view+text -> JSON; 图片直显; download/二进制 -> attachment 流式。"""
+        """GET /api/fs/file?path=&mode=view|download[&enc=gb18030]
+        view+非图片 -> JSON(fs_read_text); 图片直显; download -> attachment 流式。"""
         qs = parse_qs(urlparse(self.path).query)
         p = (qs.get("path") or [""])[0]
         mode = (qs.get("mode") or ["view"])[0]
+        enc = (qs.get("enc") or [""])[0]
         real = fs_resolve(p)
         if not real or not os.path.isfile(real):
             self.log_message("fs/file rejected %r mode=%s -> 404", p[:160], mode)
             self.send_error(404)
             return
         kind, mime = fs_meta(real)
-        if mode == "view" and kind == "text":
-            try:
-                with open(real, "rb") as f:
-                    text = f.read().decode("utf-8", "replace")
-                self._send_json(200, {"ok": True, "name": os.path.basename(real),
-                                      "size": len(text), "text": text[:512 * 1024]})
-            except OSError as ex:
-                self._send_json(500, {"ok": False, "msg": str(ex)})
+        if mode == "view" and kind != "image":
+            data = fs_read_text(real, enc)
+            if not data.get("ok"):
+                self.log_message("fs/file read error %r: %s", p[:160], data.get("msg"))
+                self._send_json(500, data)
+            else:
+                self._send_json(200, data)
             return
         try:
             size = os.path.getsize(real)
@@ -6059,7 +6622,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(size))
             self.send_header("Cache-Control", "no-store")
-            if mode == "download" or kind == "binary":
+            if mode == "download":
                 fn = os.path.basename(real)
                 safe = re.sub(r"[^A-Za-z0-9._-]", "_", fn) or "download"
                 from urllib.parse import quote
@@ -6139,6 +6702,49 @@ def selftest():
             self.assertEqual(ctx_level(45), "ok")
             self.assertEqual(ctx_level(801), "warn")   # >800K 黄
             self.assertEqual(ctx_level(1201), "stop")  # >1.2M 红
+
+        def test_fs_security(self):
+            self.assertIsNone(fs_resolve("/etc"))
+            self.assertIsNone(fs_resolve("/root"))
+            self.assertIsNone(fs_resolve("/proc/self/environ"))
+            self.assertIsNone(fs_resolve("/home/tetsuya/../etc"))    # 穿越出白名单
+            self.assertIsNone(fs_resolve("/home/tetsuya/.env"))      # 敏感文件
+            self.assertIsNone(fs_resolve("/home/tetsuya/prod_key.pem"))
+            self.assertIsNone(fs_resolve("/home/tetsuya/creds/id_rsa"))
+            self.assertIsNone(fs_resolve("/home/tetsuya/known_hosts"))
+            self.assertIsNone(fs_resolve("/home/tetsuya/development/.git/config"))  # .git 全树
+            self.assertIsNone(fs_resolve("relative/path"))
+            self.assertEqual(fs_resolve("/home/tetsuya/development"),
+                             os.path.realpath("/home/tetsuya/development"))
+            self.assertTrue(fs_sensitive(".git"))
+            self.assertTrue(fs_sensitive("xkey.txt"))
+            self.assertFalse(fs_sensitive("normal.md"))
+
+        def test_fs_text(self):
+            import tempfile
+            with tempfile.TemporaryDirectory() as td:
+                utf8 = os.path.join(td, "a.txt")
+                open(utf8, "wb").write("hello\nworld".encode())
+                r = fs_read_text(utf8)
+                self.assertTrue(r["ok"] and not r["binary"])
+                self.assertEqual(r["encoding"], "utf-8")
+                self.assertIsNone(r["alt_enc"])
+                gb = os.path.join(td, "b.txt")
+                open(gb, "wb").write("传奇配置文件".encode("gb18030"))
+                r = fs_read_text(gb)
+                self.assertEqual(r["encoding"], "utf-8")      # 乱码标记
+                self.assertEqual(r["alt_enc"], "gb18030")     # 提供重开按钮
+                r2 = fs_read_text(gb, "gb18030")
+                self.assertEqual(r2["encoding"], "gb18030")
+                self.assertIn("传奇", r2["text"])
+                binf = os.path.join(td, "c.bin")
+                open(binf, "wb").write(b"\x00\x01\x02binary")
+                self.assertTrue(fs_read_text(binf)["binary"])  # NUL 探测
+                big = os.path.join(td, "big.log")
+                open(big, "wb").write(b"x" * (5 << 20))
+                r = fs_read_text(big)
+                self.assertTrue(r["truncated"])                 # >2MB 截断
+                self.assertEqual(len(r["text"]), _FS_TEXT_MAX)
 
         def test_retry_progress(self):
             self.assertEqual(parse_retry("API error. Retrying (3)/10 in 5s"), "3")
