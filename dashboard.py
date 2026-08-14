@@ -2559,7 +2559,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
             padding: 12px 14px; margin-bottom: 14px; }
   .gpanel h2 { margin: 0 0 10px; font-size: 13px; color: #9a9a9a; font-weight: 500; }
   .gpanel .ghint { color: #8f8f8f; font-weight: 400; font-size: 11.5px; }
-  .gcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; }
+  .gcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; align-items: start; }
   .gcard { background: #131313; border: 1px solid #222; border-radius: 8px; padding: 10px 12px; }
   .gcard .ghead { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
   .gcard .glight { font-size: 13px; flex: none; }
@@ -2662,7 +2662,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .statuscard .sc-ico { font-size: 30px; line-height: 1; }
   .statuscard .sc-big { font-size: 24px; font-weight: 700; color: #f2f2f2; }
   .statuscard .sc-sub { margin-top: 8px; color: #909090; font-size: 12px; }
-  .mgrid4 { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mgrid4 { grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
   .mcell { background: #141414; border: 1px solid #232323; border-radius: 10px; padding: 10px 12px;
            display: flex; flex-direction: column; gap: 3px; }
   .mnum { font-size: 22px; font-weight: 700; color: #f2f2f2; font-variant-numeric: tabular-nums; }
@@ -2686,6 +2686,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .rc-row:last-child { border-bottom: none; }
   .rc-ico { flex: none; }
   .rc-kind { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rc-kind .rc-name { color: #e8e8e8; font-weight: 600; }
+  .rc-ago::before { content: "·"; color: #444; margin-right: 8px; }
   .rc-name { color: #909090; font-size: 12px; flex: none; max-width: 38%; overflow: hidden;
              text-overflow: ellipsis; white-space: nowrap; }
   .rc-ago { color: #909090; font-size: 12px; flex: none; }
@@ -2713,6 +2715,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .lv-more { font-size: 12px; color: #909090; padding: 10px 0 2px; }
 
   @media (max-width: 768px) {
+    .meta { display: none !important; }  /* 移动端: 更新时间/端口数与主体状态卡重复,隐藏 */
     -webkit-tap-highlight-color: transparent;
     /* safe-area: 刘海/手势条不遮挡; 标题行+状态摘要合并紧凑化 */
     header { padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
@@ -2726,6 +2729,9 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .btn, .chip, .mbtn, .ctl-btn, .tcol, .aglog-refresh { padding: 9px 14px; font-size: 13px; min-height: 38px; }
     /* 内部滚动: main 自滚, 底部页签栏固定在文档流尾, 不再遮住最后一屏 */
     html, body { height: 100%; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+  ::-webkit-scrollbar-track { background: transparent; }
     body { display: flex; flex-direction: column; overflow: hidden;
            overscroll-behavior: none; }
     main { flex: 1 1 auto; min-height: 0; overflow-y: auto;
@@ -2882,7 +2888,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
       </svg>
     </a>
   </h1>
-  <span class="meta">{{T:updated}} <span id="updated">{{UPDATED}}</span> · {{T:svc_pre}}<span id="count">{{COUNT}}</span>{{T:svc_post}}</span>
+  <span class="meta" id="meta-line">{{T:updated}} <span id="updated">{{UPDATED}}</span> · {{T:svc_pre}}<span id="count">{{COUNT}}</span>{{T:svc_post}}</span>
   <span class="spacer"></span>
   <span class="auto">
     <span class="sw" id="auto" role="switch" aria-checked="false" tabindex="0"
@@ -2890,10 +2896,6 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     {{T:auto_refresh}} (<span id="auto-sec">{{AUTO}}s</span>)
   </span>
   <span class="btn" id="refresh" role="button" tabindex="0">{{T:refresh}}</span>
-  <div class="statusline" id="statusline" role="button" tabindex="0">
-    <span id="status-ico">⏳</span><b id="status-text">{{T:st_loading}}</b>
-    <span class="stale" id="stale-badge" hidden>{{T:st_stale}}</span>
-  </div>
 </header>
 <div id="ptr-indicator" aria-hidden="true"><span class="ptr-arrow">↓</span><span class="ptr-label">{{T:ptr_pull}}</span></div>
 <main>
@@ -3615,7 +3617,7 @@ async function renderOverview(apiData) {
   const cls = ok ? "ok" : alerts.some(a => a.sev === "bad") ? "bad" : "warn";
   const txt = ok ? t("st_all_ok") : t("st_alert", { n: nAlert });
   const ico = ok ? "✅" : "⚠";
-  const sc = $("statuscard"), sl = $("statusline");
+  const sc = $("statuscard"), sl = $("statusline"); // sl 可为 null(已移除)
   if (sc) { sc.className = "statuscard " + cls; $("sc-ico").textContent = ico; $("sc-text").textContent = txt; }
   if (sl) { sl.className = "statusline " + cls; $("status-ico").textContent = ico; $("status-text").textContent = txt; }
   $("m-svc").textContent = lastSvc.ok + "/" + lastSvc.total;
@@ -3630,7 +3632,7 @@ async function renderOverview(apiData) {
   $("recent-body").innerHTML = recent.length ? recent.map(e => {
     const m = EV_META[e.kind] || EV_META.other;
     return `<div class="rc-row" role="button" tabindex="0"><span class="rc-ico">${m.ico}</span>` +
-      `<span class="rc-kind">${escHtml(t(m.key))} · ${escHtml(e.name)}</span>` +
+      `<span class="rc-kind">${escHtml(t(m.key))} · <b class="rc-name">${escHtml(e.name)}</b></span>` +
       `<span class="rc-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
   }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
   updateBadge(nAlert);
