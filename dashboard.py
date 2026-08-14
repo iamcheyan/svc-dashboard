@@ -2441,12 +2441,8 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
             foot = (f'<div class="gfoot"><span class="gcopy" role="button" tabindex="0" '
                     f'data-cmd="{escape(c["resume_cmd"], quote=True)}">{icon("copy", 13)} {t(lang, "g_copy")}</span></div>')
         inner += foot
-        # 手机端左滑露「复制 resume」: .swipe-bg 静止在卡片下,.swipe-fg 跟手平移
-        back = (f'<div class="swipe-bg"><span class="swipe-act" role="button" tabindex="0" '
-                f'data-copy="{escape(c["resume_cmd"], quote=True)}">{icon("copy", 13)} {t(lang, "g_copy")}</span></div>'
-                if c["resume_cmd"] else "")
-        cls = "gcard swipe-item" if back else "gcard"
-        out.append(f'<div class="{cls}" data-light="{c["light"]}">{back}<div class="swipe-fg">{inner}</div></div>')
+        # 复制 resume 命令 = 卡片内显式 .gcopy 按钮(无滑扫手势)
+        out.append(f'<div class="gcard" data-light="{c["light"]}">{inner}</div>')
     body = "".join(out) if out else (
         f'<div class="empty-state"><span class="es-ico">{icon("gauge", 44)}</span>'
         f'<span class="es-title">{escape(t(lang, "g_none"))}</span>'
@@ -2754,10 +2750,11 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   * { box-sizing: border-box; }
   body { margin: 0; font-family: ui-sans-serif, system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
          background: var(--bg); color: var(--text); }
-  header { position: sticky; top: 0; z-index: 10; background: var(--header-bg); backdrop-filter: blur(6px);
-           border-bottom: 1px solid var(--border-soft); padding: 12px 24px;
+  header { position: static; background: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+           border-bottom: none; padding: 14px 24px 6px;
            display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header h1 { font-size: 17px; margin: 0; font-weight: 600; color: var(--text-title);
+  header h1 { font-size: 30px; margin: 0; font-weight: 800; letter-spacing: -.4px;
+              color: var(--text-title);
               display: inline-flex; align-items: center; gap: 8px; }
   header h1 .h-server { width: 7px; height: 7px; border-radius: 50%; background: var(--c-green); flex: none; }
   header .meta { color: var(--text-soft); font-size: 12.5px; }
@@ -2770,12 +2767,14 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     user-select: none; -webkit-user-select: none; touch-action: manipulation;
     cursor: pointer; transition: background .12s, border-color .12s, color .12s, transform .05s; }
   .btn { background: var(--btn-bg); color: var(--text-hi); border: 1px solid var(--btn-border);
-         border-radius: 8px; padding: 7px 14px; font-size: 13px; }
+         border-radius: 16px; padding: 7px 14px; font-size: 13px; }
   .btn:hover { background: var(--btn-hover); }
   .btn:active { background: var(--btn-press); transform: translateY(1px); }
   .btn.spinning { opacity: .7; }
-  /* topbar 刷新按钮: 点击=立即刷新, 长按=锁定/解锁自动刷新(锁定=琥珀描边+锁形角标) */
-  .icon-btn { width: 38px; height: 38px; padding: 0; position: relative; border-radius: 10px; }
+  /* topbar 刷新按钮(玻璃圆钮): 点击=立即刷新, 长按=锁定/解锁自动刷新(锁定=琥珀描边+锁形角标) */
+  .icon-btn { width: 40px; height: 40px; min-height: 40px; padding: 0; position: relative;
+              border-radius: 50%; background: var(--glass-bg); border: 1px solid var(--glass-bd);
+              -webkit-backdrop-filter: blur(20px) saturate(1.8); backdrop-filter: blur(20px) saturate(1.8); }
   #refresh.locked { border-color: var(--c-warn); color: var(--c-warn); }
   #refresh .ic-badge { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px;
                        border-radius: 50%; background: var(--c-warn); color: var(--bg);
@@ -2824,7 +2823,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 
   /* ---------------- 移动 App 化基础(桌面端多数隐藏) ----------------
      字号走 rem(html=100%),尊重系统字体大小设置;
-     手势元素(滑动露按钮/页签栏/图表/骨架屏)仅手机布局出现。 */
+     手势元素(页签栏/图表/骨架屏)仅手机布局出现。 */
   [hidden] { display: none !important; }  /* 防 class 的 display:flex 盖过 hidden 属性 */
   html { font-size: 100%; -webkit-text-size-adjust: 100%; }
   #pages { display: contents; }          /* 桌面: 透明容器,子元素即 main 内容 */
@@ -2832,15 +2831,12 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .skel, .gmore, .statuscard, .mgrid4, #alerts, #recent,
   #log-filters, .lv { display: none; }
   .gextra { display: block; }            /* 桌面: goal 卡次要信息全展示 */
-  .swipe-item { position: relative; overflow: hidden; }
-  .swipe-bg { position: absolute; inset: 0; display: flex; align-items: stretch;
-              justify-content: flex-end; background: var(--c-green-bg); }
-  .swipe-act { display: inline-flex; align-items: center; justify-content: center;
-               min-width: 88px; padding: 0 14px; background: var(--c-green-btn); color: #fff;
-               font-size: 12.5px; white-space: nowrap; }
-  .swipe-fg { position: relative; background: var(--bg-panel); will-change: transform;
-              transition: transform .18s ease; }
-  .swipe-fg.stick { transition: none; }  /* 跟手阶段禁过渡 */
+  /* 服务卡头行显式圆形操作钮: 复制地址 + 打开(替代旧左滑手势) */
+  .svc-act { display: inline-flex; align-items: center; justify-content: center;
+             width: 44px; height: 44px; border-radius: 50%; flex: none; cursor: pointer;
+             background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border);
+             color: var(--text-mid); }
+  .svc-act:active { transform: scale(.92); }
   .svc-open { display: inline-flex; align-items: center; justify-content: center;
               width: 44px; height: 44px; border-radius: 50%; flex: none;
               background: var(--accent-blue-bg); border: 1px solid var(--accent-blue-bd);
@@ -2856,7 +2852,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   #chart-empty { color: var(--text-dead); font-size: 12px; padding: 18px 0; }
   .gmore { display: none; color: var(--text-dim); font-size: 11px; }
   .sysbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-  .stat { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px;
+  .stat { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px;
           padding: 10px 16px; min-width: 130px; }
   .stat .label { color: var(--text-dim); font-size: 11px; margin-bottom: 3px;
                  display: inline-flex; align-items: center; }
@@ -2869,7 +2865,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .tbadge.sc { background: var(--tbadge-sc-bg); color: var(--tbadge-sc-tx); border: 1px solid var(--tbadge-sc-bd); }
   .filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
   .filters .spacer { flex: 1; }
-  .watchdog-panel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px;
+  .watchdog-panel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px;
                     padding: 12px 14px; margin-bottom: 14px; }
   .watchdog-panel h2 { margin: 0 0 8px; font-size: 13px; color: var(--text-dim); font-weight: 500; }
   .watchdog-panel table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -2890,7 +2886,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                  align-items: center; gap: 8px; }
   .aglog-refresh { background: var(--accent-blue-bg); border: 1px solid var(--accent-blue-bd);
                    color: var(--accent-blue-tx);
-                   padding: 2px 10px; font-size: 11px; border-radius: 6px; cursor: pointer; }
+                   padding: 2px 10px; font-size: 11px; border-radius: 14px; cursor: pointer; }
   .aglog-refresh:hover { background: var(--accent-blue-hover); }
   .aglog-list { display: flex; flex-direction: column; gap: 2px; }
   .aglog-row { display: flex; gap: 10px; font-family: ui-monospace, monospace; font-size: 11.5px;
@@ -2910,11 +2906,11 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .mcard .mdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .mcard .mbtns { display: flex; gap: 8px; flex-wrap: wrap; }
   .mcard .mbtn { background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border); color: var(--text);
-                  border-radius: 6px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
+                  border-radius: 14px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
   .mcard .mbtn:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
   .mcard .mbtn[aria-disabled="true"] { opacity: .5; cursor: default; }
   .mcard .mresult { margin-top: 8px; font-size: 12px; color: var(--c-green); min-height: 15px; word-break: break-all; }
-  .chip { background: var(--chip-bg); color: var(--text-soft); border: 1px solid var(--chip-border);
+  .chip { background: var(--chip-bg); color: var(--text-soft); border: 1px solid transparent;
           border-radius: 999px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
   .chip:hover { background: var(--bg-hover); }
   .chip.active { background: var(--chip-on-bg); border-color: var(--chip-on-bg); color: var(--chip-on-tx); }
@@ -2924,12 +2920,12 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .toolchips { margin-bottom: 14px; }
 
   /* ---------------- Goal 进度卡片 / 负载水位 / 事件时间线 ---------------- */
-  .gpanel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px;
+  .gpanel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px;
             padding: 12px 14px; margin-bottom: 14px; }
   .gpanel h2 { margin: 0 0 10px; font-size: 13px; color: var(--text-dim); font-weight: 500; }
   .gpanel .ghint { color: var(--text-faint); font-weight: 400; font-size: 11.5px; }
   .gcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; align-items: start; }
-  .gcard { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .gcard { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; }
   .gcard .ghead { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
   .gcard .glight { font-size: 13px; }
   .gcard .gname { font-weight: 600; color: var(--text-hi); font-size: 14px; word-break: break-all; }
@@ -2950,7 +2946,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                   word-break: break-all; }
   .gcard .gfoot { margin-top: 8px; }
   .gcopy { display: inline-flex; align-items: center; gap: 6px; background: var(--btn-soft-bg);
-           border: 1px solid var(--btn-soft-border); color: var(--text); border-radius: 6px;
+           border: 1px solid var(--btn-soft-border); color: var(--text); border-radius: 14px;
            padding: 6px 14px; font-size: 12.5px; cursor: pointer; user-select: none; }
   .gcopy:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
   .gempty { color: var(--text-faint); font-size: 12.5px; padding: 10px 0; }
@@ -2983,8 +2979,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .evt-txt { color: var(--text-soft); word-break: break-all; min-width: 200px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th { text-align: left; color: var(--text-faint); font-weight: 500; font-size: 12px;
-             padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 52px;
-             background: var(--bg); }
+             padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0;
+             z-index: 5; background: var(--bg); }
   tbody td { padding: 9px 10px; border-bottom: 1px solid var(--border-faint); vertical-align: top; }
   tbody tr:hover { background: var(--bg-panel); }
   .name { white-space: nowrap; }
@@ -3012,7 +3008,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .local { color: var(--text-dim); font-size: 11px; }
   .ctl { white-space: nowrap; }
   .ctl-btn { background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border); color: var(--text);
-             border-radius: 6px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
+            border-radius: 14px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
   .ctl-btn:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
   .ctl-btn[aria-disabled="true"] { opacity: .5; cursor: default; }
   .empty { color: var(--text-faint); text-align: center; padding: 48px 0; }
@@ -3022,20 +3018,35 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .empty-state .es-ico { color: var(--text-ghost); display: inline-flex; }
   .empty-state .es-title { font-size: 22px; font-weight: 700; color: var(--text-hi); }
   .empty-state .es-sub { font-size: 13px; color: var(--text-dim); }
-  /* 浮动刷新圆钮: 桌面端隐藏(移动媒体块内 display:flex 恢复) */
-  .fab-refresh { display: none; }
+  /* 浮动玻璃刷新圆钮(桌面+移动同款): topbar 滚出视口后由 IntersectionObserver 显示;
+     点击=刷新/长按=锁定自动刷新, 与 topbar 刷新钮同一状态 */
+  .fab-refresh { position: fixed; right: 20px; bottom: 24px; z-index: 45;
+                 width: 48px; height: 48px; border-radius: 50%;
+                 display: flex; align-items: center; justify-content: center;
+                 background: var(--glass-bg); border: 1px solid var(--glass-bd);
+                 -webkit-backdrop-filter: blur(20px) saturate(1.8);
+                 backdrop-filter: blur(20px) saturate(1.8);
+                 box-shadow: var(--glass-shadow); color: var(--text-hi);
+                 cursor: pointer; user-select: none; -webkit-user-select: none;
+                 transition: transform .18s ease, opacity .18s ease; }
+  .fab-refresh:active { transform: scale(.92); }
+  .fab-refresh.locked { color: var(--c-warn); }
+  .fab-refresh .ic-badge { position: absolute; top: -4px; right: -4px; width: 16px; height: 16px;
+                           border-radius: 50%; background: var(--c-warn); color: var(--bg);
+                           display: none; align-items: center; justify-content: center; }
+  .fab-refresh.locked .ic-badge { display: inline-flex; }
   @media (max-width: 900px) { .cmd, .cwd { min-width: 120px; } }
 
   /* ---------------- 手机端 (<768px): App 化布局 ----------------
      六页横向滑动(概览/日志/Goal/服务/模型/ツール) + 底部页签栏 + safe-area;
-     服务表→卡片(左滑复制/圆形打开), goal 卡收起次要信息。
+     服务表→卡片(头行圆形 复制/打开 按钮), goal 卡收起次要信息;
      ≥769px 恢复桌面布局,所有规则只在此断点内生效。 */
   /* ---------------- 概要摘要组件 + 日志时间线(桌面隐藏,手机显示) ----------------
      字号体系: 状态数字 22-24px / 正文 14px / 辅助 12px。 */
   .stale { display: inline-flex; align-items: center; gap: 5px; background: var(--c-warn-bg);
            color: var(--c-warn); border: 1px solid var(--c-warn-border); border-radius: 999px;
            padding: 2px 10px; font-size: 12px; }
-  .statuscard { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px;
+  .statuscard { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px;
                 padding: 14px 16px; }
   .statuscard .sc-head { display: flex; align-items: center; gap: 12px; }
   .statuscard .sc-ico { font-size: 30px; line-height: 1; }
@@ -3052,7 +3063,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .mnum.alert { color: var(--c-warn); }
   .mlabel { font-size: 12px; color: var(--text-dim); }
   .al-btn { background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border); color: var(--text);
-            border-radius: 6px; padding: 8px 12px; font-size: 12.5px; cursor: pointer; }
+            border-radius: 14px; padding: 8px 12px; font-size: 12.5px; cursor: pointer; }
   .al-btn:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
   .al-btn.ignore { color: var(--text-dim); }
   .alert-item { align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border-faint); }
@@ -3100,23 +3111,11 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   @media (max-width: 768px) {
     .meta { display: none !important; }  /* 移动端: 更新时间/端口数与主体状态卡重复,隐藏 */
     html { -webkit-tap-highlight-color: transparent; }
-    /* topbar 不固定(iOS Large Title 风): 随内容滚出视口, header 由 JS 移入 main;
-       背景透明无边框(不再悬浮), 左=服务器名大标题, 右=玻璃圆钮刷新 */
-    header { position: static; z-index: auto; background: none;
-             -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom: none;
-             padding: 12px max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
+    /* topbar 不固定(iOS Large Title 风, 基础样式已静态化/透明/大标题/玻璃圆钮):
+       移动端仅收窄边距+safe-area, header 由 JS 移入 main 随内容滚出视口 */
+    header { padding: 12px max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
              padding-top: calc(8px + env(safe-area-inset-top)); gap: 8px; }
-    header h1 { font-size: 30px; font-weight: 800; letter-spacing: -.4px; }
-    header .spacer { display: none; }
-    header #refresh { width: 40px; height: 40px; min-height: 40px; border-radius: 50%;
-             background: var(--glass-bg); border: 1px solid var(--glass-bd);
-             -webkit-backdrop-filter: blur(20px) saturate(1.8);
-             backdrop-filter: blur(20px) saturate(1.8); }
-    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-      header #refresh { background: var(--bg-elev); }
-    }
     .btn, .chip, .mbtn, .ctl-btn, .tcol, .aglog-refresh { padding: 9px 14px; font-size: 13px; min-height: 38px; }
-    .icon-btn { min-height: 38px; }
     /* 内部滚动: main 自滚, 底部页签栏固定在文档流尾, 不再遮住最后一屏 */
     html, body { height: 100%; }
   ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -3155,38 +3154,17 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                   font-size: 10.5px; font-weight: 700; display: flex; align-items: center;
                   justify-content: center; border: 1.5px solid var(--glass-bg); }
 
-    /* 浮动玻璃刷新圆钮: topbar 滚出视口后出现在底栏右上方 20px(IntersectionObserver 控制) */
-    .fab-refresh { position: fixed; right: 20px; bottom: calc(96px + env(safe-area-inset-bottom));
-                   z-index: 45; width: 48px; height: 48px; border-radius: 50%;
-                   display: flex; align-items: center; justify-content: center;
-                   background: var(--glass-bg); border: 1px solid var(--glass-bd);
-                   -webkit-backdrop-filter: blur(20px) saturate(1.8);
-                   backdrop-filter: blur(20px) saturate(1.8);
-                   box-shadow: var(--glass-shadow); color: var(--text-hi);
-                   cursor: pointer; user-select: none; -webkit-user-select: none;
-                   transition: transform .18s ease, opacity .18s ease; }
-    .fab-refresh:active { transform: scale(.92); }
-    .fab-refresh.locked { color: var(--c-warn); }
-    .fab-refresh .ic-badge { position: absolute; top: -4px; right: -4px; width: 16px; height: 16px;
-                             border-radius: 50%; background: var(--c-warn); color: var(--bg);
-                             display: none; align-items: center; justify-content: center; }
-    .fab-refresh.locked .ic-badge { display: inline-flex; }
+    /* 浮动刷新圆钮基础样式在全局(桌面同款): 移动端抬高到悬浮底栏上方 */
+    .fab-refresh { bottom: calc(96px + env(safe-area-inset-bottom)); }
 
-    /* 圆角体系统一: 小按钮 14-16px / 卡片 14-16px / chips 胶囊 */
-    .btn { border-radius: 16px; }
-    .ctl-btn, .al-btn, .aglog-refresh { border-radius: 14px; }
-    .mbtn { border-radius: 14px; }
-    .statuscard, .gpanel { border-radius: 16px; }
-    .mcell, .stat, .watchdog-panel { border-radius: 14px; }
+    /* 圆角体系已在基础样式统一: 移动端仅补触控尺寸与服务卡片行 */
     #svc tbody tr { border-radius: 16px; }
-    .chip { border-radius: 999px; border-color: transparent; background: var(--chip-bg);
-            min-height: 44px; padding: 10px 16px; }
-    /* 表格 thead 锚点: topbar 不再固定 → 改为滚动容器(main)内 sticky top:0 */
-    main table thead th { position: sticky; top: 0; z-index: 5; background: var(--bg); }
+    .chip { min-height: 44px; padding: 10px 16px; }
+    .copy-toast { bottom: calc(110px + env(safe-area-inset-bottom)); }
     /* 两层结构: #pages(裁剪窗口) > #track(600% 轨道) > .pg(各 1/6 = 屏宽) */
     #pages { display: block; width: 100%; overflow: hidden; }
     body { overscroll-behavior-x: none; }  /* 关掉浏览器右滑返回/左滑前进接管 */
-    #pages, .swipe-fg { touch-action: pan-y; }  /* 横向留给 JS 手势 */
+    #pages { touch-action: pan-y; }  /* 横向留给 JS 手势 */
     .filters { touch-action: pan-x; }  /* 自身横滚的容器除外 */
     #track { display: flex; align-items: flex-start; width: 600%;
              will-change: transform;
@@ -3223,7 +3201,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     .filters .spacer { display: none; }
     .chip { flex: none; font-size: 12.5px; }
 
-    /* 服务列表 → 卡片(左滑露「复制地址」, 头行右侧 44px 圆形打开按钮) */
+    /* 服务列表 → 卡片(头行右侧显式 44px 圆形 复制/打开 按钮, 无滑扫手势) */
     #svc thead { display: none; }
     #svc tbody tr { display: block; background: var(--bg-panel); border: 1px solid var(--border);
                     border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
@@ -3287,14 +3265,14 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     .gdone-row { font-size: 11.5px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    #track, .swipe-fg, .gmore { transition: none !important; }
+    #track, .gmore { transition: none !important; }
     .skel-line { animation: none; }
     .fab-refresh, #tabbar .tab { transition: none !important; }
     .fab-refresh:active { transform: none; }
   }
   /* 玻璃材质降级: 低端设备不支持 backdrop-filter → 不透明实底 */
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    #tabbar, .fab-refresh { background: var(--bg-elev); }
+    #tabbar, .fab-refresh, .icon-btn { background: var(--bg-elev); }
   }
   /* ---------------- ツール页 ---------------- */
   .toolspage .tl-sec + .tl-sec { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
@@ -3362,8 +3340,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .fs-crumbs a svg { vertical-align: -2px; }
   .fs-searchrow { padding: 0 12px 8px; display: flex; gap: 8px; }
   .fs-search { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; min-height: 40px;
-              background: var(--bg-input); border: 1px solid var(--chip-border);
-              border-radius: 10px; padding: 0 10px; color: var(--text-dim); }
+              background: var(--bg-input); border: 1px solid transparent;
+              border-radius: 999px; padding: 0 14px; color: var(--text-dim); }
   .fs-search input { flex: 1 1 auto; min-width: 0; background: none; border: none; outline: none;
               color: var(--text); font-size: 14px; min-height: 38px; }
   .fs-search input::placeholder { color: var(--text-dead); }
@@ -3371,12 +3349,11 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
               padding: 0 10px calc(24px + env(safe-area-inset-bottom)); }
   .fs-skrow { border-radius: 12px; background: var(--bg-panel); border: 1px solid var(--border-faint);
               padding: 12px 14px; margin-bottom: 8px; }
-  .fs-row { border-radius: 12px; margin-bottom: 6px; }
-  .fs-row .swipe-fg { display: flex; align-items: center; gap: 10px; padding: 9px 11px;
-              border-radius: 12px; border: 1px solid var(--border-faint);
-              transition: transform .18s ease, background .12s ease; }
-  .fs-row .swipe-fg:active { background: var(--bg-active); }
-  @media (hover: hover) { .fs-row .swipe-fg:hover { background: var(--bg-hover); } }
+  .fs-row { display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+            border-radius: 12px; margin-bottom: 6px; border: 1px solid var(--border-faint);
+            transition: background .12s ease; cursor: pointer; }
+  .fs-row:active { background: var(--bg-active); }
+  @media (hover: hover) { .fs-row:hover { background: var(--bg-hover); } }
   .fs-fico { width: 36px; height: 36px; flex: none; border-radius: 9px;
               display: inline-flex; align-items: center; justify-content: center; }
   .fs-ico-dir { background: var(--accent-blue-bg); color: var(--accent-blue-tx); }
@@ -3391,16 +3368,13 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .fs-row .fs-meta { display: flex; gap: 6px; align-items: center; font-size: 11.5px;
               color: var(--text-faint); font-family: ui-monospace, monospace; }
   .fs-row .fs-meta .dot { color: var(--text-dead); }
-  .fs-row .fs-hoveract { display: none; gap: 5px; flex: none; }
+  .fs-row .fs-acts { display: flex; gap: 5px; flex: none; }
+  .fs-row .fs-earr { flex: none; }
   .fs-hact { width: 34px; height: 34px; border-radius: 9px; display: inline-flex;
               align-items: center; justify-content: center; background: var(--btn-soft-bg);
               border: 1px solid var(--btn-soft-border); color: var(--text-mid); cursor: pointer; }
   .fs-hact:hover { background: var(--bg-hover); color: var(--text-hi); }
   .fs-hact:active { transform: scale(.92); }
-  @media (hover: hover) and (min-width: 769px) {
-    .fs-row .swipe-bg { display: none; }
-    .fs-row .fs-hoveract { display: flex; }
-  }
   .fs-note { display: flex; flex-direction: column; align-items: center; gap: 12px;
               padding: 56px 20px; color: var(--text-dim); font-size: 13.5px; text-align: center; }
   .fs-note svg { opacity: .38; }
@@ -3517,7 +3491,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .tl-netrow { display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 12.5px; }
   .tl-netrow .tl-val { margin-left: 0; }
   .tl-netrow .sep { flex: 1 1 auto; border-bottom: 1px dotted var(--btn-hover); }
-  .copy-toast { position: fixed; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom));
+  .copy-toast { position: fixed; left: 50%; bottom: 32px;
       transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px;
       background: var(--glass-bg); color: var(--c-green); border: 1px solid var(--glass-bd);
       -webkit-backdrop-filter: blur(20px) saturate(1.8); backdrop-filter: blur(20px) saturate(1.8);
@@ -3540,7 +3514,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
         title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:17}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
 </header>
 <div id="ptr-indicator" aria-hidden="true"><svg class="ptr-ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="16.5"/></svg><span class="ptr-core">{{ICO:refresh:18}}</span></div>
-<!-- 浮动玻璃刷新圆钮(移动端): topbar 滚出视口后由 IntersectionObserver 显示;
+<!-- 浮动玻璃刷新圆钮(移动端+桌面): topbar 滚出视口后由 IntersectionObserver 显示;
      点击=刷新/长按=锁定自动刷新, 与 topbar 刷新钮同一状态 -->
 <span class="fab-refresh" id="fab-refresh" role="button" tabindex="0" hidden
       title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:20}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
@@ -3818,7 +3792,7 @@ function row(e, mobile) {
     ? `<span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span>`
     : "";
   if (mobile) {
-    // 手机卡片(合法表格结构): td.swipe-item 内 左滑露「复制地址」+ 头行 44px 圆形打开
+    // 手机卡片(合法表格结构): 头行右侧显式 44px 圆形 复制/打开 按钮(无滑扫手势)
     const kv = (k, v) => `<div class='kv'><span class='k'>${k}</span><span class='v'>${v}</span></div>`;
     const rows =
       kv(t("th_port"), `<a href='${link}' target='_blank' rel='noopener'>${e.port}</a>`) +
@@ -3827,12 +3801,12 @@ function row(e, mobile) {
       kv(t("th_cmd"), esc(cmd)) +
       kv(t("th_cwd"), esc(cwd)) +
       (man ? kv(t("th_ctl"), ctl) : "");
-    return `<tr><td class='swipe-item'><div class='swipe-bg'>` +
-      `<span class='swipe-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}'>${icon("copy", 12)} ${t("act_copy_addr")}</span></div>` +
-      `<div class='swipe-fg'><div class='td-head'><span class='svc'>${esc(e.name)}</span>` +
+    return `<tr><td>` +
+      `<div class='td-head'><span class='svc'>${esc(e.name)}</span>` +
       `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
+      `<span class='svc-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}' aria-label='${t("act_copy_addr")}'>${icon("copy", 15)}</span>` +
       `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>${icon("ext", 15)}</a></div>` +
-      `<div class='td-rows'>${rows}</div></div></td></tr>`;
+      `<div class='td-rows'>${rows}</div></td></tr>`;
   }
   return `<tr>
     <td class='name'><span class='svc'>${esc(e.name)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
@@ -3944,7 +3918,7 @@ function renderToolchips() {
   el.style.display = chips ? "" : "none";
 }
 
-// 复制 resume 命令(http 非安全上下文走 execCommand 降级)
+// 显式复制按钮统一处理(.gcopy 胶囊钮 / .svc-act 圆形钮; http 非安全上下文走 execCommand 降级)
 function fallbackCopy(txt, done) {
   const ta = document.createElement("textarea");
   ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
@@ -3953,11 +3927,12 @@ function fallbackCopy(txt, done) {
   ta.remove();
 }
 document.addEventListener("click", (e) => {
-  const b = e.target.closest(".gcopy, .swipe-act");
+  const b = e.target.closest(".gcopy, .svc-act");
   if (!b) return;
   const txt = b.dataset.cmd || b.dataset.copy || "";
+  const iconOnly = b.classList.contains("svc-act");  // 圆形图标钮: 反馈只换图标不塞文字
   const done = () => {
-    const old = b.innerHTML; b.innerHTML = icon("ok", 12) + " " + t("g_copied");
+    const old = b.innerHTML; b.innerHTML = icon("ok", 12) + (iconOnly ? "" : " " + t("g_copied"));
     haptic(12);
     setTimeout(() => b.innerHTML = old, 1600);
   };
@@ -4598,7 +4573,7 @@ document.querySelectorAll(".tcol").forEach(b =>
     document.querySelectorAll(".tcol").forEach(x =>
       x.classList.toggle("active", x === b));
   }));
-// 刷新控件(topbar 圆钮 + 移动端浮动圆钮共用): 点击=立即刷新, 长按(500ms)=锁定/解锁自动刷新
+// 刷新控件(topbar 圆钮 + 浮动圆钮共用): 点击=立即刷新, 长按(500ms)=锁定/解锁自动刷新
 // 锁定态=琥珀描边+锁形角标, 两个按钮视觉同步。
 let refreshHoldTimer = null, refreshHoldDone = false;
 function refreshBtns() { return [$("refresh"), $("fab-refresh")].filter(Boolean); }
@@ -4628,18 +4603,18 @@ function bindRefreshCtl(btn) {
     btn.addEventListener(ev, () => clearTimeout(refreshHoldTimer), { passive: true }));
 }
 refreshBtns().forEach(bindRefreshCtl);
-// 浮动刷新圆钮显隐: topbar(header, 已移入 main)滚出视口 → 显示; 回到顶部 → 隐藏。
-// IntersectionObserver 观察 header, root=main 滚动容器; 桌面端 isMobile()=false 恒隐藏。
+// 浮动刷新圆钮显隐: topbar(header)滚出视口 → 显示; 回到顶部 → 隐藏。
+// IntersectionObserver 以视口为 root: 移动端 header 在 main 内随内容滚走, 桌面端随文档滚走。
 (function setupFab() {
   const fab = $("fab-refresh"), hdr = document.querySelector("header");
   if (!fab || !hdr || !("IntersectionObserver" in window)) return;
   const io = new IntersectionObserver((entries) => {
     for (const en of entries) {
-      const show = !en.isIntersecting && isMobile();
+      const show = !en.isIntersecting;
       fab.hidden = !show;
       console.log("[svc-dashboard] fab " + (show ? "visible (topbar scrolled out)" : "hidden"));
     }
-  }, { root: document.querySelector("main"), threshold: 0 });
+  }, { threshold: 0 });
   io.observe(hdr);
 })();
 // 全局键盘委托: 所有 span[role=button] 控件支持 Enter/Space 触发
@@ -4673,7 +4648,7 @@ const PAGE_GROUPS = [
 ];
 let pagesHomeOrder = null, pgWrappers = null, trackEl = null, headerHome = null;
 function placeHeader(mobile) {
-  // 移动端: header 移入 main 顶部 → 随内容滚出视口(不固定); 桌面: 放回 body 原位(sticky)。
+  // 移动端: header 移入 main 顶部 → 随内容滚出视口(不固定); 桌面: 放回 body 原位(同为静态, 随文档滚动)。
   // 移动方向只在断点切换时执行一次, 载入时即按当前视口就位。
   const hdr = document.querySelector("header"), main = document.querySelector("main");
   if (!hdr || !main) return;
@@ -4880,7 +4855,7 @@ async function initAgentsPage() {
 document.addEventListener("click", (e) => {
     const g = e.target.closest(".gcard");
     if (!g || !isMobile()) return;
-    if (e.target.closest(".gcopy, .swipe-act, .swipe-bg")) return;
+    if (e.target.closest(".gcopy")) return;           // 复制 resume 命令: 交给全局 gcopy
     if (g.querySelector(".gextra")) { g.classList.toggle("open"); haptic(6); }
 });
 
@@ -4923,9 +4898,9 @@ if (TOUCH) document.addEventListener("touchend", (e) => {
   } else { lastTap = now; lastTapEl = stat; }
 }, { passive: true });
 
-// --- 触摸手势总协调: 分页滑动 / 边缘右滑返回 / 列表左滑 ---
+// --- 触摸手势总协调: 分页滑动 / 边缘右滑返回 ---
 if (TOUCH) (function setupGestures() {
-  let g = null; // {kind:"page"|"edge"|"row", id, x0, y0, t0, dx, lastX, base, row, fg, lockX}
+  let g = null; // {kind:"page"|"edge", id, x0, y0, t0, dx, lastX, lockX}
   const W = () => window.innerWidth;
   document.addEventListener("touchstart", (e) => {
     if (e.touches.length !== 1 || g) return;
@@ -4933,16 +4908,8 @@ if (TOUCH) (function setupGestures() {
     if (!isMobile()) return;
     // 边缘手势最优先: 起点 x<24px 且非首页(否则按普通分页滑动处理)
     const edge = t.clientX < 24 && page > 0;
-    const target = !edge && t.target.closest ? t.target.closest(".swipe-item") : null;
-    const swipeItem = target;
-    // 横向自身滚动的容器不参与手势; a/ chip 不排除 —— 链接上的横滑仍是列表手势, 点击照常触发
+    // 横向自身滚动的容器不参与手势
     const scroller = t.target.closest ? t.target.closest(".filters, .aglog, .termlog, select") : null;
-    if (swipeItem && !scroller) {
-      g = { kind: "row", id: t.identifier, x0: t.clientX, y0: t.clientY, t0: Date.now(),
-            fg: swipeItem.querySelector(".swipe-fg"), base: 0, lockX: null };
-      gesture.claimed = t.identifier;
-      return;
-    }
     if (scroller || !pages) return;
     // 边缘手势(上文已判定)返回概览, 否则普通分页滑动
     g = { kind: edge ? "edge" : "page", id: t.identifier, x0: t.clientX, y0: t.clientY,
@@ -4958,32 +4925,20 @@ if (TOUCH) (function setupGestures() {
     if (g.lockX === null) {
       if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return; // 未定轴
       g.lockX = Math.abs(dx) > Math.abs(dy);
-      if (g.kind === "row" || g.kind === "page" || g.kind === "edge") {
-        if (g.lockX) e.preventDefault(); // 横向手势: 阻断浏览器返回/前进导航
-      }
+      if (g.lockX) e.preventDefault(); // 横向手势: 阻断浏览器返回/前进导航
     }
     if (!g.lockX) return; // 纵向滚动交给浏览器
-    if (g.kind === "row") {
-      // 左滑露按钮: 只允许负方向(露出右侧按钮), 已露出时回推
-      const w = g.fg.parentElement.querySelector(".swipe-act");
-      const open = w ? w.offsetWidth : 96;
-      let x = Math.min(0, Math.max(-open - 24, g.base + dx));
-      g.fg.classList.add("stick");
-      g.fg.style.transform = `translate3d(${x}px,0,0)`;
-      g.dx = x;
-    } else {
-      // 分页/边缘: 跟手(阻尼 0.55), 越界回弹
-      let d = (page > 0 || dx > 0) && (page < N_PAGES - 1 || dx < 0) ? dx * 0.55
-              : dx > 0 ? (page < N_PAGES - 1 ? 0 : Math.min(64, dx * 0.18))
-                       : (page > 0 ? 0 : Math.max(-64, dx * 0.18));
-      if (g.kind === "edge" && d < -20) { g.kind = "page"; } // 反向滑: 降级为分页
-      const pct = d / W() * 100;
-      g.dx = pct;
-      if (!trackEl) return;
-      trackEl.classList.add("stick");
-      trackEl.style.transform = `translate3d(calc(${-page * PAGE_W}% + ${pct}vw),0,0)`;
-      g.lastX = t.clientX;
-    }
+    // 分页/边缘: 跟手(阻尼 0.55), 越界回弹
+    let d = (page > 0 || dx > 0) && (page < N_PAGES - 1 || dx < 0) ? dx * 0.55
+            : dx > 0 ? (page < N_PAGES - 1 ? 0 : Math.min(64, dx * 0.18))
+                     : (page > 0 ? 0 : Math.max(-64, dx * 0.18));
+    if (g.kind === "edge" && d < -20) { g.kind = "page"; } // 反向滑: 降级为分页
+    const pct = d / W() * 100;
+    g.dx = pct;
+    if (!trackEl) return;
+    trackEl.classList.add("stick");
+    trackEl.style.transform = `translate3d(calc(${-page * PAGE_W}% + ${pct}vw),0,0)`;
+    g.lastX = t.clientX;
   }, { passive: false });
 
   document.addEventListener("touchend", (e) => {
@@ -4991,15 +4946,6 @@ if (TOUCH) (function setupGestures() {
     const t = [...e.changedTouches].find(x => x.identifier === g.id);
     const done = () => { gesture.claimed = null; g = null; };
     if (!t) { done(); return; }
-    if (g.kind === "row") {
-      const open = (g.fg.parentElement.querySelector(".swipe-act") || {}).offsetWidth || 96;
-      const x = g.dx <= -open * 0.6 ? -open : 0;
-      g.fg.classList.remove("stick");
-      g.fg.style.transform = `translate3d(${x}px,0,0)`;
-      g.fg.dataset.open = x ? "1" : "";
-      if (x) haptic(6);
-      done(); return;
-    }
     const dx = (g.lockX ? g.lastX - g.x0 : 0);
     const dt = Date.now() - g.t0;
     trackEl && trackEl.classList.remove("stick");
@@ -5021,14 +4967,6 @@ if (TOUCH) (function setupGestures() {
     trackEl && trackEl.classList.remove("stick");
     applyPagesX(true);
     g = null; gesture.claimed = null;
-  }, { passive: true });
-  // 点击其他区域收起已露出的滑动按钮
-  document.addEventListener("touchstart", (e) => {
-    document.querySelectorAll(".swipe-fg[data-open]").forEach(fg => {
-      if (!fg.parentElement.contains(e.target)) {
-        fg.style.transform = "translate3d(0,0,0)"; fg.removeAttribute("data-open");
-      }
-    });
   }, { passive: true });
 })();
 
@@ -5377,16 +5315,18 @@ function fsRender() {
     const sub = e.type === "dir"
       ? `${e.count != null ? t("fs_items", { n: e.count }) : "—"}</span>`
       : `${fmtB(e.size)}</span>`;
-    return `<div class='fs-row swipe-item' data-kind='${kind}' data-type='${e.type}' data-name='${escAttr(e.name)}'>` +
-      `<div class='swipe-bg'><span class='swipe-act' role='button' tabindex='0' data-copy='${escAttr((fsState.cwd || FS_HOME) + "/" + e.name)}'>${icon("copy", 13)} ${t("fs_copy_path")}</span></div>` +
-      `<div class='swipe-fg'><span class='fs-fico ${ico[2]}'>${icon(ico[1], 19)}</span>` +
+    const acts = `<span class='fs-acts'>` +
+      `<span class='fs-hact' data-ha='copy' role='button' tabindex='0' title='${t("fs_copy_path")}' aria-label='${t("fs_copy_path")}'>${icon("copy", 15)}</span>` +
+      (e.type === "dir" ? "" :
+        `<span class='fs-hact' data-ha='dl' role='button' tabindex='0' title='${t("tl_fs_dl")}' aria-label='${t("tl_fs_dl")}'>${icon("down", 15)}</span>`) +
+      `</span>`;
+    return `<div class='fs-row' data-kind='${kind}' data-type='${e.type}' data-name='${escAttr(e.name)}'>` +
+      `<span class='fs-fico ${ico[2]}'>${icon(ico[1], 19)}</span>` +
       `<span class='fs-main'><span class='fs-nm'>${escHtml(e.name)}</span>` +
       `<span class='fs-meta'><span>${sub}<span class='dot'> · </span>${fsRelTime(e.mtime)}</span></span></span>` +
-      (e.type === "dir" ? `<span class='fs-earr' style='color:var(--text-dead)'>${icon("chev", 15)}</span>`
-                        : `<span class='fs-hoveract'>` +
-                          `<span class='fs-hact' data-ha='copy' role='button' tabindex='0' title='${t("fs_copy_path")}'>${icon("copy", 15)}</span>` +
-                          `<span class='fs-hact' data-ha='dl' role='button' tabindex='0' title='${t("tl_fs_dl")}'>${icon("down", 15)}</span></span>`) +
-      `</div></div>`;
+      acts +
+      (e.type === "dir" ? `<span class='fs-earr' style='color:var(--text-dead)'>${icon("chev", 15)}</span>` : "") +
+      `</div>`;
   }).join("");
   list.innerHTML = html
     || (fsState.err ? `<div class='fs-errcard'>${icon("err", 16)}<span>${escHtml(fsState.err)}</span>` +
@@ -5800,7 +5740,7 @@ function initToolsPage() {
       const crumb = e.target.closest("[data-crumb]");
       if (crumb) { fsOpen(crumb.dataset.crumb, crumb.dataset.crumb === fsState.parent ? "up" : "down"); return; }
       const ha = e.target.closest("[data-ha]");
-      if (ha) {   // 桌面 hover 按钮
+      if (ha) {   // 行内显式操作钮(复制/下载)
         const row = ha.closest(".fs-row");
         const path = fsState.cwd + "/" + row.dataset.name;
         if (ha.dataset.ha === "copy") copyText(path, ha);
@@ -5811,7 +5751,6 @@ function initToolsPage() {
       if (retry) { fsOpen(fsState.cwd || FS_HOME); return; }
       const row = e.target.closest(".fs-row");
       if (!row) return;
-      if (e.target.closest(".swipe-act, .swipe-bg")) return;
       if (row.dataset.type === "dir") { haptic(6); fsOpen(fsState.cwd + "/" + row.dataset.name); }
       else fsOpenFile(row.dataset.name);
     });
