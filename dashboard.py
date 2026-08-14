@@ -3334,6 +3334,11 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .badge-direct  { background: var(--chip-bg); color: var(--text-faint); border: 1px solid var(--chip-border); }
   .badge-self    { background: var(--btn-bg); color: var(--text-title); border: 1px solid var(--btn-hover); }
   .badge-paused  { background: var(--c-warn-bg); color: var(--c-warn); border: 1px solid var(--c-warn-border); }
+  /* P0-6: 服务行行首运行状态点 红=paused/异常 绿=正常 灰=未知(受管状态查询前/查询失败) */
+  .svc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+             background: var(--c-green); margin-right: 7px; flex: none; }
+  .svc-dot.off { background: var(--dot-off); }
+  .svc-dot.bad { background: var(--c-red); }
   .detail { display: block; color: var(--text-ghost); font-size: 11px; font-family: ui-monospace, monospace; margin-top: 2px; }
   .local { color: var(--text-dim); font-size: 11px; }
   .ctl { white-space: nowrap; }
@@ -4216,6 +4221,9 @@ function row(e, mobile) {
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   // 可管理的手动进程服务: 行尾渲染 暂停/继续 按钮(状态由 fillCtl 填充)
   const man = MANAGE_PROC_BY_PORT[e.port];
+  // P0-6: 行首运行状态点(红=paused/异常 绿=正常 灰=受管单元状态未知); 受管单元由 fillSvcDots 异步上色
+  const svcUnit = man || (e.type === "systemd" && MANAGE_SVC_BY_UNIT[e.unit]) || null;
+  const svcDot = `<span class="svc-dot ${e.paused ? "bad" : svcUnit ? "off" : "on"}"${svcUnit ? ` data-unit="${esc(svcUnit)}"` : ""}></span>`;
   const ctl = man
     ? `<span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span>`
     : "";
@@ -4232,13 +4240,13 @@ function row(e, mobile) {
       kv(t("th_cwd"), esc(cwd)) +
       (man ? kv(t("th_ctl"), ctl) : "");
     return `<tr><td>` +
-      `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
+      `${svcDot}<span class='badge ${badge[1]}'>${text}</span>${detail}` +
       `<span class='svc-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}' aria-label='${t("act_copy_addr")}'>${icon("copy", 15)}</span>` +
       `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>${icon("ext", 15)}</a></div>` +
       `<div class='td-rows'>${rows}</div></td></tr>`;
   }
   return `<tr>
-    <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
+    <td class='port' data-label='${t("th_port")}'>${svcDot}<a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
     <td class='addr' data-label='${t("th_addr")}'>${esc(ip)}${loop}</td>
     <td class='pid' data-label='PID'>${e.pids.join(", ")}</td>
     <td class='cmd' data-label='${t("th_cmd")}'>
@@ -4291,6 +4299,7 @@ function applyFilter() {
     '<tr><td class="empty" colspan="6">' + t("no_match") + '</td></tr>';
   $("count").textContent = shown.length;
   fillCtl(); // 服务表行尾 暂停/继续 按钮状态
+  fillSvcDots(); // P0-6: 行首状态点按受管单元状态上色
 }
 
 function renderSys(s) {
@@ -4579,6 +4588,34 @@ const MANAGE_LABELS = { start: t("m_start"), stop: t("m_stop"), restart: t("m_re
 // 端口 -> 受管手动进程服务 id(服务表行尾按钮用)
 const MANAGE_PROC_BY_PORT = {};
 MANAGE_UNITS.filter(u => u.kind === "proc").forEach(u => MANAGE_PROC_BY_PORT[u.port] = u.id);
+// systemd 单元名 -> 受管 id(P0-6 行首状态点; 本列表单元名 = id + ".service")
+const MANAGE_SVC_BY_UNIT = {};
+MANAGE_UNITS.filter(u => u.kind === "systemd").forEach(u => { MANAGE_SVC_BY_UNIT[u.id + ".service"] = u.id; });
+
+// P0-6: 行首状态点按受管单元状态上色(15s 缓存; fillCtl 的按钮查询保持独立实时不受影响)
+const svcDotCache = {};
+async function fillSvcDots() {
+  const dots = document.querySelectorAll(".svc-dot[data-unit]");
+  const uids = [...new Set([...dots].map(d => d.dataset.unit))];
+  const now = Date.now();
+  await Promise.all(uids.map(async (uid) => {
+    const c = svcDotCache[uid];
+    if (c && now - c.t < 15000) return;
+    try {
+      const r = await fetch("/api/manage?unit=" + encodeURIComponent(uid) + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
+      svcDotCache[uid] = { t: Date.now(), st: await r.json() };
+    } catch (err) {
+      svcDotCache[uid] = { t: Date.now(), st: null };   // 查询失败 → 保持灰点
+    }
+  }));
+  dots.forEach(d => {
+    const st = (svcDotCache[d.dataset.unit] || {}).st;
+    d.classList.remove("off");   // 初始灰态由下面的 toggle 重设, 防止 off/on 并存
+    d.classList.toggle("on", !!(st && st.ok && st.active === "active"));
+    d.classList.toggle("bad", !!(st && st.ok && st.active !== "active"));
+    d.classList.toggle("off", !(st && st.ok));   // 查询失败/未知 → 灰
+  });
+}
 
 // 服务表行尾的 暂停/继续 按钮: 查状态填充文案,点击执行动作。
 async function fillCtl() {
