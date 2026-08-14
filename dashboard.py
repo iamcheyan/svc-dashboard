@@ -733,7 +733,7 @@ L10N = {
         "ev_other": "·", "ev_none": "暂无事件",
         "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分钟前", "g_ago_h": "{h} 小时前",
         "tab_home": "概览", "tab_goal": "Goal", "tab_svc": "服务", "tab_model": "模型", "tab_log": "日志",
-        "act_open": "打开", "act_copy_addr": "复制地址", "g_detail": "详情",
+        "act_open": "打开", "act_copy_addr": "复制地址", "g_detail": "详情", "g_view_detail": "查看详情", "g_status_detail": "当前状态", "g_runtime_detail": "运行信息", "g_terminal_detail": "实时终端（最近 40 行）", "g_activity_detail": "任务活动", "g_watchdog_detail": "Watchdog 事件", "g_field_status": "状态", "g_field_idle": "最近活动", "g_seconds": "{n} 秒前", "g_no_activity": "暂无可显示的活动",
         "chart_title": "负载 / CPU 趋势", "chart_win": "窗口 {n} 点",
         "chart_empty": "采样中：刷新几次就有曲线了（双指捏合可调时间窗）",
         "log_pick": "选择 agent 查看日志",
@@ -746,6 +746,7 @@ L10N = {
         "al_lost": "会话丢失", "al_done": "已完成,待查看",
         "al_ignore": "忽略", "al_detail": "详情",
         "rc_title": "最近活动", "rc_more": "全部 →",
+        "hp_web": "Web 服务", "hp_web_hint": "点一下直接打开", "hp_goal_sum": "Goal 概览", "hp_goal_more": "Goal 页 →", "hp_open": "打开",
         "lf_status": "状态", "lf_source": "来源", "lf_time": "时间",
         "lf_all": "全部", "lf_success": "成功", "lf_warn": "告警",
         "lf_fail": "失败", "lf_recover": "恢复",
@@ -770,7 +771,7 @@ L10N = {
         "fs_rel_now": "刚刚", "fs_rel_s": "{n} 秒前", "fs_rel_m": "{n} 分钟前",
         "fs_rel_h": "{n} 小时前", "fs_rel_d": "{n} 天前", "fs_rel_y": "昨天",
         "g_ago_d": "{d} 天前",
-        "tab_tools": "工具", "cat_all": "全部", "cat_more": "查看更多",
+        "tab_tools": "工具",
         "tl_health_title": "健康检查", "tl_health_run": "跑一次检查", "tl_health_loading": "检查中…",
         "tl_h_load": "负载", "tl_h_cpu": "CPU", "tl_h_mem": "内存", "tl_h_swap": "Swap",
         "tl_h_disk": "磁盘 /", "tl_h_temp": "温度", "tl_h_trend": "磁盘趋势",
@@ -877,8 +878,8 @@ L10N = {
         "ev_other": "·", "ev_none": "No events yet",
         "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago",
         "tab_home": "Overview", "tab_goal": "Goal", "tab_svc": "Services", "tab_model": "Models", "tab_log": "Logs",
-        "tab_tools": "Tools", "cat_all": "All", "cat_more": "View more",
-        "act_open": "Open", "act_copy_addr": "Copy address", "g_detail": "details",
+        "tab_tools": "Tools",
+        "act_open": "Open", "act_copy_addr": "Copy address", "g_detail": "details", "g_view_detail": "View details", "g_status_detail": "Current status", "g_runtime_detail": "Runtime", "g_terminal_detail": "Live terminal (last 40 lines)", "g_activity_detail": "Task activity", "g_watchdog_detail": "Watchdog events", "g_field_status": "Status", "g_field_idle": "Last activity", "g_seconds": "{n}s ago", "g_no_activity": "No activity to show",
         "chart_title": "Load / CPU trend", "chart_win": "window {n} pts",
         "chart_empty": "Collecting samples: refresh a few times (pinch to adjust window)",
         "log_pick": "Pick an agent for logs",
@@ -891,6 +892,7 @@ L10N = {
         "al_lost": "session lost", "al_done": "completed, review pending",
         "al_ignore": "Ignore", "al_detail": "Details",
         "rc_title": "Recent activity", "rc_more": "All →",
+        "hp_web": "Web services", "hp_web_hint": "tap to open", "hp_goal_sum": "Goals", "hp_goal_more": "Goals →", "hp_open": "Open",
         "lf_status": "status", "lf_source": "source", "lf_time": "time",
         "lf_all": "all", "lf_success": "ok", "lf_warn": "warn",
         "lf_fail": "fail", "lf_recover": "recovered",
@@ -1022,7 +1024,7 @@ L10N = {
         "ev_other": "·", "ev_none": "イベントなし",
         "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分前", "g_ago_h": "{h} 時間前",
         "tab_home": "概要", "tab_goal": "Goal", "tab_svc": "サービス", "tab_model": "モデル", "tab_log": "ログ",
-        "act_open": "開く", "act_copy_addr": "アドレスをコピー", "g_detail": "詳細",
+        "act_open": "開く", "act_copy_addr": "アドレスをコピー", "g_detail": "詳細", "g_view_detail": "詳細を見る", "g_status_detail": "現在の状態", "g_runtime_detail": "実行情報", "g_terminal_detail": "ライブ端末（最新40行）", "g_activity_detail": "タスク活動", "g_watchdog_detail": "Watchdogイベント", "g_field_status": "状態", "g_field_idle": "最終活動", "g_seconds": "{n}秒前", "g_no_activity": "表示できる活動はありません",
         "chart_title": "負荷 / CPU 推移", "chart_win": "ウィンドウ {n} 点",
         "chart_empty": "サンプル収集中：数回更新すると曲線になります（ピンチで調整）",
         "log_pick": "エージェントを選択",
@@ -1035,6 +1037,7 @@ L10N = {
         "al_lost": "セッション消失", "al_done": "完了: 確認待ち",
         "al_ignore": "無視", "al_detail": "詳細",
         "rc_title": "最近の活動", "rc_more": "すべて →",
+        "hp_web": "Webサービス", "hp_web_hint": "タップで開く", "hp_goal_sum": "ゴール", "hp_goal_more": "ゴール一覧 →", "hp_open": "開く",
         "lf_status": "状態", "lf_source": "ソース", "lf_time": "期間",
         "lf_all": "すべて", "lf_success": "成功", "lf_warn": "注意",
         "tl_fs_title": "ファイル", "tl_fs_filter": "このフォルダを絞り込み…", "tl_fs_hidden": "隠しファイル表示",
@@ -1059,7 +1062,7 @@ L10N = {
         "evk_nudge": "催促", "evk_recover": "復旧", "evk_pause": "一時停止",
         "evk_cleanup": "クリーンアップ", "evk_commit": "コミット", "evk_other": "その他",
         "g_ago_d": "{d} 日前",
-        "tab_tools": "ツール", "cat_all": "すべて", "cat_more": "もっと見る",
+        "tab_tools": "ツール",
         "tl_health_title": "ヘルスチェック", "tl_health_run": "チェック実行", "tl_health_loading": "チェック中…",
         "tl_h_load": "負荷", "tl_h_cpu": "CPU", "tl_h_mem": "メモリ", "tl_h_swap": "Swap",
         "tl_h_disk": "ディスク /", "tl_h_temp": "温度", "tl_h_trend": "ディスク推移",
@@ -2475,6 +2478,70 @@ def scan_goals():
     return cards
 
 
+def goal_detail(gid, session=""):
+    """Goal 详情: 当前状态、watchdog 配置、tmux 实时画面和近期 JSONL 活动。"""
+    wd = watchdog_goals()
+    g = wd.get(gid or "", {})
+    if not g and session:   # 按 session 兜底匹配 watchdog 行
+        g = next((v for v in wd.values() if v.get("session") == session), {})
+    cards = scan_goals()
+    card = next((c for c in cards if (gid and c.get("gid") == gid)
+                 or (session and c.get("session") == session)), None)
+    tmux = g.get("session") or session or (card or {}).get("session", "")
+    panes = scan_tmux()
+    pane = next((p for p in panes if p["session"] == tmux), None)
+    capture = _tmux_capture(f'{tmux}:{pane["pane"]}' if pane else "") or []
+    path = g.get("jsonl", "")
+    if not path:
+        # 兜底1: watchdog 行按 session 反查到的完整 gid 已在 ev_gid; 兜底2: scan_omp 的会话 id
+        omg = next((o for o in scan_omp() if o.get("id")), None) if not gid else None
+        for cand in (gid, omg and omg.get("id")):
+            if not cand:
+                continue
+            for q in glob.glob(os.path.join(OMP_SESSION_ROOT, "**", f"*_{cand}.jsonl"), recursive=True):
+                path = q
+                break
+            if path:
+                break
+        # 兜底3: 按 tmux session 名在 sessions 目录找最新 jsonl(文件名无会话id时)
+        if not path and tmux:
+            cands = sorted(glob.glob(os.path.join(OMP_SESSION_ROOT, "**", "*.jsonl"), recursive=True), key=os.path.getmtime, reverse=True)
+            for q in cands[:80]:
+                try:
+                    with open(q, "rb") as fh:
+                        head = fh.read(4096).decode("utf-8", "ignore")
+                    if tmux in head or (card and card.get("name") and card["name"] in head):
+                        path = q
+                        break
+                except OSError:
+                    continue
+    activities = []
+    if path and os.path.exists(path):
+        for raw in reversed(_tail_lines(path, limit=256 * 1024)):
+            try:
+                event = json.loads(raw)
+            except (ValueError, TypeError):
+                continue
+            row = _event_text(event, DEFAULT_LANG)
+            if row and row[0] != "evt":
+                activities.append({"kind": row[0], "text": row[1]})
+            if len(activities) >= 40:
+                break
+        activities.reverse()
+    # watchdog 日志里 gid 是 8 位短 id([01a0006d] 前缀), 与完整 session gid 按[:8]对齐;
+    # 查询可能只给 session 名 → 经 watchdog_goals() 反查完整 gid 再匹配
+    ev_gid = gid or next((k for k, v in wd.items() if v.get("session") == tmux), "")
+    short = ev_gid[:8]
+    events = [e for e in parse_watchdog_events(limit=80)
+              if short and str(e.get("gid", ""))[:8] == short]
+    return {"ok": True, "goal": card or {"gid": gid, "session": tmux},
+            "watchdog": {"gid": gid, "jsonl": path, "session": tmux,
+                         "workdir": g.get("workdir") or (card or {}).get("workdir", ""),
+                         "label": g.get("label", "")},
+            "pane": pane, "capture": capture, "activities": activities,
+            "events": events}
+
+
 # 快捷工具入口: 端口存活才显示(chips)
 TOOL_LINKS = [("dbeditor", 8810), ("dbviewer", 8800),
               ("wilviewer", 8765), ("mapviewer", 8899)]
@@ -2585,9 +2652,13 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
             prog = "<br>".join(escape(x) for x in c["progress"])
             extra.append(f'<div class="gprog">{prog}</div>')
         more = (f'<span class="gmore" title="{t(lang, "g_detail")}">{icon("chev", 12)}</span>') if extra else ""
+        detail = (f'<span class="g-detail-btn" role="button" tabindex="0" '
+                  f'data-gid="{escape(c["gid"], quote=True)}" '
+                  f'data-session="{escape(c["session"], quote=True)}">'
+                  f'{icon("doc", 12)} {t(lang, "g_view_detail")}</span>')
         head = (f'<div class="ghead">{glight}'
                 f'<span class="gname">{escape(c["name"])}</span>'
-                f'<span class="gstate">{t(lang, key)}</span>{more}</div>')
+                f'<span class="gstate">{t(lang, key)}</span>{more}{detail}</div>')
         if c["label"] and c["label"] != c["name"]:
             head += f'<div class="gsub">{escape(c["label"][:60])}</div>'
         elif c["objective"]:
@@ -3101,10 +3172,43 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .gcard .glight { font-size: 13px; }
   .gcard .gname { font-weight: 600; color: var(--text-hi); font-size: 14px; word-break: break-all; }
   .gcard .gstate { color: var(--text-faint); font-size: 11.5px; }
+  .g-detail-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; flex: none;
+                  cursor: pointer; color: var(--text-dim); font-size: 11px; padding: 3px 7px;
+                  border: 1px solid var(--btn-soft-border); border-radius: 999px; }
+  .g-detail-btn:hover, .g-detail-btn:focus-visible { color: var(--text-title); border-color: var(--btn-soft-hover-bd); }
+  .g-detail-body { max-height: min(68vh, 620px); overflow-y: auto; font-size: 12px; }
+  .g-detail-section { margin: 0 0 14px; }
+  .g-detail-section h3 { margin: 0 0 6px; color: var(--text-dim); font-size: 12px; font-weight: 600; }
+  .g-detail-kv { display: grid; grid-template-columns: 76px 1fr; gap: 5px 9px; }
+  .g-detail-kv .k { color: var(--text-ghost); }
+  .g-detail-kv .v { color: var(--text-main); word-break: break-word; font-family: ui-monospace, monospace; }
+  .g-detail-log { white-space: pre-wrap; word-break: break-word; background: var(--term-bg); border: 1px solid var(--term-bd);
+                 border-radius: 7px; padding: 8px; max-height: 220px; overflow: auto; font: 11px/1.45 ui-monospace, monospace; }
+  .g-detail-events { display: grid; gap: 4px; }
+  .g-detail-event { padding: 5px 7px; border-left: 2px solid var(--border); color: var(--text-main); }
+  .g-detail-event .time { color: var(--text-ghost); margin-right: 7px; }
+  .g-detail-event .kind { color: var(--accent); margin-right: 5px; }
   .gcard .gsub { color: var(--text-dim); font-size: 11.5px; margin-top: 2px;
                  word-break: break-all; line-height: 1.45; }
   .gcard .grow { display: flex; justify-content: space-between; gap: 10px;
                  font-size: 12.5px; color: var(--text-soft); padding: 3px 0 0; }
+  /* 桌面首页网格: Web磁贴 / Goal摘要 / 最近活动 */
+  .hp-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
+  .hp-grid .gpanel { margin-bottom: 0; }
+  .hp-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .hp-tile { display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
+             background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
+             padding: 10px 12px; text-decoration: none; color: var(--text-hi); font-weight: 600; font-size: 13px; }
+  .hp-tile:hover { border-color: var(--btn-hover); background: var(--bg-hover); }
+  .hp-tile-port { color: var(--text-faint); font-weight: 400; font-size: 11px; font-family: ui-monospace, monospace; }
+  .hp-goal-line { font-size: 13px; color: var(--text-main); margin-bottom: 8px; }
+  .hp-goal-row { display: flex; align-items: baseline; gap: 7px; padding: 5px 0; font-size: 12.5px;
+                 border-bottom: 1px solid var(--border-faint); }
+  .hp-goal-row:last-child { border-bottom: none; }
+  .hp-goal-name { color: var(--text-hi); font-weight: 600; word-break: break-all; }
+  .hp-goal-ctx { color: var(--text-faint); font-family: ui-monospace, monospace; font-size: 11px; }
+  .hp-goal-ago { margin-left: auto; color: var(--text-ghost); font-size: 11px; flex: none; }
+  @media (max-width: 1100px) { .hp-grid { grid-template-columns: 1fr 1fr; } .hp-grid #recent { grid-column: 1 / -1; } }
   .gcard .grow + .grow { border-top: none; }
   .gcard .grow > span:first-child { color: var(--text-ghost); flex: none; }
   .gcard .gtx { font-family: ui-monospace, monospace; color: var(--text-mid); }
@@ -3308,6 +3412,11 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .lv-more { font-size: 12px; color: var(--text-dim); padding: 10px 0 2px; }
 
   @media (max-width: 768px) {
+  /* 手机: 首页网格单列堆叠(磁贴两列小格) */
+  .hp-grid { display: block; }
+  .hp-grid .gpanel { margin-bottom: 14px; }
+  .hp-tiles { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 7px; }
+  .hp-tile { padding: 9px 10px; font-size: 12.5px; }
     .meta { display: none !important; }  /* 移动端: 更新时间/端口数与主体状态卡重复,隐藏 */
     html { -webkit-tap-highlight-color: transparent; }
     /* topbar 不固定(iOS Large Title 风, 基础样式已静态化/透明/大标题/玻璃圆钮):
@@ -3736,15 +3845,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .cat-off { display: none !important; }   /* 分类过滤: 仅桌面 JS 加, 断点切回移动时移除 */
   @media (min-width: 769px) { #catbar { display: flex; } }
   /* "全部"模式预览折叠: 分区限高渐隐 + 右下"查看更多"跳对应分类 */
-  .cat-preview { position: relative; overflow: hidden; }
-  .cat-preview::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 72px;
-      background: linear-gradient(rgba(0,0,0,0), var(--bg)); pointer-events: none; }
-  .cat-more { position: absolute; right: 14px; bottom: 10px; z-index: 2;
-      display: inline-flex; align-items: center; gap: 4px;
-      appearance: none; border: 1px solid var(--chip-border); background: var(--bg-elev);
-      color: var(--accent); border-radius: 999px; padding: 7px 16px; font-size: 12.5px;
-      cursor: pointer; font-weight: 600; }
-  .cat-more:hover { background: var(--bg-hover); }
 </style>
 <header>
   <!-- topbar 重设计: 左=服务器名(HOSTNAME), 右=刷新按钮(点击刷新/长按锁定自动刷新)。
@@ -3783,9 +3883,20 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <h2>{{T:al_title}}</h2>
   <div id="alert-body" class="alert-body"><div class="gempty">{{T:st_loading}}</div></div>
 </div>
-<div class="gpanel" id="recent">
-  <h2>{{T:rc_title}} <span class="ghint rc-more" role="button" tabindex="0">{{T:rc_more}}</span></h2>
-  <div id="recent-body"></div>
+<!-- 桌面首页网格: Web磁贴 / Goal摘要 / 最近活动 (移动端沿用原顺序,由 PAGE_GROUPS 分组) -->
+<div class="hp-grid" id="hp-grid">
+  <div class="gpanel hp-web">
+    <h2>{{T:hp_web}} <span class="ghint">{{T:hp_web_hint}}</span></h2>
+    <div class="hp-tiles" id="hp-tiles"><div class="gempty">{{T:st_loading}}</div></div>
+  </div>
+  <div class="gpanel hp-goals">
+    <h2>{{T:hp_goal_sum}} <span class="ghint hp-more" data-go="goal" role="button" tabindex="0">{{T:hp_goal_more}}</span></h2>
+    <div id="hp-goal-body"><div class="gempty">{{T:st_loading}}</div></div>
+  </div>
+  <div class="gpanel" id="recent">
+    <h2>{{T:rc_title}} <span class="ghint rc-more" role="button" tabindex="0">{{T:rc_more}}</span></h2>
+    <div id="recent-body"></div>
+  </div>
 </div>
 {{SYSBAR}}
 <div class="gpanel" id="repos">
@@ -4697,7 +4808,6 @@ function renderAlerts(alerts) {
 
 let lastSvc = { ok: 0, total: 0 };
 async function renderOverview(apiData) {
-  if (!isMobile()) return;
   if (apiData && apiData.services) {
     lastSvc = { ok: apiData.services.filter(s => !s.paused).length, total: apiData.services.length };
   }
@@ -4732,8 +4842,42 @@ async function renderOverview(apiData) {
       `<span class="rc-sub">${escHtml(e.text)}</span></span>` +
       `<span class="rc-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
   }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
+  if (!isMobile()) {   // 桌面首页: Web磁贴 + Goal 摘要(移动端走原卡片流)
+    renderHomeTiles(apiData && apiData.services);
+    renderHomeGoals(goals, nRun, nBad);
+  }
   updateBadge(nAlert);
   refreshFreshness();
+}
+function renderHomeTiles(services) {
+  const el = $("hp-tiles");
+  if (!el) return;
+  const svcs = services || [];
+  const web = svcs.filter(e => {
+    const ip = e.ip || "";
+    const loop = ip.startsWith("127.") || ip === "::1" || ip.startsWith("::ffff:127.");
+    return e.scope !== "system" && !e.paused && !loop && ![22000, 5355].includes(+e.port);
+  });
+  // 同端口去重(docker v4/v6 双行)
+  const seen = new Set(), uniq = [];
+  web.forEach(e => { const k = e.port + ":" + (e.name || ""); if (!seen.has(k)) { seen.add(k); uniq.push(e); } });
+  el.innerHTML = uniq.length ? uniq.map(e => {
+    const link = `http://${linkHost(location.hostname)}:${e.port}/`;
+    const nm = (e.name || "?").replace(/ (docker)/, "").replace(/[.]py$/, "");
+    return `<a class="hp-tile" href="${escAttr(link)}" target="_blank" rel="noopener">`
+      + `<span class="hp-tile-name">${escHtml(nm)}</span><span class="hp-tile-port">:${e.port}</span></a>`;
+  }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
+}
+function renderHomeGoals(goals, nRun, nBad) {
+  const el = $("hp-goal-body");
+  if (!el) return;
+  const act = (goals || []).filter(g => g.light === "active" || g.light === "retry")
+    .sort((a, b) => (b.idle_sec || 0) - (a.idle_sec || 0)).slice(0, 4);
+  el.innerHTML = `<div class="hp-goal-line"><b>${nRun}</b> ${t("g_active")} · <b class="${nBad ? "t-red" : ""}">${nBad}</b> ${t("g_paused")}</div>`
+    + (act.length ? act.map(g => `<div class="hp-goal-row"><span class="glight t-green">${icon("dot", 10)}</span>`
+       + `<span class="hp-goal-name">${escHtml(g.name)}</span><span class="hp-goal-ctx">${escHtml(g.ctx_raw || "")}</span>`
+       + `<span class="hp-goal-ago">${g.idle_sec != null ? escHtml(agoStr(g.idle_sec)) : ""}</span></div>`).join("")
+      : `<div class="gempty">${t("g_none")}</div>`);
 }
 function updateBadge(n) {
   const b = $("tab-alert-badge");
@@ -4977,7 +5121,7 @@ const gesture = { claimed: null };
 // 移动端把各分区装进 6 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#statuscard", ".mgrid4", "#alerts", "#recent", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
+  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   ["#logpage"],
   ["#goals"],
   ["#filters", "#tasks", "#svc"],
@@ -5028,10 +5172,9 @@ function regroupPages() {
 }
 mqMobile.addEventListener("change", () => {
   regroupPages(); drawChart();
-  // 桌面分类过滤与移动分页互斥: 切到移动清 .cat-off/.cat-preview(display 盖 .pg 分页)
+  // 桌面分类过滤与移动分页互斥: 切到移动清 .cat-off(分页自身就按页隔离内容)
   if (mqMobile.matches) {
     document.querySelectorAll(".cat-off").forEach(el => el.classList.remove("cat-off"));
-    clearCatPreview();
   } else setCat(curCat, false);   // 切回桌面: 恢复选中分类的过滤
 });
 // --- 分页(概览/日志/Goal/模型/ツール) ---
@@ -5215,11 +5358,57 @@ async function initAgentsPage() {
     }));
 }
 
+// --- Goal 详情: 状态 + watchdog 配置 + tmux 画面 + JSONL 活动 + watchdog 事件 ---
+function goalDetailHtml(d) {
+  const esc = escHtml;
+  const g = d.goal || {}, w = d.watchdog || {}, p = d.pane || {};
+  const kv = (k, v) => `<span class="k">${esc(k)}</span><span class="v">${esc(v || "—")}</span>`;
+  const activity = (d.activities || []).map(x => `<div class="g-detail-event"><span class="kind">${esc(x.kind)}</span>${esc(x.text)}</div>`).join("");
+  const events = (d.events || []).map(x => `<div class="g-detail-event"><span class="time">${esc(x.time || "")}</span><span class="kind">${esc(x.kind || "event")}</span>${esc(x.text || "")}</div>`).join("");
+  const capture = (d.capture || []).join("\\n");
+  return `<div class="g-detail-body">
+    <section class="g-detail-section"><h3>${t("g_status_detail")}</h3><div class="g-detail-kv">` +
+      kv(t("g_field_status"), g.light) + kv(t("g_field_idle"), g.idle_sec == null ? "—" : t("g_seconds", { n: g.idle_sec })) +
+      kv("Context", g.ctx_raw) + kv("Retry", g.retry) + kv("进度", (g.progress || []).join("\\n")) + `</div></section>` +
+    `<section class="g-detail-section"><h3>${t("g_runtime_detail")}</h3><div class="g-detail-kv">` +
+      kv("Goal ID", g.gid || w.gid) + kv("Session", w.session) + kv("PID / Pane", `${p.pid || "—"} / ${p.pane || "—"}`) + kv("工作目录", w.workdir) + kv("JSONL", w.jsonl) + `</div></section>` +
+    (capture ? `<section class="g-detail-section"><h3>${t("g_terminal_detail")}</h3><pre class="g-detail-log">${esc(capture)}</pre></section>` : "") +
+    `<section class="g-detail-section"><h3>${t("g_activity_detail")} (${(d.activities || []).length})</h3><div class="g-detail-events">${activity || `<div>${t("g_no_activity")}</div>`}</div></section>` +
+    `<section class="g-detail-section"><h3>${t("g_watchdog_detail")} (${(d.events || []).length})</h3><div class="g-detail-events">${events || `<div>${t("g_no_activity")}</div>`}</div></section>
+  </div>`;
+}
+async function openGoalDetail(btn) {
+  const modal = $("ui-modal"), title = $("ui-dialog-title"), msg = $("ui-dialog-msg"), ok = $("ui-ok"), cancel = $("ui-cancel");
+  if (!modal || !title || !msg || !cancel) return;
+  title.innerHTML = icon("doc", 17) + " <span>" + t("g_view_detail") + "</span>";
+  msg.innerHTML = `<div class="g-detail-body">${t("a_loading")}</div>`;
+  if (ok) ok.hidden = true;
+  cancel.textContent = t("m_close"); modal.hidden = false; document.body.classList.add("modal-open");
+  const close = () => { modal.hidden = true; document.body.classList.remove("modal-open"); if (ok) ok.hidden = false; cancel.textContent = t("m_cancel"); cancel.removeEventListener("click", close); modal.removeEventListener("click", outside); document.removeEventListener("keydown", key); };
+  const outside = e => { if (e.target === modal) close(); };
+  const key = e => { if (e.key === "Escape") close(); };
+  cancel.addEventListener("click", close); modal.addEventListener("click", outside); document.addEventListener("keydown", key);
+  try {
+    const q = "gid=" + encodeURIComponent(btn.dataset.gid || "") + "&session=" + encodeURIComponent(btn.dataset.session || "");
+    const r = await fetch("/api/goaldetail?" + q, { cache: "no-store" });
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.msg || "HTTP " + r.status);
+    msg.innerHTML = goalDetailHtml(d);
+  } catch (e) { msg.innerHTML = `<div class="g-detail-log">${escHtml(e.message)}</div>`; }
+  cancel.focus();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest(".g-detail-btn");
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation(); openGoalDetail(b);
+});
+
 // --- goal 卡片展开(点标题切换 .gextra) ---
 document.addEventListener("click", (e) => {
     const g = e.target.closest(".gcard");
     if (!g || !isMobile()) return;
     if (e.target.closest(".gcopy")) return;           // 复制 resume 命令: 交给全局 gcopy
+    if (e.target.closest(".g-detail-btn")) return;    // 查看详情: 交给 goal 详情弹层
     if (g.querySelector(".gextra")) { g.classList.toggle("open"); haptic(6); }
 });
 
@@ -6210,71 +6399,36 @@ function initToolsPage() {
 }
 
 // --- 桌面端分类条(右上角 #catbar): 过滤 #pages 各分区; 移动端隐藏(底部页签), 断点切换时清过滤 ---
-const CATS = [   // [id, i18n key]; 顺序 = 展示顺序
-  ["all", "cat_all"], ["home", "tab_home"], ["goal", "tab_goal"],
+const CATS = [   // [id, i18n key]; 顺序 = 展示顺序 ("全部"已删: 无信息架构,首页即导航面板)
+  ["home", "tab_home"], ["goal", "tab_goal"],
   ["svc", "tab_svc"], ["tools", "tab_tools"],
 ];
 const CAT_SELS = {   // 桌面可见分区 → 分类(与移动端 PAGE_GROUPS 对齐; 日志/模型页为移动专用不设)
-  home: ["#sysbar", "#repos", "#toolchips", "#events"],
+  home: ["#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   goal: ["#goals"],
   svc: ["#filters", "#tasks", "#svc"],
   tools: ["#toolspage"],
 };
 var curCat = "all";
-const CAT_PREVIEW = {   // "全部"模式预览折叠: [选择器, 限高px]; 短分区(sysbar等)不限, 长分区收成一段
-  home: [["#events", 260]],
-  goal: [["#goals", 340]],
-  svc: [["#svc", 420]],
-  tools: [["#toolspage", 480]],
-};
-function clearCatPreview() {
-  document.querySelectorAll(".cat-preview-wrap").forEach(w => {   // 表格包装 div: 先还原子节点再删
-    while (w.firstChild) w.before(w.firstChild);
-    w.remove();
-  });
-  document.querySelectorAll(".cat-preview").forEach(el => { el.classList.remove("cat-preview"); el.style.maxHeight = ""; });
-  document.querySelectorAll(".cat-more").forEach(el => el.remove());
-}
 function setCat(c, save) {
   curCat = c;
   document.querySelectorAll("#catbar .cat").forEach(b => b.classList.toggle("active", b.dataset.cat === c));
-  clearCatPreview();
   const keep = new Set((CAT_SELS[c] || []).map(s => document.querySelector(s)).filter(Boolean));
-  document.querySelectorAll("#pages > *").forEach(el => el.classList.toggle("cat-off", c !== "all" && !keep.has(el)));
-  if (c === "all") {   // 每类显示一部分: 限高渐隐 + 右下"查看更多"跳对应分类
-    for (const [cat, items] of Object.entries(CAT_PREVIEW)) {
-      for (const [sel, h] of items) {
-        let el = document.querySelector(sel);
-        if (!el) continue;
-        const btn = document.createElement("button");
-        btn.type = "button"; btn.className = "cat-more"; btn.dataset.cat = cat;
-        btn.textContent = t("cat_more") + " →";
-        btn.addEventListener("click", () => setCat(cat));
-        if (el.tagName === "TABLE") {   // table 不吃 max-height: 动态包一层 div 限高
-          const wrap = document.createElement("div");
-          wrap.className = "cat-preview cat-preview-wrap";
-          wrap.style.maxHeight = h + "px";
-          el.before(wrap); wrap.append(el, btn);
-        } else {
-          el.classList.add("cat-preview");
-          el.style.maxHeight = h + "px";
-          el.appendChild(btn);
-        }
-      }
-    }
-  }
+  document.querySelectorAll("#pages > *").forEach(el => el.classList.toggle("cat-off", !keep.has(el)));
   if (save !== false) {
     try { localStorage.setItem("svc-cat", c); } catch (e) {}
     try {                                   // URL hash 同步: #cat=goal 可直达分类
       const u = new URL(location.href);
-      if (c === "all") u.hash = ""; else u.hash = "cat=" + c;
+      if (c === "home") u.hash = ""; else u.hash = "cat=" + c;
       history.replaceState(null, "", u);
     } catch (e) {}
   }
 }
 function catFromHash() {
   const m = location.hash.match(/^#cat=([a-z]+)/);
-  return m && CATS.some(c => c[0] === m[1]) ? m[1] : null;
+  let c = m && CATS.some(x => x[0] === m[1]) ? m[1] : null;
+  if (c === "all") c = "home";   // 旧链接兼容
+  return c;
 }
 window.addEventListener("hashchange", () => {   // 手改 hash/后退也跟随
   const c = catFromHash();
@@ -6303,7 +6457,8 @@ if (isMobile()) {
   initToolsPage();   // 桌面无页签: 工具面板直接展开在页面流里(内部会解除 hidden)
   let savedCat = catFromHash();
   if (!savedCat) { try { savedCat = localStorage.getItem("svc-cat"); } catch (e) {} }
-  setCat(CATS.some(c => c[0] === savedCat) ? savedCat : "all", false);  // URL 优先，随后本地恢复
+  if (savedCat === "all") savedCat = "home";
+  setCat(CATS.some(c => c[0] === savedCat) ? savedCat : "home", false);  // URL 优先，随后本地恢复
 }
 initLogAgentPicker();   // 延后到这里: escHtml 等 const 已初始化(避免 TDZ 崩整页)
 load(true);
@@ -7110,6 +7265,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif path == "/api/goaldetail":
+            qs = parse_qs(urlparse(self.path).query)
+            gid = (qs.get("gid") or [""])[0]
+            session = (qs.get("session") or [""])[0]
+            if not gid and not session:
+                self._send_json(400, {"ok": False, "msg": "gid or session required"})
+            else:
+                self._send_json(200, goal_detail(gid, session))
         elif path == "/api/goals":
             # limit 控制事件条数(手机日志页 24h-7d 时间窗需要更多条目)
             qs = parse_qs(urlparse(self.path).query)
