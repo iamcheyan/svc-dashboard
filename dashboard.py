@@ -632,19 +632,27 @@ def render_sysbar(s, lang=DEFAULT_LANG):
     mem_txt = f'{fmt_bytes(mem.get("used"))} / {fmt_bytes(mem.get("total"))} ({mem.get("percent", 0)}%)'
     disk = s.get("disk") or {}
     disk_txt = f'{fmt_bytes(disk.get("used"))} / {fmt_bytes(disk.get("total"))} ({disk.get("percent", 0)}%)'
+    # P1-2: 指标值状态色(>90 红 / ≥75 黄, 与 renderHealth 阈值同风格); load/up 非百分比不上色
+    def _zone(pct):
+        try:
+            pct = float(pct)
+        except (TypeError, ValueError):
+            return ""
+        return " bad" if pct > 90 else " warn" if pct >= 75 else ""
+
     cards = [
-        ("load", t(lang, "sys_load"), loadavg),
-        ("cpu", "CPU", cpu),
-        ("mem", t(lang, "sys_mem"), mem_txt),
-        ("disk", t(lang, "sys_disk"), disk_txt),
-        ("up", t(lang, "sys_up"), fmt_uptime(s.get("uptime"), lang)),
+        ("load", t(lang, "sys_load"), loadavg, ""),
+        ("cpu", "CPU", cpu, _zone(s.get("cpu_usage"))),
+        ("mem", t(lang, "sys_mem"), mem_txt, _zone(mem.get("percent", 0))),
+        ("disk", t(lang, "sys_disk"), disk_txt, _zone(disk.get("percent", 0))),
+        ("up", t(lang, "sys_up"), fmt_uptime(s.get("uptime"), lang), ""),
     ]
     # data-k: 手机端双击手势定位(负载卡双击→Goal页, 磁盘卡双击→展开top进程)
     k_ico = {"load": "load", "cpu": "cpu", "mem": "mem", "disk": "disk", "up": "clock"}
     return '<div class="sysbar" id="sysbar">' + "".join(
         f'<div class="stat" data-k="{k}"><div class="label">'
         f'<span class="lb-ico">{icon(k_ico.get(k, "dot"), 13)}</span>{lbl}</div>'
-        f'<div class="value">{val}</div></div>' for k, lbl, val in cards) + "</div>"
+        f'<div class="value{cls}">{val}</div></div>' for k, lbl, val, cls in cards) + "</div>"
 
 
 # ---------------- 国际化 ----------------
@@ -3117,6 +3125,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                  display: inline-flex; align-items: center; }
   .stat .value { font-size: 14px; font-weight: 600; font-family: ui-monospace, monospace;
                  color: var(--text-hi); white-space: nowrap; }
+  .stat .value.bad { color: var(--c-red); }   /* P1-2: 指标值 >90 红 */
+  .stat .value.warn { color: var(--c-warn); } /* P1-2: 指标值 ≥75 黄 */
   .tbadge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px;
             margin-right: 6px; vertical-align: 1px; }
   .tbadge.wd { background: var(--tbadge-wd-bg); color: var(--tbadge-wd-tx); border: 1px solid var(--tbadge-wd-bd); }
@@ -4313,15 +4323,16 @@ function renderSys(s) {
   };
   const mem = s.mem || {}, disk = s.disk || {};
   const SYS_ICONS = { load: "load", cpu: "cpu", mem: "mem", disk: "disk", up: "clock" };
+  const zone = (p) => (p > 90 ? " bad" : p >= 75 ? " warn" : "");   // P1-2: >90 红 / ≥75 黄
   const cards = [
-    ["load", t("sys_load"), (s.loadavg || []).join(" / ") || "—"],
-    ["cpu", "CPU", `${s.cpu_usage}% · ${s.cpu_count} ${t("unit_core")}`],
-    ["mem", t("sys_mem"), `${fmtBytes(mem.used)} / ${fmtBytes(mem.total)} (${mem.percent || 0}%)`],
-    ["disk", t("sys_disk"), `${fmtBytes(disk.used)} / ${fmtBytes(disk.total)} (${disk.percent || 0}%)`],
-    ["up", t("sys_up"), fmtUp(s.uptime)],
+    ["load", t("sys_load"), (s.loadavg || []).join(" / ") || "—", ""],
+    ["cpu", "CPU", `${s.cpu_usage}% · ${s.cpu_count} ${t("unit_core")}`, zone(s.cpu_usage)],
+    ["mem", t("sys_mem"), `${fmtBytes(mem.used)} / ${fmtBytes(mem.total)} (${mem.percent || 0}%)`, zone(mem.percent || 0)],
+    ["disk", t("sys_disk"), `${fmtBytes(disk.used)} / ${fmtBytes(disk.total)} (${disk.percent || 0}%)`, zone(disk.percent || 0)],
+    ["up", t("sys_up"), fmtUp(s.uptime), ""],
   ];
-  $("sysbar").innerHTML = cards.map(([k, l, v]) =>
-    `<div class='stat' data-k='${k}'><div class='label'><span class='lb-ico'>${icon(SYS_ICONS[k] || "dot", 13)}</span>${l}</div><div class='value'>${v}</div></div>`).join("");
+  $("sysbar").innerHTML = cards.map(([k, l, v, cls]) =>
+    `<div class='stat' data-k='${k}'><div class='label'><span class='lb-ico'>${icon(SYS_ICONS[k] || "dot", 13)}</span>${l}</div><div class='value${cls}'>${v}</div></div>`).join("");
   chartSample(s); // 手机端趋势图采样(桌面 no-op)
 }
 
