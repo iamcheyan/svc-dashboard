@@ -5459,12 +5459,32 @@ document.addEventListener("click", e => {
   e.preventDefault(); e.stopPropagation(); openGoalDetail(b);
 });
 
+// --- goal 卡"标记忽略"(P1-8): 接概要页 ignoredSet, 同 goal+类型不再提醒 ---
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".g-ignore-btn");
+  if (!b || b.classList.contains("ignored")) return;
+  addIgnore(b.dataset.ignKey || "");
+  b.classList.add("ignored");
+  b.textContent = t("g_ignored");
+  haptic(8);
+  renderOverview(null);   // 概要"需要处理"同步去掉对应告警
+});
+
+// --- 移动服务卡长命令折叠/展开(P1-6): 点命令行本身切换 2 行截断 ---
+document.addEventListener("click", (e) => {
+  const m = e.target.closest(".mclamp");
+  if (!m) return;
+  m.classList.toggle("open");
+  m.setAttribute("aria-expanded", m.classList.contains("open") ? "true" : "false");
+});
+
 // --- goal 卡片展开(点标题切换 .gextra) ---
 document.addEventListener("click", (e) => {
     const g = e.target.closest(".gcard");
     if (!g || !isMobile()) return;
     if (e.target.closest(".gcopy")) return;           // 复制 resume 命令: 交给全局 gcopy
     if (e.target.closest(".g-detail-btn")) return;    // 查看详情: 交给 goal 详情弹层
+    if (e.target.closest(".g-ignore-btn")) return;    // 标记忽略: 交给上方忽略委托
     if (g.querySelector(".gextra")) { g.classList.toggle("open"); haptic(6); }
 });
 
