@@ -654,7 +654,7 @@ L10N = {
     "zh": {
         "title": "服务一览", "github_repo": "GitHub 仓库",
         "updated": "更新于", "svc_pre": "", "svc_post": " 个监听端口", "auto_refresh": "自动刷新",
-        "refresh": "刷新", "ptr_pull": "下拉刷新", "ptr_release": "松开刷新", "ptr_loading": "刷新中…",
+        "refresh": "刷新", "m_confirm_title": "请确认操作", "m_cancel": "取消", "m_ok": "确认", "ptr_pull": "下拉刷新", "ptr_release": "松开刷新", "ptr_loading": "刷新中…",
         "chip_user": "用户服务", "chip_docker": "Docker", "chip_system": "系统服务",
         "chip_all": "全部", "chip_omp": "agent任务", "chip_watchdog": "定时任务",
         "chip_tmux": "tmux状态", "chip_manage": "服务管理",
@@ -798,7 +798,7 @@ L10N = {
     "en": {
         "title": "Services", "github_repo": "GitHub repo",
         "updated": "updated", "svc_pre": "", "svc_post": " listening ports", "auto_refresh": "Auto refresh",
-        "refresh": "Refresh", "ptr_pull": "Pull to refresh", "ptr_release": "Release to refresh", "ptr_loading": "Refreshing…",
+        "refresh": "Refresh", "m_confirm_title": "Confirm action", "m_cancel": "Cancel", "m_ok": "Confirm", "ptr_pull": "Pull to refresh", "ptr_release": "Release to refresh", "ptr_loading": "Refreshing…",
         "chip_user": "User services", "chip_docker": "Docker", "chip_system": "System services",
         "chip_all": "All", "chip_omp": "Agents", "chip_watchdog": "Tasks",
         "chip_tmux": "tmux", "chip_manage": "Manage",
@@ -944,7 +944,7 @@ L10N = {
     "ja": {
         "title": "サービス一覧", "github_repo": "GitHub リポジトリ",
         "updated": "更新", "svc_pre": "サービス ", "svc_post": "", "auto_refresh": "自動更新",
-        "refresh": "更新", "ptr_pull": "引っ張って更新", "ptr_release": "離して更新", "ptr_loading": "更新中…",
+        "refresh": "更新", "m_confirm_title": "操作の確認", "m_cancel": "キャンセル", "m_ok": "確認", "ptr_pull": "引っ張って更新", "ptr_release": "離して更新", "ptr_loading": "更新中…",
         "chip_user": "ユーザーサービス", "chip_docker": "Docker", "chip_system": "システムサービス",
         "chip_all": "すべて", "chip_omp": "エージェント", "chip_watchdog": "タスク",
         "chip_tmux": "tmux", "chip_manage": "サービス管理",
@@ -2652,6 +2652,8 @@ def render_events(events, lang=DEFAULT_LANG):
 _page_cache = {"t": 0.0, "body": None, "lang": None}
 PAGE_CACHE_SEC = 5.0
 _page_cache_lock = threading.Lock()
+_frag_cache = {}
+_frag_lock = threading.Lock()
 
 
 def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=None, ts_mode=False):
@@ -2663,6 +2665,7 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
         if (c is not None and _page_cache["lang"] == lang
                 and now - _page_cache["t"] < PAGE_CACHE_SEC):
             return c
+    lite = not entries          # 方案C: entries 为空 = 轻首屏(重面板走 /api/fragment 异步)
     if sysdata is None:
         sysdata = sys_info()
     rows = []
@@ -2713,6 +2716,12 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             f'</tr>')
     table = "\n".join(rows)
     hostname = socket.gethostname()
+    if lite:
+        sysbar = '<div class="sysbar" id="sysbar">' + "".join(
+            f'<div class="stat" data-k="{k}"><div class="label">{t(lang, key)}</div><div class="value">—</div></div>'
+            for k, key in (("load", "sys_load"), ("cpu", "sys_cpu"), ("mem", "sys_mem"), ("disk", "sys_disk"), ("up", "sys_up"))) + '</div>'
+    else:
+        sysbar = render_sysbar(sysdata, lang)
     body = (PAGE_TEMPLATE
             .replace("{{LANG}}", lang)
             .replace("{{TS_MODE}}", "true" if ts_mode else "false")
@@ -2722,12 +2731,18 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             .replace("{{HOST}}", escape(host_header))
             .replace("{{HOSTNAME}}", escape(hostname))
             .replace("{{AUTO}}", str(AUTO_REFRESH_SEC))
-            .replace("{{SYSBAR}}", render_sysbar(sysdata, lang))
-            .replace("{{TOOLCHIPS}}", render_toolchips(entries, host_header, lang))
-            .replace("{{GOALS_PANEL}}", render_goal_cards(scan_goals(), lang))
-            .replace("{{EVENTS_PANEL}}", render_events(merge_events(
-                parse_watchdog_events(), parse_completed_goals(),
-                parse_repo_commits()), lang))
+            .replace("{{SYSBAR}}", sysbar)
+            .replace("{{TOOLCHIPS}}", "" if lite else render_toolchips(entries, host_header, lang))
+            .replace("{{GOALS_PANEL}}",
+                     '<div class="gpanel" id="goals"><h2>{{T:g_panel}} <span class="ghint">{{T:g_hint}}</span></h2>'
+                     '<div class="gcards"><div class="gempty">{{T:a_loading}}</div></div></div>' if lite
+                     else render_goal_cards(scan_goals(), lang))
+            .replace("{{EVENTS_PANEL}}",
+                     '<div class="gpanel" id="events"><h2>{{T:ev_title}} <span class="ghint">{{T:ev_hint}}</span></h2>'
+                     '<div class="gempty">{{T:a_loading}}</div></div>' if lite
+                     else render_events(merge_events(
+                         parse_watchdog_events(), parse_completed_goals(),
+                         parse_repo_commits()), lang))
             .replace("{{UPDATED}}", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(updated_ts)))
             .replace("{{COUNT}}", str(len(entries)))
             .replace("<!--TABLE-->", table))
@@ -3644,6 +3659,25 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .tl-netrow { display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 12.5px; }
   .tl-netrow .tl-val { margin-left: 0; }
   .tl-netrow .sep { flex: 1 1 auto; border-bottom: 1px dotted var(--btn-hover); }
+  /* 非原生交互控件: 确认层/通知层/复选框/选择器统一使用主题变量 */
+  body.modal-open { overflow: hidden; }
+  .ui-modal[hidden], .ui-notice[hidden] { display: none !important; }
+  .ui-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: rgba(0,0,0,.46); }
+  .ui-dialog { width: min(440px, 100%); padding: 22px; border: 1px solid var(--glass-bd); border-radius: 22px; background: var(--glass-bg); color: var(--text-title); box-shadow: 0 18px 60px rgba(0,0,0,.32); backdrop-filter: blur(22px); }
+  .ui-dialog-title { display:flex; align-items:center; gap:9px; font-weight:700; font-size:16px; margin-bottom:12px; }
+  .ui-dialog-msg { white-space: pre-wrap; line-height:1.55; color:var(--text-main); }
+  .ui-dialog-actions { display:flex; justify-content:flex-end; gap:9px; margin-top:20px; }
+  .ui-action { min-height:40px; padding:9px 16px; border-radius:13px; border:1px solid var(--glass-bd); background:var(--btn-soft-bg); color:var(--text-main); cursor:pointer; font:inherit; }
+  .ui-action.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .ui-action:hover { filter:brightness(1.08); }
+  .ui-notice { position:fixed; z-index:1100; left:50%; bottom:32px; transform:translateX(-50%); max-width:min(520px, calc(100vw - 32px)); padding:12px 16px; border:1px solid var(--glass-bd); border-radius:15px; background:var(--glass-bg); color:var(--text-main); box-shadow:0 12px 36px rgba(0,0,0,.28); backdrop-filter:blur(18px); }
+  input[type="checkbox"] { appearance:none; -webkit-appearance:none; width:18px; height:18px; margin:0 8px 0 0; vertical-align:-4px; border:1px solid var(--btn-soft-bd); border-radius:5px; background:var(--btn-soft-bg); cursor:pointer; }
+  input[type="checkbox"]:checked { border-color:var(--accent); background:var(--accent); }
+  input[type="checkbox"]:checked::after { content:""; display:block; width:5px; height:9px; margin:2px 0 0 5px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
+  select { appearance:none; -webkit-appearance:none; min-height:40px; padding:9px 34px 9px 13px; border:1px solid var(--glass-bd); border-radius:13px; color:var(--text-main); background:var(--glass-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%238b8b95' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 11px center; font:inherit; color-scheme:dark; }
+  [data-theme="light"] select { color-scheme:light; }
+  @media (prefers-reduced-motion: reduce) { .ui-modal, .ui-notice, .ui-dialog { transition:none !important; } }
+
   .copy-toast { position: fixed; left: 50%; bottom: 32px;
       transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px;
       background: var(--glass-bg); color: var(--c-green); border: 1px solid var(--glass-bd);
@@ -3871,6 +3905,14 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <span class="tab" data-p="5" role="button" tabindex="0" aria-label="{{T:tab_tools}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9.5 1.5 3 8l-1.5 5 5-1.5 6.5-6.5a2.1 2.1 0 0 0-3-3z"/><path d="M9.5 1.5 12.5 4.5"/></svg><span class="tlabel">{{T:tab_tools}}</span></span>
 </nav>
+<div class="ui-modal" id="ui-modal" hidden role="presentation">
+  <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="ui-dialog-title">
+    <div class="ui-dialog-title" id="ui-dialog-title">{{ICO:warn:17}} <span>{{T:m_confirm_title}}</span></div>
+    <div class="ui-dialog-msg" id="ui-dialog-msg"></div>
+    <div class="ui-dialog-actions"><span class="ui-action" id="ui-cancel" role="button" tabindex="0">{{T:m_cancel}}</span><span class="ui-action primary" id="ui-ok" role="button" tabindex="0">{{T:m_ok}}</span></div>
+  </div>
+</div>
+<div class="ui-notice" id="ui-notice" hidden role="status"></div>
 <!-- 文件浏览全屏页(body 直接子级): 左=浏览主体(推入列表), 右=文本/图片预览; 桌面双栏并列 -->
 <div class="fs-sheet" id="fs-app" hidden>
   <div class="fs-left">
@@ -4351,9 +4393,32 @@ async function fillCtl() {
     b.addEventListener("click", () => doCtl(b)));
 }
 
+function uiConfirm(message) {
+  const modal = $("ui-modal"), msg = $("ui-dialog-msg"), ok = $("ui-ok"), cancel = $("ui-cancel");
+  if (!modal || !msg || !ok || !cancel) return Promise.resolve(false);
+  msg.textContent = message;
+  modal.hidden = false;
+  document.body.classList.add("modal-open");
+  return new Promise(resolve => {
+    let done = false;
+    const finish = value => { if (done) return; done = true; modal.hidden = true; document.body.classList.remove("modal-open"); cleanup(); resolve(value); };
+    const onKey = e => { if (e.key === "Escape") finish(false); if (e.key === "Enter") finish(true); };
+    const cleanup = () => { ok.removeEventListener("click", yes); cancel.removeEventListener("click", no); modal.removeEventListener("click", outside); document.removeEventListener("keydown", onKey); };
+    const yes = () => finish(true), no = () => finish(false), outside = e => { if (e.target === modal) finish(false); };
+    ok.addEventListener("click", yes); cancel.addEventListener("click", no); modal.addEventListener("click", outside); document.addEventListener("keydown", onKey);
+    ok.focus();
+  });
+}
+let uiNoticeTimer = null;
+function uiNotice(message) {
+  const el = $("ui-notice"); if (!el) return;
+  el.textContent = message || ""; el.hidden = !message;
+  clearTimeout(uiNoticeTimer); if (message) uiNoticeTimer = setTimeout(() => { el.hidden = true; }, 3600);
+}
+
 async function doCtl(btn) {
   const uid = btn.dataset.ctl, action = btn.dataset.action;
-  if (!confirm(t("m_confirm", { label: MANAGE_LABELS[action] || action, unit: uid }))) return;
+  if (!await uiConfirm(t("m_confirm", { label: MANAGE_LABELS[action] || action, unit: uid }))) return;
   btn.setAttribute("aria-disabled", "true");
   btn.textContent = t("m_doing");
   try {
@@ -4433,7 +4498,7 @@ async function loadManage() {
 async function doManage(btn) {
   const unit = btn.dataset.unit, action = btn.dataset.action;
   const label = MANAGE_LABELS[action] || action;
-  if (!confirm(t("m_confirm", { label, unit }))) return;
+  if (!await uiConfirm(t("m_confirm", { label, unit }))) return;
   btn.setAttribute("aria-disabled", "true");
   const res = btn.closest(".mcard").querySelector(".mresult");
   res.textContent = t("m_doing");
@@ -4451,6 +4516,29 @@ async function doManage(btn) {
   }
   btn.setAttribute("aria-disabled", "false");
   setTimeout(() => loadManage(), 600); // 等 systemd 状态落地再刷新
+}
+
+async function hydrateFragments() {
+  const jobs = [
+    ["goals", "#goals"],
+    ["events", "#events"],
+    ["toolchips", "#toolchips"],
+  ];
+  await Promise.all(jobs.map(async ([part, selector]) => {
+    try {
+      const r = await fetch("/api/fragment?p=" + part + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const html = await r.text();
+      const box = document.createElement("template");
+      box.innerHTML = html.trim();
+      const next = box.content.querySelector(selector);
+      const old = document.querySelector(selector);
+      if (next && old) old.replaceWith(next);
+      else if (part === "toolchips" && next) document.querySelector("#filters")?.before(next);
+    } catch (err) {
+      console.error("fragment hydrate failed: " + part, err);
+    }
+  }));
 }
 
 async function load(alsoSys) {
@@ -5820,11 +5908,11 @@ async function cleanScan() {
     $("tl-clean-exec").hidden = false;
     const dp = $("tl-clean-docker");
     if (dp) dp.addEventListener("click", async () => {
-      if (!confirm(t("tl_clean_docker_confirm"))) return;
+      if (!await uiConfirm(t("tl_clean_docker_confirm"))) return;
       dp.textContent = "…";
       const r = await tlPost("/api/cleanup", { action: "docker_prune" });
       dp.innerHTML = icon(r.ok ? "ok" : "err", 13) + " " + t("tl_clean_docker_prune");
-      alert(r.msg || "");
+      uiNotice(r.msg || "");
     });
   } catch (e) {
     body.innerHTML = `<div class='gempty t-red'>${icon("err", 13)} ${escHtml(e.message)}</div>`;
@@ -5835,7 +5923,7 @@ async function cleanScan() {
 async function cleanExec() {
   const ids = [...document.querySelectorAll("input[data-clean]:checked")].map(x => x.dataset.clean);
   if (!ids.length) return;
-  if (!confirm(t("tl_clean_confirm"))) return;
+  if (!await uiConfirm(t("tl_clean_confirm"))) return;
   const btn = $("tl-clean-exec"), body = $("tl-clean-body");
   btn.textContent = "…";
   const d = await tlPost("/api/cleanup", { dry_run: false, items: ids });
@@ -5882,7 +5970,7 @@ async function usvcLoad() {
         `</div>`;
     }).join("") : `<div class='gempty'>${t("tl_usvc_none")}</div>`;
     body.querySelectorAll("[data-usvc]").forEach(b => b.addEventListener("click", async () => {
-      if (!confirm(`${t("tl_usvc_restart")} ${b.dataset.usvc}?`)) return;
+      if (!await uiConfirm(`${t("tl_usvc_restart")} ${b.dataset.usvc}?`)) return;
       b.textContent = "…";
       const r = await tlPost("/api/uservice", { unit: b.dataset.usvc, action: "restart" });
       b.innerHTML = icon(r.ok ? "ok" : "err", 13) + " " + t("tl_usvc_restart");
@@ -5895,7 +5983,7 @@ async function usvcLoad() {
 
 function usvcUnlock() {
   const v = ($("tl-usvc-code").value || "").trim();
-  if (v !== "I-KNOW") { alert(t("tl_usvc_wrong")); return; }
+  if (v !== "I-KNOW") { uiNotice(t("tl_usvc_wrong")); return; }
   localStorage.setItem("svc-usvc", "I-KNOW");
   $("tl-usvc-unlockwrap").hidden = true;   // 解锁成功: 收起输入行(锁按钮本来就在, 无需翻转)
   usvcLoad();
@@ -6134,6 +6222,7 @@ if (isMobile()) {
   setCat(CATS.some(c => c[0] === savedCat) ? savedCat : "all", false);  // URL 优先，随后本地恢复
 }
 load(true);
+hydrateFragments();
 </script>
 </body>
 </html>
@@ -6876,21 +6965,21 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             lang = detect_lang(self.headers.get("Accept-Language", ""),
                                urlparse(self.path).query)
-            # 缓存命中路径: 不做任何预采集,直接问 render_html(命中即 <1ms 返回)
+            # 方案C: 首页只返回轻量骨架；服务表/概要数据由客户端 /api 异步填充。
+            # 不在首个 HTTP 请求里执行 gather()/sys_info()。
+            hit = False
             with _page_cache_lock:
                 cached = _page_cache["body"]
+                # lite 首屏缓存按语言复用；缓存内容本身不含运行时扫描数据。
                 hit = (cached is not None and _page_cache["lang"] == lang
                        and time.time() - _page_cache["t"] < PAGE_CACHE_SEC)
-            if not hit:
-                cached = None
-                entries = gather()
-            else:
-                entries = []
-            body = render_html(self._host(), entries, time.time(), lang,
-                               sysdata=None if hit else sys_info(),
-                               ts_mode=self._is_tailscale_client()).encode("utf-8")
+            entries = []
             if hit:
                 body = cached.encode("utf-8")
+            else:
+                body = render_html(self._host(), entries, time.time(), lang,
+                                   sysdata={},
+                                   ts_mode=self._is_tailscale_client()).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -6901,6 +6990,41 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"updated": time.time(), "services": gather()})
         elif path == "/api/sys":
             self._send_json(200, sys_info())
+        elif path == "/api/fragment":
+            # 方案C: 重面板片段端点。?p=goals|events|toolchips 返回渲染好的 HTML 片段,
+            # 首屏 lite 骨架由客户端 fetch 此端点填充(独立 5s 缓存,与首页互不阻塞)。
+            lang = detect_lang(self.headers.get("Accept-Language", ""),
+                               urlparse(self.path).query)
+            qs = parse_qs(urlparse(self.path).query)
+            frag = (qs.get("p") or [""])[0]
+            ts_mode = self._is_tailscale_client()
+            host = self._host()
+            with _frag_lock:
+                key = (frag, lang, ts_mode)
+                ent = _frag_cache.get(key)
+                now = time.time()
+                if ent and now - ent[0] < PAGE_CACHE_SEC:
+                    html = ent[1]
+                else:
+                    if frag == "goals":
+                        html = render_goal_cards(scan_goals(), lang)
+                    elif frag == "events":
+                        html = render_events(merge_events(
+                            parse_watchdog_events(), parse_completed_goals(),
+                            parse_repo_commits()), lang)
+                    elif frag == "toolchips":
+                        html = render_toolchips(gather(), host, lang)
+                    else:
+                        self._send_json(404, {"ok": False, "msg": "unknown fragment"})
+                        return
+                    _frag_cache[key] = (now, html)
+            body = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif path == "/api/goals":
             # limit 控制事件条数(手机日志页 24h-7d 时间窗需要更多条目)
             qs = parse_qs(urlparse(self.path).query)
