@@ -772,6 +772,7 @@ L10N = {
         "fs_rel_h": "{n} 小时前", "fs_rel_d": "{n} 天前", "fs_rel_y": "昨天",
         "g_ago_d": "{d} 天前",
         "tab_tools": "工具",
+        "tl_grp_insp": "巡检", "tl_grp_ops": "运维", "tl_grp_direct": "直达", "tl_grp_pref": "偏好",
         "tl_health_title": "健康检查", "tl_health_run": "跑一次检查", "tl_health_loading": "检查中…",
         "tl_h_load": "负载", "tl_h_cpu": "CPU", "tl_h_mem": "内存", "tl_h_swap": "Swap",
         "tl_h_disk": "磁盘 /", "tl_h_temp": "温度", "tl_h_trend": "磁盘趋势",
@@ -879,6 +880,7 @@ L10N = {
         "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago",
         "tab_home": "Overview", "tab_goal": "Goal", "tab_svc": "Services", "tab_model": "Models", "tab_log": "Logs",
         "tab_tools": "Tools",
+        "tl_grp_insp": "Checks", "tl_grp_ops": "Operations", "tl_grp_direct": "Quick access", "tl_grp_pref": "Preferences",
         "act_open": "Open", "act_copy_addr": "Copy address", "g_detail": "details", "g_view_detail": "View details", "g_status_detail": "Current status", "g_runtime_detail": "Runtime", "g_terminal_detail": "Live terminal (last 40 lines)", "g_activity_detail": "Task activity", "g_watchdog_detail": "Watchdog events", "g_field_status": "Status", "g_field_idle": "Last activity", "g_seconds": "{n}s ago", "g_no_activity": "No activity to show",
         "chart_title": "Load / CPU trend", "chart_win": "window {n} pts",
         "chart_empty": "Collecting samples: refresh a few times (pinch to adjust window)",
@@ -1064,6 +1066,7 @@ L10N = {
         "evk_cleanup": "クリーンアップ", "evk_commit": "コミット", "evk_other": "その他",
         "g_ago_d": "{d} 日前",
         "tab_tools": "ツール",
+        "tl_grp_insp": "点検", "tl_grp_ops": "運用", "tl_grp_direct": "ショートカット", "tl_grp_pref": "設定",
         "tl_health_title": "ヘルスチェック", "tl_health_run": "チェック実行", "tl_health_loading": "チェック中…",
         "tl_h_load": "負荷", "tl_h_cpu": "CPU", "tl_h_mem": "メモリ", "tl_h_swap": "Swap",
         "tl_h_disk": "ディスク /", "tl_h_temp": "温度", "tl_h_trend": "ディスク推移",
@@ -3613,8 +3616,20 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     #tabbar, .fab-refresh, .icon-btn { background: var(--bg-elev); }
   }
-  /* ---------------- ツール页 ---------------- */
-  .toolspage .tl-sec + .tl-sec { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
+  /* ---------------- ツール页: 4 分组(巡检/运维/直达/偏好) + 桌面 2 列 ---------------- */
+  .tl-group { margin-top: 16px; }
+  .tl-grouph { margin: 0 0 4px; font-size: 13px; color: var(--text-dim); font-weight: 500;
+               display: flex; align-items: center; gap: 8px; }
+  .tl-grouph::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--border-faint); }
+  .tl-group .tl-sec + .tl-sec { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
+  @media (min-width: 769px) {
+    #toolspage[hidden] { display: none !important; }
+    #toolspage { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; align-items: start; }
+    #toolspage > h2, #tlg-direct, #tlg-pref { grid-column: 1 / -1; }
+    #tlg-insp { grid-column: 1; }
+    #tlg-ops { grid-column: 2; }
+    .tl-group { margin-top: 20px; }
+  }
   .toolspage .tl-sec h3 { margin: 0 0 8px; font-size: 12.5px; color: var(--text-dim); font-weight: 500;
                           display: flex; align-items: center; gap: 6px; }
   .tl-sechead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -3992,81 +4007,94 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 </div>
 <div class="gpanel toolspage" id="toolspage" hidden>
   <h2>{{T:tab_tools}}</h2>
-  <!-- 主题三选: 跟随系统 / 深色 / 浅色(localStorage 记住, html[data-theme] 生效) -->
-  <div class="tl-sec" id="tl-theme">
-    <div class="tl-sechead"><h3>{{T:theme_title}}</h3></div>
-    <div class="filters themechips" id="theme-chips">
-      <span class="chip active" data-thm="auto" role="button" tabindex="0">{{T:th_auto}}</span>
-      <span class="chip" data-thm="dark" role="button" tabindex="0">{{T:th_dark}}</span>
-      <span class="chip" data-thm="light" role="button" tabindex="0">{{T:th_light}}</span>
+  <!-- P1-10: 4 分组 巡检→运维→直达→偏好; P1-11: 桌面 2 列(#tlg-insp 左 / #tlg-ops 右, 直达+偏好全宽) -->
+  <div class="tl-group" id="tlg-insp">
+    <div class="tl-grouph">{{T:tl_grp_insp}}</div>
+    <!-- F2 健康检查 -->
+    <div class="tl-sec" id="tl-health">
+      <div class="tl-sechead">
+        <h3>{{T:tl_health_title}}</h3>
+        <span class="btn tl-run" id="tl-health-run" role="button" tabindex="0">{{T:tl_health_run}}</span>
+      </div>
+      <div id="tl-health-body"><div class="gempty">{{T:st_loading}}</div></div>
+    </div>
+
+    <!-- G3 网络速测 -->
+    <div class="tl-sec" id="tl-net">
+      <div class="tl-sechead">
+        <h3>{{T:tl_net_title}}</h3>
+        <span class="btn tl-run" id="tl-net-run" role="button" tabindex="0">{{T:tl_net_run}}</span>
+      </div>
+      <div id="tl-net-body"><div class="gempty">—</div></div>
+    </div>
+
+    <!-- G4 计划任务一览(只读) -->
+    <div class="tl-sec" id="tl-cron">
+      <h3>{{T:tl_cron_title}}</h3>
+      <div id="tl-cron-body"><div class="gempty">{{T:st_loading}}</div></div>
     </div>
   </div>
 
-  <!-- F2 健康检查 -->
-  <div class="tl-sec" id="tl-health">
-    <div class="tl-sechead">
-      <h3>{{T:tl_health_title}}</h3>
-      <span class="btn tl-run" id="tl-health-run" role="button" tabindex="0">{{T:tl_health_run}}</span>
+  <div class="tl-group" id="tlg-ops">
+    <div class="tl-grouph">{{T:tl_grp_ops}}</div>
+    <!-- F1 文件浏览: 入口卡 → 全屏独立浏览页(遮罩为 body 直接子级, 避开 #track transform) -->
+    <div class="tl-sec" id="tl-fs">
+      <div class="fs-entry" id="fs-entry" role="button" tabindex="0">
+        <span class="fs-eico">{{ICO:folder:24}}</span>
+        <span class="fs-etxt"><h3>{{T:fs_entry_title}}</h3><p>{{T:fs_entry_sub}}</p></span>
+        <span class="fs-earr">{{ICO:chev:18}}</span>
+      </div>
     </div>
-    <div id="tl-health-body"><div class="gempty">{{T:st_loading}}</div></div>
-  </div>
 
-  <!-- F4 快速复制组(JS 填充) -->
-  <div class="tl-sec" id="tl-copy">
-    <div id="tl-copy-body" class="tl-copyrow"></div>
-  </div>
+    <!-- F3 垃圾清理(dry_run 默认 true, 不许改) -->
+    <div class="tl-sec" id="tl-clean">
+      <div class="tl-sechead">
+        <h3>{{T:tl_clean_title}}</h3>
+        <span class="btn tl-run" id="tl-clean-scan" role="button" tabindex="0">{{T:tl_clean_scan}}</span>
+        <span class="btn tl-run" id="tl-clean-exec" role="button" tabindex="0" hidden>{{T:tl_clean_exec}}</span>
+      </div>
+      <div id="tl-clean-body"><div class="gempty">{{T:tl_clean_scan}} →</div></div>
+    </div>
 
-  <!-- G1 工具直达 chips(JS 填充) -->
-  <div class="tl-sec" id="tl-g1sec">
-    <h3>{{T:tl_g1_title}}</h3>
-    <div class="filters toolchips" id="tl-g1"></div>
-  </div>
-
-  <!-- F1 文件浏览: 入口卡 → 全屏独立浏览页(遮罩为 body 直接子级, 避开 #track transform) -->
-  <div class="tl-sec" id="tl-fs">
-    <div class="fs-entry" id="fs-entry" role="button" tabindex="0">
-      <span class="fs-eico">{{ICO:folder:24}}</span>
-      <span class="fs-etxt"><h3>{{T:fs_entry_title}}</h3><p>{{T:fs_entry_sub}}</p></span>
-      <span class="fs-earr">{{ICO:chev:18}}</span>
+    <!-- G2 用户级服务重启(I-KNOW 护栏, 默认锁; 逻辑不许放松) -->
+    <div class="tl-sec" id="tl-usvc">
+      <div class="tl-sechead">
+        <h3>{{T:tl_usvc_title}}</h3>
+        <span class="tl-usvc-unlock" id="tl-usvc-unlockwrap" hidden>
+          <input type="text" id="tl-usvc-code" placeholder="I-KNOW" autocomplete="off">
+          <span class="btn tl-run" id="tl-usvc-unlock" role="button" tabindex="0">{{T:tl_usvc_unlock}}</span>
+        </span>
+        <span class="btn tl-run" id="tl-usvc-showlock" role="button" tabindex="0" title="{{T:tl_usvc_title}}">{{ICO:lock:14}}</span>
+      </div>
+      <div id="tl-usvc-body"></div>
     </div>
   </div>
 
-  <!-- F3 垃圾清理 -->
-  <div class="tl-sec" id="tl-clean">
-    <div class="tl-sechead">
-      <h3>{{T:tl_clean_title}}</h3>
-      <span class="btn tl-run" id="tl-clean-scan" role="button" tabindex="0">{{T:tl_clean_scan}}</span>
-      <span class="btn tl-run" id="tl-clean-exec" role="button" tabindex="0" hidden>{{T:tl_clean_exec}}</span>
+  <div class="tl-group" id="tlg-direct">
+    <div class="tl-grouph">{{T:tl_grp_direct}}</div>
+    <!-- G1 工具直达 chips(JS 填充) -->
+    <div class="tl-sec" id="tl-g1sec">
+      <h3>{{T:tl_g1_title}}</h3>
+      <div class="filters toolchips" id="tl-g1"></div>
     </div>
-    <div id="tl-clean-body"><div class="gempty">{{T:tl_clean_scan}} →</div></div>
+
+    <!-- F4 快速复制组(JS 填充) -->
+    <div class="tl-sec" id="tl-copy">
+      <div id="tl-copy-body" class="tl-copyrow"></div>
+    </div>
   </div>
 
-  <!-- G3 网络速测 -->
-  <div class="tl-sec" id="tl-net">
-    <div class="tl-sechead">
-      <h3>{{T:tl_net_title}}</h3>
-      <span class="btn tl-run" id="tl-net-run" role="button" tabindex="0">{{T:tl_net_run}}</span>
+  <div class="tl-group" id="tlg-pref">
+    <div class="tl-grouph">{{T:tl_grp_pref}}</div>
+    <!-- 主题三选: 跟随系统 / 深色 / 浅色(localStorage 记住, html[data-theme] 生效) -->
+    <div class="tl-sec" id="tl-theme">
+      <div class="tl-sechead"><h3>{{T:theme_title}}</h3></div>
+      <div class="filters themechips" id="theme-chips">
+        <span class="chip active" data-thm="auto" role="button" tabindex="0">{{T:th_auto}}</span>
+        <span class="chip" data-thm="dark" role="button" tabindex="0">{{T:th_dark}}</span>
+        <span class="chip" data-thm="light" role="button" tabindex="0">{{T:th_light}}</span>
+      </div>
     </div>
-    <div id="tl-net-body"><div class="gempty">—</div></div>
-  </div>
-
-  <!-- G2 用户级服务重启(I-KNOW 护栏, 默认锁) -->
-  <div class="tl-sec" id="tl-usvc">
-    <div class="tl-sechead">
-      <h3>{{T:tl_usvc_title}}</h3>
-      <span class="tl-usvc-unlock" id="tl-usvc-unlockwrap" hidden>
-        <input type="text" id="tl-usvc-code" placeholder="I-KNOW" autocomplete="off">
-        <span class="btn tl-run" id="tl-usvc-unlock" role="button" tabindex="0">{{T:tl_usvc_unlock}}</span>
-      </span>
-      <span class="btn tl-run" id="tl-usvc-showlock" role="button" tabindex="0" title="{{T:tl_usvc_title}}">{{ICO:lock:14}}</span>
-    </div>
-    <div id="tl-usvc-body"></div>
-  </div>
-
-  <!-- G4 计划任务一览(只读) -->
-  <div class="tl-sec" id="tl-cron">
-    <h3>{{T:tl_cron_title}}</h3>
-    <div id="tl-cron-body"><div class="gempty">{{T:st_loading}}</div></div>
   </div>
 </div>
 </div>
@@ -5807,10 +5835,10 @@ function renderHealth(h) {
     p.alive ? `PID ${p.pid}` : "DOWN")));
   const ports = h.ports || [];
   const up = ports.filter(x => x.up).length;
-  rows.push(row(up === ports.length ? "" : "warn", t("tl_h_ports"),
-    `<b>${up}/${ports.length}</b> up`));
-  rows.push(row((h.watchdog_1h || {}).count > 0 ? "warn" : "", t("tl_h_wd"), `<b>${(h.watchdog_1h || {}).count}</b>`));
-  const headTxt = h.overall === "ok" ? t("st_all_ok") : `${t("tl_h_ports")} ${up}/${ports.length} · ${t("tl_h_wd")} ${(h.watchdog_1h || {}).count}`;
+  // P1-12 去重: 端口/WD 摘要只保留大字告警头(3 秒判断), 删下方两行重复; 端口明细预览保留
+  const wdCnt = (h.watchdog_1h || {}).count;
+  const headTxt = `${h.overall === "ok" ? t("st_all_ok") : t("st_alert", { n: (ports.length - up) + wdCnt })}`
+    + ` · ${t("tl_h_ports")} ${up}/${ports.length} · ${t("tl_h_wd")} ${wdCnt}`;
   body.innerHTML = `<div class='tl-row tl-head-big'><span>${big}</span><span class='tl-name'>${headTxt}</span></div>` + rows.join("") +
     (ports.length ? `<div class='tl-docker-pre' id='tl-ports-pre'>${ports.map(x =>
       `${x.up ? "●" : "○"} :${x.port} ${escHtml(x.name)}`).join("\\n")}</div>` : "");
