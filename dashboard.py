@@ -1400,8 +1400,19 @@ def scan_omp():
     if _omp_cache["data"] is not None and now - _omp_cache["t"] < 8:
         return _omp_cache["data"]
     panes = _omp_tmux_panes()
+    # 只扫 <OMP_SESSION_ROOT>/<workdir>/*.jsonl 一层 —— recursive glob 会把
+    # 会话子目录里的附件(如 zdocs goal 的 Maps.jsonl/ProtoS2C.jsonl 等
+    # agent 产物)也当 session 读,徒增 IO 且永远解析不出 goal。
+    # 会话文件名形如 2026-08-13T22-47-04-284Z_<uuid>.jsonl,据此过滤。
+    session_files = []
+    for root, dirs, files in os.walk(OMP_SESSION_ROOT):
+        if os.path.dirname(root) == OMP_SESSION_ROOT:
+            dirs[:] = []  # 不深入会话子目录
+        for fn in files:
+            if fn.endswith(".jsonl") and re.search(r"_[0-9a-f-]{36}\.jsonl$", fn):
+                session_files.append(os.path.join(root, fn))
     results = []
-    for path in glob.glob(os.path.join(OMP_SESSION_ROOT, "**", "*.jsonl"), recursive=True):
+    for path in session_files:
         try:
             mtime = os.path.getmtime(path)
         except OSError:
@@ -1547,8 +1558,12 @@ def scan_tmux():
 # ---------------- Agent 日志 / 实时画面 ----------------
 # 点击 agent 标题展开:OMP jsonl 事件时间线 + tmux 窗格 capture-pane。
 def _event_text(event, lang=DEFAULT_LANG):
-    """把一条 omp session 事件压成可读摘要行,返回 (kind, text)。"""
-    t = event.get("type", "")
+    """把一条 omp session 事件压成可读摘要行,返回 (kind, text)。
+
+    注意: 局部变量禁止命名 t —— 它会遮蔽 i18n 函数 t(lang,key),
+    曾导致 /api/agentlog 对 session_exit/compaction 事件 500。
+    """
+    etype = event.get("type", "")
     ts = event.get("timestamp", "")
     try:
         ts = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone().strftime("%H:%M:%S")
@@ -1557,7 +1572,7 @@ def _event_text(event, lang=DEFAULT_LANG):
     data = event.get("data") or {}
     msg = event.get("message") or {}
     role = msg.get("role", "")
-    if t == "message" and role == "assistant":
+    if etype == "message" and role == "assistant":
         parts = []
         content = msg.get("content") or []
         if isinstance(content, str):
@@ -1568,17 +1583,17 @@ def _event_text(event, lang=DEFAULT_LANG):
                     parts.append(c.get("text", ""))
         text = " ".join(str(p) for p in parts if p)
         return ("assistant", f"[{ts}] {text[:160]}")
-    if t == "message" and role == "user":
+    if etype == "message" and role == "user":
         text = msg.get("content", "")
         if isinstance(text, list):
             text = " ".join(c.get("text", "") for c in text if isinstance(c, dict) and c.get("type") == "text")
         return ("user", f"[{ts}] → {str(text)[:100]}")
-    if t == "message" and role == "toolResult":
+    if etype == "message" and role == "toolResult":
         out = msg.get("output") or msg.get("content") or ""
         if isinstance(out, list):
             out = " ".join(str(c.get("text", "")) for c in out if isinstance(c, dict))
         return ("tool", f"[{ts}] ↩ {str(out)[:90]}")
-    if t == "custom":
+    if etype == "custom":
         ct = data.get("customType") or event.get("customType") or ""
         if "tool_execution_start" in ct:
             return ("tool", f"[{ts}] ⚙ {data.get('toolName', '—')}")
@@ -1591,9 +1606,9 @@ def _event_text(event, lang=DEFAULT_LANG):
             obj = " ".join(str(goal.get("objective") or "").split())
             return ("goal", f"[{ts}] {t(lang, 'aev_goal', o=obj[:120])}")
         return ("evt", f"[{ts}] · {ct}")
-    if t == "compaction":
+    if etype == "compaction":
         return ("goal", f"[{ts}] {t(lang, 'aev_comp', s=str(event.get('summary', ''))[:120])}")
-    return ("evt", f"[{ts}] · {t}") if ts else None
+    return ("evt", f"[{ts}] · {etype}") if ts else None
 
 
 def scan_agent_log(sid, lang=DEFAULT_LANG):
@@ -2671,6 +2686,11 @@ function applyFilter() {
     c.classList.toggle("active", c.dataset.f === filter));
   if (filter === "omp") {
     $("svc").style.display = "none";
+    // 先亮面板显示「加载中」,再等数据 —— 冷扫描需数秒,
+    // 之前面板一直 hidden,数据回来前用户看到的是一片空白。
+    const tasksEl = $("tasks");
+    tasksEl.hidden = false; tasksEl.className = "watchdog-panel";
+    tasksEl.innerHTML = "<h2>" + t("a_title") + " <span style='color:#666;font-weight:400'>" + t("a_loading") + "</span></h2>";
     loadAgents().then(renderAgentPanel);
     $("count").textContent = t("chip_omp");
     return;
@@ -3080,6 +3100,7 @@ async function load(alsoSys) {
   const btn = $("refresh");
   btn.classList.add("spinning");
   btn.setAttribute("aria-disabled", "true");
+  ompCache = null; tasksCache = null; tmuxCache = null; // 手动刷新清面板缓存,拿到最新 agent/tmux/任务状态
   try {
     const r = await fetch("/api", { cache: "no-store" });
     const data = await r.json();
