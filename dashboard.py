@@ -623,6 +623,24 @@ L10N = {
         "m_no_self": "不能操作 dashboard 自身(入口)", "m_started_async": "已后台启动(端口未即时就绪)",
         "m_no_touch": "不能操作受保护进程: {name}",
         "m_badreq": "请求体解析失败: {e}",
+        "g_panel": "Goal 进度", "g_hint": "实时采集: tmux pane + session 活跃度 + watchdog 台账",
+        "g_active": "在跑", "g_paused": "已暂停", "g_retry": "API 重试中",
+        "g_done": "已完成", "g_lost": "会话丢失",
+        "g_ctx": "上下文", "g_ctx_high": "偏高", "g_ctx_stop": "建议停止",
+        "g_last": "最近活动", "g_stalled": "可能 STALLED",
+        "g_copy": "复制 resume 命令", "g_copied": "已复制",
+        "g_none": "当前没有在跑的 goal",
+        "g_done_fold": "✅ 已完成 goal（{n}）",
+        "ld_title": "建议并发", "ld_ok": "还可开 {n} 个 goal",
+        "ld_full": "满载，别再开了", "ld_over": "过载，先别开",
+        "ld_load": "load15 {l} / {c}核",
+        "ld_cpu": "CPU top5", "ld_mem": "内存 top5",
+        "ev_title": "最近事件", "ev_hint": "watchdog 动作 + goal 完成台账",
+        "ev_complete": "✅ 完成", "ev_restart": "🔄 watchdog 重启",
+        "ev_nudge": "🔔 watchdog 催行", "ev_recover": "🟢 已恢复",
+        "ev_pause": "⏸ 目标暂停", "ev_cleanup": "🧹 清理",
+        "ev_other": "·", "ev_none": "暂无事件",
+        "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分钟前", "g_ago_h": "{h} 小时前",
     },
     "en": {
         "title": "Services", "github_repo": "GitHub repo",
@@ -688,6 +706,24 @@ L10N = {
         "m_no_self": "Cannot manage the dashboard itself (entry point)", "m_started_async": "Launched in background (port not ready yet)",
         "m_no_touch": "Protected process: {name} cannot be managed",
         "m_badreq": "Bad request: {e}",
+        "g_panel": "Goal progress", "g_hint": "live: tmux pane + session mtime + watchdog logs",
+        "g_active": "running", "g_paused": "paused", "g_retry": "API retrying",
+        "g_done": "completed", "g_lost": "session lost",
+        "g_ctx": "context", "g_ctx_high": "high", "g_ctx_stop": "consider stopping",
+        "g_last": "last activity", "g_stalled": "maybe STALLED",
+        "g_copy": "Copy resume cmd", "g_copied": "copied",
+        "g_none": "No running goals",
+        "g_done_fold": "✅ Completed goals ({n})",
+        "ld_title": "Concurrency", "ld_ok": "room for {n} more goal(s)",
+        "ld_full": "at capacity, no more goals", "ld_over": "overloaded, hold off",
+        "ld_load": "load15 {l} / {c} cores",
+        "ld_cpu": "CPU top5", "ld_mem": "Memory top5",
+        "ev_title": "Recent events", "ev_hint": "watchdog actions + completions",
+        "ev_complete": "✅ complete", "ev_restart": "🔄 watchdog restart",
+        "ev_nudge": "🔔 watchdog nudge", "ev_recover": "🟢 recovered",
+        "ev_pause": "⏸ goal paused", "ev_cleanup": "🧹 cleanup",
+        "ev_other": "·", "ev_none": "No events yet",
+        "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago",
     },
     "ja": {
         "title": "サービス一覧", "github_repo": "GitHub リポジトリ",
@@ -753,6 +789,24 @@ L10N = {
         "m_no_self": "ダッシュボード自身は操作できません(入口)", "m_started_async": "バックグラウンド起動しました(ポート未即時)",
         "m_no_touch": "保護プロセス {name} は操作できません",
         "m_badreq": "リクエスト解析失敗: {e}",
+        "g_panel": "Goal 進捗", "g_hint": "ライブ取得: tmux pane + session 更新時刻 + watchdog ログ",
+        "g_active": "実行中", "g_paused": "一時停止", "g_retry": "API リトライ中",
+        "g_done": "完了", "g_lost": "セッション消失",
+        "g_ctx": "コンテキスト", "g_ctx_high": "高め", "g_ctx_stop": "停止推奨",
+        "g_last": "最終活動", "g_stalled": "STALLED の可能性",
+        "ld_ok": "あと {n} 個まで起動可能",
+        "g_none": "実行中の goal はありません",
+        "g_done_fold": "✅ 完了済み goal（{n}）",
+        "ld_title": "推奨同時実行",
+        "ld_full": "満杯、これ以上は不可", "ld_over": "過負荷、控えて",
+        "ld_load": "load15 {l} / {c}コア",
+        "ld_cpu": "CPU top5", "ld_mem": "メモリ top5",
+        "ev_title": "最近のイベント", "ev_hint": "watchdog 操作 + 完了台帳",
+        "ev_complete": "✅ 完了", "ev_restart": "🔄 watchdog 再起動",
+        "ev_nudge": "🔔 watchdog 促し", "ev_recover": "🟢 復旧",
+        "ev_pause": "⏸ goal 一時停止", "ev_cleanup": "🧹 クリーンアップ",
+        "ev_other": "·", "ev_none": "イベントなし",
+        "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分前", "g_ago_h": "{h} 時間前",
     },
 }
 
@@ -1755,7 +1809,7 @@ def _tmux_run(args, timeout=2):
 
 _CTX_GOAL_RE = re.compile(r"\bGoal\s+(\d+(?:\.\d+)?)\s*([KM]?)\b")
 _CTX_EDGE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*([KM])\s*[─━─]{2,}\s*╮")
-_RETRY_RE = re.compile(r"Retrying \((\d+)/10\)")
+_RETRY_RE = re.compile(r"Retrying \((\d+)(?:\)|\s*/\s*10)")
 _PHASE_RE = re.compile(r"^[IVXLCDM]+\.\s+\S.*?\d+\s*/\s*\d+\s*$")
 
 
@@ -1851,14 +1905,6 @@ def _fold(s):
     return re.sub(r"[^a-z0-9]", "", str(s or "").lower())
 
 
-def _find_jsonl_by_gid(gid):
-    """按 goal id 在 sessions 目录里找 jsonl 路径;找不到返回 None。"""
-    if not gid:
-        return None
-    for p in glob.glob(os.path.join(OMP_SESSION_ROOT, "**", "*.jsonl"), recursive=True):
-        if gid in os.path.basename(p):
-            return p
-    return None
 
 
 _goals_cache = {"t": 0.0, "data": None}
@@ -2012,7 +2058,7 @@ def top_procs(limit=5):
         if not argv:  # 内核线程
             continue
         cur[pid] = cpu_j
-        meta[pid] = (nice_name(argv) or comm, rss, starttime)
+        meta[pid] = (nice_name(" ".join(argv)) or comm, rss, starttime)
     prev, dt = _proc_cpu_prev["cpu"], max(0.0, now - _proc_cpu_prev["t"])
     agg = {}
     for pid, (name, rss, starttime) in meta.items():
@@ -2161,7 +2207,8 @@ def render_events(events, lang=DEFAULT_LANG):
             f'<span class="ghint">{t(lang, "ev_hint")}</span></h2>{body}</div>')
 
 def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=None):
-    rows = []
+    if sysdata is None:
+        sysdata = sys_info()
     rows = []
     for e in entries:
         ip, port = e["ip"], e["port"]
@@ -2333,6 +2380,67 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .chip:hover { background: #1f1f1f; }
   .chip.active { background: #f2f2f2; border-color: #f2f2f2; color: #111; }
   .chip span { opacity: .6; margin-left: 4px; font-size: 11px; }
+  a.chip { text-decoration: none; }
+  a.chip:hover { color: #f2f2f2; border-color: #3a3a3a; }
+  .toolchips { margin-bottom: 14px; }
+
+  /* ---------------- Goal 进度卡片 / 负载水位 / 事件时间线 ---------------- */
+  .gpanel { background: #141414; border: 1px solid #222; border-radius: 10px;
+            padding: 12px 14px; margin-bottom: 14px; }
+  .gpanel h2 { margin: 0 0 10px; font-size: 13px; color: #9a9a9a; font-weight: 500; }
+  .gpanel .ghint { color: #666; font-weight: 400; font-size: 11.5px; }
+  .gcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; }
+  .gcard { background: #131313; border: 1px solid #222; border-radius: 8px; padding: 10px 12px; }
+  .gcard .ghead { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+  .gcard .glight { font-size: 13px; flex: none; }
+  .gcard .gname { font-weight: 600; color: #eee; font-size: 14px; word-break: break-all; }
+  .gcard .gstate { color: #8a8a8a; font-size: 11.5px; }
+  .gcard .gsub { color: #777; font-size: 11.5px; margin-top: 2px;
+                 word-break: break-all; line-height: 1.45; }
+  .gcard .grow { display: flex; justify-content: space-between; gap: 10px;
+                 font-size: 12.5px; color: #b0b0b0; padding: 3px 0 0; }
+  .gcard .grow > span:first-child { color: #777; flex: none; }
+  .gcard .gtx { font-family: ui-monospace, monospace; color: #c9c9c9; }
+  .gcard .gtx.warn { color: #e0b060; font-weight: 600; }
+  .gcard .gtx.stop { color: #e06c6c; font-weight: 600; }
+  .gcard .gretry { color: #e0884c; font-family: ui-monospace, monospace; }
+  .gcard .gidle { font-family: ui-monospace, monospace; }
+  .gcard .gstalled, .gcard .gstalled + * { color: #777 !important; }
+  .gcard .gprog { font-family: ui-monospace, monospace; font-size: 11.5px;
+                  color: #9a9a9a; padding: 4px 0 0 6px; line-height: 1.5;
+                  word-break: break-all; }
+  .gcard .gfoot { margin-top: 8px; }
+  .gcopy { display: inline-flex; align-items: center; gap: 6px; background: #1d1d1d;
+           border: 1px solid #2e2e2e; color: #d6d6d6; border-radius: 6px;
+           padding: 6px 14px; font-size: 12.5px; cursor: pointer; user-select: none; }
+  .gcopy:hover { border-color: #555; color: #fff; }
+  .gempty { color: #8a8a8a; font-size: 12.5px; padding: 10px 0; }
+  .gdone { margin-top: 12px; border-top: 1px solid #1f1f1f; padding-top: 8px; }
+  .gdone summary { cursor: pointer; color: #9a9a9a; font-size: 12.5px; user-select: none; }
+  .gdone summary:hover { color: #d6d6d6; }
+  .gdone-row { display: flex; gap: 10px; align-items: baseline; padding: 4px 0;
+               font-size: 12px; border-bottom: 1px solid #171717; flex-wrap: wrap; }
+  .gdone-row:last-child { border-bottom: none; }
+  .gdone-name { color: #c9c9c9; font-weight: 600; word-break: break-all; }
+
+  .loadline .ld-head { font-size: 13.5px; color: #d6d6d6; display: flex;
+                       align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .loadline .ld-ico { font-size: 14px; }
+  .loadline b { color: #eee; font-weight: 600; }
+  .loadline .ld-sub { color: #777; font-size: 12px; font-family: ui-monospace, monospace; }
+  .loadline .ld-tops { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 8px; }
+  .loadline .ld-top { flex: 1 1 260px; min-width: 0; }
+  .loadline .ld-t { color: #777; font-size: 11px; margin-bottom: 3px; }
+  .loadline .ld-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.6;
+                      font-family: ui-monospace, monospace; }
+  .loadline .ld-val { color: #c9c9c9; min-width: 52px; text-align: right; flex: none; }
+  .loadline .ld-name { color: #9a9a9a; word-break: break-all; }
+
+  .evt-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.7;
+             font-family: ui-monospace, monospace; flex-wrap: wrap; }
+  .evt-ts { color: #5c7a9a; flex: none; }
+  .evt-name { color: #e0a84c; flex: none; }
+  .evt-txt { color: #b0b0b0; word-break: break-all; min-width: 200px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th { text-align: left; color: #8a8a8a; font-weight: 500; font-size: 12px;
              padding: 8px 10px; border-bottom: 1px solid #222; position: sticky; top: 52px;
@@ -2439,6 +2547,17 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .mcard .mbtns { gap: 6px; }
     .mcard .mbtn { flex: 1 1 auto; min-width: 88px; padding: 11px 8px; font-size: 13.5px; }
     .mcard .mresult { font-size: 12.5px; }
+
+    /* Goal 卡片/负载线/事件: 单列可读 */
+    .gcards { grid-template-columns: 1fr; gap: 8px; }
+    .gcard .grow { flex-wrap: wrap; }
+    .gpanel { padding: 10px 12px; }
+    .loadline .ld-top { flex: 1 1 100%; }
+    .loadline .ld-row { font-size: 11.5px; }
+    .evt-row { gap: 6px; }
+    .evt-txt { min-width: 0; flex: 1 1 100%; padding-left: 14px; }
+    .gcopy { min-height: 38px; padding: 9px 16px; font-size: 13px; }
+    .gdone-row { font-size: 11.5px; }
   }
 </style>
 </head>
@@ -2463,6 +2582,10 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 </header>
 <main>
 {{SYSBAR}}
+{{LOADLINE}}
+{{TOOLCHIPS}}
+{{GOALS_PANEL}}
+{{EVENTS_PANEL}}
 <div class="filters" id="filters">
   <span class="chip active" data-f="user" role="button" tabindex="0">{{T:chip_user}} <span id="n-user"></span></span>
   <span class="chip" data-f="docker" role="button" tabindex="0">{{T:chip_docker}} <span id="n-docker"></span></span>
@@ -2599,7 +2722,56 @@ function renderSys(s) {
   ];
   $("sysbar").innerHTML = cards.map(([l, v]) =>
     `<div class='stat'><div class='label'>${l}</div><div class='value'>${v}</div></div>`).join("");
+  renderLoadline(s);
 }
+
+// 负载水位线 + top 进程(/api/sys 刷新时同步更新;与后端 render_loadline 同构)
+function renderLoadline(s) {
+  const el = $("loadline");
+  if (!el || !s.goalload) return;
+  const gl = s.goalload, esc = (x) => String(x ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const zone = gl.zone || "none";
+  const msg = zone === "ok" ? t("ld_ok", { n: gl.n }) : zone === "full" ? t("ld_full") : zone === "over" ? t("ld_over") : "—";
+  const [ico, color] = zone === "ok" ? ["🟢", "#6ec89a"] : zone === "full" ? ["🟡", "#e0b060"] : zone === "over" ? ["🔴", "#e06c6c"] : ["⚪", "#8a8a8a"];
+  const sub = t("ld_load", { l: gl.load15 != null ? gl.load15.toFixed(1) : "—", c: gl.cores ?? "?" });
+  const rows = (items, fmt) => (items || []).length
+    ? items.map(([v, k]) => `<div class='ld-row'><span class='ld-val'>${fmt(v)}</span><span class='ld-name'>${esc(k)}</span></div>`).join("")
+    : `<div class='ld-row' style='color:#666'>—</div>`;
+  el.innerHTML = `<div class='ld-head'><span class='ld-ico' style='color:${color}'>${ico}</span><b>${t("ld_title")}</b>：${msg}` +
+    `<span class='ld-sub'>（${sub}）</span></div><div class='ld-tops'>` +
+    `<div class='ld-top'><div class='ld-t'>${t("ld_cpu")}</div>${rows(gl.cpu_top, v => v.toFixed(0) + "%")}</div>` +
+    `<div class='ld-top'><div class='ld-t'>${t("ld_mem")}</div>${rows(gl.mem_top, v => v >= 1024 ? (v / 1024).toFixed(1) + "G" : v.toFixed(0) + "M")}</div></div>`;
+}
+
+// 快捷工具入口 chips: 端口存活才显示,点击直达(随 /api 刷新)
+const TOOL_LINKS = [["dbeditor", 8810], ["dbviewer", 8800], ["wilviewer", 8765], ["mapviewer", 8899]];
+function renderToolchips() {
+  const el = $("toolchips");
+  if (!el) return;
+  const ports = new Set(services.map(s => s.port));
+  const chips = TOOL_LINKS.filter(([n, p]) => ports.has(p)).map(([n, p]) =>
+    `<a class='chip tchip' href='http://${location.hostname}:${p}/' target='_blank' rel='noopener'>${n} :${p} ↗</a>`).join("");
+  el.innerHTML = chips;
+  el.style.display = chips ? "" : "none";
+}
+
+// 复制 resume 命令(http 非安全上下文走 execCommand 降级)
+function fallbackCopy(txt, done) {
+  const ta = document.createElement("textarea");
+  ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch (e) { /* 忽略 */ }
+  ta.remove();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".gcopy");
+  if (!b) return;
+  const cmd = b.dataset.cmd || "";
+  const done = () => { const old = b.textContent; b.textContent = "✓ " + t("g_copied"); setTimeout(() => b.textContent = old, 1600); };
+  if (navigator.clipboard && window.isSecureContext)
+    navigator.clipboard.writeText(cmd).then(done).catch(() => fallbackCopy(cmd, done));
+  else fallbackCopy(cmd, done);
+});
 
 const TYPE_BADGE = {
   watchdog: [t("tbd_wd"), "tbadge wd"],
@@ -2913,6 +3085,7 @@ async function load(alsoSys) {
     const data = await r.json();
     $("updated").textContent = new Date(data.updated * 1000).toLocaleString();
     services = data.services;
+    renderToolchips();
     applyFilter();
   } catch (err) {
     console.error("refresh failed", err);
@@ -3005,7 +3178,8 @@ class Handler(BaseHTTPRequestHandler):
             lang = detect_lang(self.headers.get("Accept-Language", ""),
                                urlparse(self.path).query)
             entries = gather()
-            body = render_html(self._host(), entries, time.time(), lang).encode("utf-8")
+            body = render_html(self._host(), entries, time.time(), lang,
+                               sysdata=sys_info()).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -3016,6 +3190,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"updated": time.time(), "services": gather()})
         elif path == "/api/sys":
             self._send_json(200, sys_info())
+        elif path == "/api/goals":
+            self._send_json(200, {"updated": time.time(), "goals": scan_goals(),
+                                  "completed": parse_completed_goals(),
+                                  "events": merge_events(parse_watchdog_events(),
+                                                        parse_completed_goals())})
         elif path == "/api/tasks":
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             self._send_json(200, {"tasks": scan_tasks(lang)})
@@ -3073,6 +3252,75 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write("[%s] %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
 
 
+def selftest():
+    """离线自检: 纯函数单测 + 真实数据源 dry-run,全部通过返回 0。"""
+    import unittest
+
+    class T(unittest.TestCase):
+        def test_ctx(self):
+            self.assertEqual(parse_ctx_k("╭── π ZAI Preview > Goal 45K > ~/x ────╮"), 45.0)
+            self.assertEqual(parse_ctx_k("── 554K ──╮"), 554.0)
+            self.assertEqual(parse_ctx_k("Goal 1.2M"), 1.2 * 1024)
+            self.assertIsNone(parse_ctx_k("no header here"))
+            self.assertEqual(ctx_level(45), "ok")
+            self.assertEqual(ctx_level(801), "warn")   # >800K 黄
+            self.assertEqual(ctx_level(1201), "stop")  # >1.2M 红
+
+        def test_retry_progress(self):
+            self.assertEqual(parse_retry("API error. Retrying (3)/10 in 5s"), "3")
+            self.assertEqual(parse_retry("Retrying (7/10)…"), "7")
+            self.assertIsNone(parse_retry("no retry"))
+            self.assertTrue(parse_progress(
+                "╭─── Todo 12 tasks ───╮\n│ II. Phase 1  3/3   │\n"
+                "│   ├─ Browser E2E: import roundtrip + no-resurrect │\n"
+                "╰─────────────────────╯"))
+
+        def test_load_zone(self):
+            self.assertEqual(load_zone(2.0), ("ok", 2))
+            self.assertEqual(load_zone(5.9), ("ok", 1))
+            self.assertEqual(load_zone(6.0), ("full", 0))
+            self.assertEqual(load_zone(12.4), ("over", 0))
+
+        def test_wd_parse(self):
+            line = ("2026-08-14 08:15:10 [019ffbaf] resumed 019ffbaf-4c8d in %30; "
+                    "sent '继续' to drive agent")
+            m = _WD_LINE_RE.match(line)
+            self.assertTrue(m)
+            self.assertEqual(_wd_event_kind("goal paused: pid=1; driving with '继续'"), "nudge")
+
+        def test_completed(self):
+            with open(GOAL_COMPLETED_LOG) as f:
+                real = f.read()
+            # 真实台账能解析出完成项,且字段齐全
+            entries = parse_completed_goals()
+            if "Zircon全代码文档化" in real:
+                self.assertTrue(any("Zircon" in c["label"] for c in entries))
+                self.assertTrue(entries[0]["resume_cmd"].startswith(OMP_BIN))
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(T)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+    # dry-run 真实数据源
+    print("\n--- live dry-run ---")
+    goals = scan_goals()
+    print(f"goal cards: {len(goals)}")
+    for g in goals:
+        print(f"  {g['name']}: light={g['light']} ctx={g['ctx_raw'] or '—'} "
+              f"idle={g['idle_sec']}s retry={g['retry']} prog={len(g['progress'])}")
+    s = sys_info()
+    gl = s["goalload"]
+    print(f"load: {gl['load15']} ({gl['zone']}, n={gl['n']}) cpu_top={gl['cpu_top'][:3]}")
+    evts = merge_events(parse_watchdog_events(), parse_completed_goals())
+    kinds = {e["kind"] for e in evts}
+    print(f"events: {len(evts)} kinds={sorted(kinds)}")
+    html = render_html("localhost:8899", gather(), time.time(), "zh", sysdata=s)
+    checks = ["Goal 进度", "建议并发", "已完成 goal", "最近事件", "tchip"]
+    for c in checks:
+        mark = "✓" if c in html else "✗"
+        print(f"  {mark} html contains {c!r}")
+    ok = all(c in html for c in checks)
+    return 0 if ok else 1
+
+
 def main():
     args = sys.argv[1:]
     port = DEFAULT_PORT
@@ -3080,11 +3328,13 @@ def main():
         try:
             port = int(args[args.index("--port") + 1])
         except (ValueError, IndexError):
-            print("用法: dashboard.py [--port N] [--scan]")
+            print("用法: dashboard.py [--port N] [--scan] [--selftest]")
             return 2
     if "--scan" in args:
         print(json.dumps({"services": gather()}, ensure_ascii=False, indent=2))
         return 0
+    if "--selftest" in args:
+        return selftest()
 
     httpd = ThreadingHTTPServer((LISTEN_HOST, port), Handler)
     httpd.daemon_threads = True
