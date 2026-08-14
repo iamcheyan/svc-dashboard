@@ -2649,7 +2649,20 @@ def render_events(events, lang=DEFAULT_LANG):
     return (f'<div class="gpanel" id="events"><h2>{t(lang, "ev_title")} '
             f'<span class="ghint">{t(lang, "ev_hint")}</span></h2>{body}</div>')
 
+_page_cache = {"t": 0.0, "body": None, "lang": None}
+PAGE_CACHE_SEC = 5.0
+_page_cache_lock = threading.Lock()
+
+
 def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=None, ts_mode=False):
+    # 首页整页缓存: 模板+全部采集一次 ~4-8s(CPUQuota=10% 下更久),而页面声明 no-store
+    # 只是防浏览器缓存; 服务端 5s 缓存让连续刷新/多端访问不再各自重扫一遍。
+    now = time.time()
+    with _page_cache_lock:
+        c = _page_cache["body"]
+        if (c is not None and _page_cache["lang"] == lang
+                and now - _page_cache["t"] < PAGE_CACHE_SEC):
+            return c
     if sysdata is None:
         sysdata = sys_info()
     rows = []
@@ -2720,7 +2733,10 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             .replace("<!--TABLE-->", table))
     # 模板里的 {{ICO:name:size}} 占位符 -> 内联 SVG(与 JS icon() 同一份数据)
     body = _ICO_PAT.sub(lambda m: icon(m.group(1), int(m.group(2) or 16)), body)
-    return _apply_t(body, lang)
+    body = _apply_t(body, lang)
+    with _page_cache_lock:
+        _page_cache.update({"t": now, "body": body, "lang": lang})
+    return body
 
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
@@ -6860,10 +6876,21 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             lang = detect_lang(self.headers.get("Accept-Language", ""),
                                urlparse(self.path).query)
-            entries = gather()
+            # 缓存命中路径: 不做任何预采集,直接问 render_html(命中即 <1ms 返回)
+            with _page_cache_lock:
+                cached = _page_cache["body"]
+                hit = (cached is not None and _page_cache["lang"] == lang
+                       and time.time() - _page_cache["t"] < PAGE_CACHE_SEC)
+            if not hit:
+                cached = None
+                entries = gather()
+            else:
+                entries = []
             body = render_html(self._host(), entries, time.time(), lang,
-                               sysdata=sys_info(),
+                               sysdata=None if hit else sys_info(),
                                ts_mode=self._is_tailscale_client()).encode("utf-8")
+            if hit:
+                body = cached.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
