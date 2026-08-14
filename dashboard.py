@@ -30,7 +30,7 @@ import time
 from datetime import datetime, timedelta
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 DEFAULT_PORT = 80
 AUTO_REFRESH_SEC = 10
@@ -654,7 +654,7 @@ L10N = {
     "zh": {
         "title": "服务一览", "github_repo": "GitHub 仓库",
         "updated": "更新于", "svc_pre": "", "svc_post": " 个监听端口", "auto_refresh": "自动刷新",
-        "refresh": "刷新", "m_confirm_title": "请确认操作", "m_cancel": "取消", "m_ok": "确认", "ptr_pull": "下拉刷新", "ptr_release": "松开刷新", "ptr_loading": "刷新中…",
+        "refresh": "刷新", "m_confirm_title": "请确认操作", "m_cancel": "取消", "m_ok": "确认", "m_close": "关闭", "svc_detail": "详情", "chip_web": "Web服务", "ptr_pull": "下拉刷新", "ptr_release": "松开刷新", "ptr_loading": "刷新中…",
         "chip_user": "用户服务", "chip_docker": "Docker", "chip_system": "系统服务",
         "chip_all": "全部", "chip_omp": "agent任务", "chip_watchdog": "定时任务",
         "chip_tmux": "tmux状态", "chip_manage": "服务管理",
@@ -798,7 +798,7 @@ L10N = {
     "en": {
         "title": "Services", "github_repo": "GitHub repo",
         "updated": "updated", "svc_pre": "", "svc_post": " listening ports", "auto_refresh": "Auto refresh",
-        "refresh": "Refresh", "m_confirm_title": "Confirm action", "m_cancel": "Cancel", "m_ok": "Confirm", "ptr_pull": "Pull to refresh", "ptr_release": "Release to refresh", "ptr_loading": "Refreshing…",
+        "refresh": "Refresh", "m_confirm_title": "Confirm action", "m_cancel": "Cancel", "m_ok": "Confirm", "m_close": "Close", "svc_detail": "Details", "chip_web": "Web services", "ptr_pull": "Pull to refresh", "ptr_release": "Release to refresh", "ptr_loading": "Refreshing…",
         "chip_user": "User services", "chip_docker": "Docker", "chip_system": "System services",
         "chip_all": "All", "chip_omp": "Agents", "chip_watchdog": "Tasks",
         "chip_tmux": "tmux", "chip_manage": "Manage",
@@ -944,7 +944,7 @@ L10N = {
     "ja": {
         "title": "サービス一覧", "github_repo": "GitHub リポジトリ",
         "updated": "更新", "svc_pre": "サービス ", "svc_post": "", "auto_refresh": "自動更新",
-        "refresh": "更新", "m_confirm_title": "操作の確認", "m_cancel": "キャンセル", "m_ok": "確認", "ptr_pull": "引っ張って更新", "ptr_release": "離して更新", "ptr_loading": "更新中…",
+        "refresh": "更新", "m_confirm_title": "操作の確認", "m_cancel": "キャンセル", "m_ok": "確認", "m_close": "閉じる", "svc_detail": "詳細", "chip_web": "Webサービス", "ptr_pull": "引っ張って更新", "ptr_release": "離して更新", "ptr_loading": "更新中…",
         "chip_user": "ユーザーサービス", "chip_docker": "Docker", "chip_system": "システムサービス",
         "chip_all": "すべて", "chip_omp": "エージェント", "chip_watchdog": "タスク",
         "chip_tmux": "tmux", "chip_manage": "サービス管理",
@@ -2321,7 +2321,11 @@ def parse_progress(text, limit=2):
                     hit = t
             if hit:
                 hit = " ".join(hit.split())
-                out.append(hit[:72])
+                # 去掉残留的树形符号和纯 Output 占位行(视觉噪音,信息量为零)
+                clean = re.sub(r"^[├└─│\s]+", "", hit).strip()
+                if not clean or clean.lower() in ("output", "outputs"):
+                    continue
+                out.append(clean[:72])
     except Exception:
         return []
     return out[-limit:] if out else []
@@ -2563,6 +2567,9 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
             note = {"warn": t(lang, "g_ctx_high"), "stop": t(lang, "g_ctx_stop")}.get(c["ctx_level"], "")
             extra.append(f'<div class="grow"><span>{t(lang, "g_ctx")}</span>'
                          f'<span class="{cls}">{c["ctx_raw"]}{" · " + note if note else ""}</span></div>')
+        else:
+            extra.append(f'<div class="grow"><span>{t(lang, "g_ctx")}</span>'
+                         f'<span class="gtx">—</span></div>')
         if c["retry"]:
             extra.append(f'<div class="grow"><span>API</span>'
                          f'<span class="gretry">{t(lang, "g_retrying", n=c["retry"])}</span></div>')
@@ -2571,6 +2578,9 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
             stall = f' · {t(lang, "g_stalled")}' if c["stalled"] else ""
             idle_row = (f'<div class="grow"><span>{t(lang, "g_last")}</span>'
                         f'<span class="{"gstalled" if c["stalled"] else "gidle"}">{ago}{stall}</span></div>')
+        else:
+            idle_row = (f'<div class="grow"><span>{t(lang, "g_last")}</span>'
+                        f'<span class="gidle">—</span></div>')
         if c["progress"]:
             prog = "<br>".join(escape(x) for x in c["progress"])
             extra.append(f'<div class="gprog">{prog}</div>')
@@ -2699,10 +2709,18 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
         # 只渲染按钮外壳,当前状态由前端按端口查询 /api/manage 后填充。
         man = next((u for u in MANAGE_UNITS
                     if u["kind"] == "proc" and u["port"] == port), None)
-        ctl = ""
+        ctl_btn = ""
         if man:
-            ctl = (f'<td class="ctl" data-label="Control">'
-                   f'<span class="ctl-btn" data-ctl="{man["id"]}" data-port="{port}" role="button" tabindex="0" aria-disabled="true">…</span></td>')
+            ctl_btn = (f'<span class="cmd-ctl"><span class="ctl-btn" data-ctl="{man["id"]}" data-port="{port}" '
+                       f'role="button" tabindex="0" aria-disabled="true">…</span></span>')
+        import json as _json
+        det = _json.dumps({"name": e["name"], "port": port, "ip": ip,
+                           "cmd": e["cmdline"] or "", "cwd": e["cwd"] or "",
+                           "pids": e.get("pids") or []}, ensure_ascii=False)
+        det_enc = escape(quote(det, safe=""), quote=True)
+        detail_btn = (f'<span class="svc-detail" role="button" tabindex="0" data-detail="{det_enc}" '
+                      f'title="{t(lang, "svc_detail")}">{t(lang, "svc_detail")}</span>')
+        cell = f'<div class="cmd-cell"><span class="cmd-text">{cmd}</span>{detail_btn}{ctl_btn}</div>'
         rows.append(
             f'<tr>'
             f'<td class="name"><span class="svc">{escape(e["name"])}</span>'
@@ -2710,9 +2728,8 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             f'<td class="port" data-label="{t(lang, "th_port")}"><a href="{link}" target="_blank" rel="noopener">{port}</a></td>'
             f'<td class="addr" data-label="{t(lang, "th_addr")}">{escape(ip)} {loop}</td>'
             f'<td class="pid" data-label="PID">{pids}</td>'
-            f'<td class="cmd" data-label="{t(lang, "th_cmd")}">{cmd}</td>'
-            f'<td class="cwd" data-label="{t(lang, "th_cwd")}">{cwd}</td>'
-            f'{ctl}'
+            f'<td class="cmd" data-label="{t(lang, "th_cmd")}">{cell}</td>'
+            f'<td class="cwd" data-label="{t(lang, "th_cwd")}">{cell}</td>'
             f'</tr>')
     table = "\n".join(rows)
     hostname = socket.gethostname()
@@ -3078,8 +3095,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
             padding: 12px 14px; margin-bottom: 14px; }
   .gpanel h2 { margin: 0 0 10px; font-size: 13px; color: var(--text-dim); font-weight: 500; }
   .gpanel .ghint { color: var(--text-faint); font-weight: 400; font-size: 11.5px; }
-  .gcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; align-items: start; }
-  .gcard { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; }
+  .gcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 10px; align-items: stretch; }
+  .gcard { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
   .gcard .ghead { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
   .gcard .glight { font-size: 13px; }
   .gcard .gname { font-weight: 600; color: var(--text-hi); font-size: 14px; word-break: break-all; }
@@ -3088,6 +3105,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                  word-break: break-all; line-height: 1.45; }
   .gcard .grow { display: flex; justify-content: space-between; gap: 10px;
                  font-size: 12.5px; color: var(--text-soft); padding: 3px 0 0; }
+  .gcard .grow + .grow { border-top: none; }
   .gcard .grow > span:first-child { color: var(--text-ghost); flex: none; }
   .gcard .gtx { font-family: ui-monospace, monospace; color: var(--text-mid); }
   .gcard .gtx.warn { color: var(--c-warn); font-weight: 600; }
@@ -3096,9 +3114,10 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .gcard .gidle { font-family: ui-monospace, monospace; }
   .gcard .gstalled, .gcard .gstalled + * { color: var(--text-ghost) !important; }
   .gcard .gprog { font-family: ui-monospace, monospace; font-size: 11.5px;
-                  color: var(--text-dim); padding: 4px 0 0 6px; line-height: 1.5;
-                  word-break: break-all; }
-  .gcard .gfoot { margin-top: 8px; }
+                  color: var(--text-dim); line-height: 1.55;
+                  word-break: break-all;
+                  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .gcard .gfoot { margin-top: auto; padding-top: 8px; }
   .gcopy { display: inline-flex; align-items: center; gap: 6px; background: var(--btn-soft-bg);
            border: 1px solid var(--btn-soft-border); color: var(--text); border-radius: 14px;
            padding: 6px 14px; font-size: 12.5px; cursor: pointer; user-select: none; }
@@ -3159,6 +3178,18 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   table[data-col="cmd"] td.cwd { display: none; }
   table[data-col="cwd"] td.cmd { display: none; }
   th.colswitch { min-width: 220px; }
+  .cmd-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .cmd-cell .cmd-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+                        overflow: hidden; word-break: break-all; line-height: 1.45; }
+  .svc-detail { flex: none; font-size: 11.5px; color: var(--text-dim); border: 1px solid var(--btn-soft-border);
+                border-radius: 10px; padding: 4px 9px; cursor: pointer; user-select: none; white-space: nowrap; }
+  .svc-detail:hover { color: var(--text-title); border-color: var(--btn-soft-hover-bd); }
+  .cmd-ctl { flex: none; display: inline-flex; }
+  .svc-detail-dialog .ui-dialog-msg { font-size: 13px; }
+  .svc-detail-kv { display: grid; grid-template-columns: 84px 1fr; gap: 6px 12px; align-items: start; }
+  .svc-detail-kv .k { color: var(--text-ghost); font-size: 12px; padding-top: 2px; }
+  .svc-detail-kv .v { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--text-main);
+                      word-break: break-all; user-select: all; }
   .tcol { background: transparent; border: 1px solid var(--chip-border); color: var(--text-faint);
           border-radius: 6px; padding: 2px 11px; font-size: 11.5px; cursor: pointer; }
   .tcol:hover { color: var(--text-hi); border-color: var(--btn-hover); }
@@ -3771,7 +3802,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 {{GOALS_PANEL}}
 {{EVENTS_PANEL}}
 <div class="filters" id="filters">
-  <span class="chip active" data-f="user" role="button" tabindex="0">{{T:chip_user}} <span id="n-user"></span></span>
+  <span class="chip" data-f="user" role="button" tabindex="0">{{T:chip_user}} <span id="n-user"></span></span>
+  <span class="chip" data-f="web" role="button" tabindex="0">{{T:chip_web}} <span id="n-web"></span></span>
   <span class="chip" data-f="docker" role="button" tabindex="0">{{T:chip_docker}} <span id="n-docker"></span></span>
   <span class="chip" data-f="system" role="button" tabindex="0">{{T:chip_system}} <span id="n-system"></span></span>
   <span class="chip" data-f="all" role="button" tabindex="0">{{T:chip_all}} <span id="n-all"></span></span>
@@ -3785,7 +3817,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 <table id="svc" data-col="cmd">
   <thead><tr>
     <th>{{T:th_svc}}</th><th>{{T:th_port}}</th><th>{{T:th_addr}}</th><th>{{T:th_pid}}</th>
-    <th>{{T:th_ctl}}</th>
     <th class="colswitch">
       <span class="tcol active" data-col="cmd" role="button" tabindex="0">{{T:th_cmd}}</span>
       <span class="tcol" data-col="cwd" role="button" tabindex="0">{{T:th_cwd}}</span>
@@ -3990,10 +4021,11 @@ const $ = (id) => document.getElementById(id);
 
 const FILTERS = {
   user:   (e) => e.scope !== "system",
+  web:    (e) => e.scope !== "system" && !e.paused && !((e.ip || "").startsWith("127.") || e.ip === "::1" || (e.ip || "").startsWith("::ffff:127.")) && ![22000, 5355].includes(+e.port),
   docker: (e) => e.scope === "docker",
   system: (e) => e.scope === "system",
   omp:     () => false, // OMP 走独立面板,不混进服务表
-  watchdog: () => false, // 看门狗走独立面板,不混进服务表
+  watchdog: () => false, // 看门狗走独立面板
   manage:  () => false, // 服务管理走独立面板
   all:    () => true,
 };
@@ -4018,6 +4050,8 @@ function row(e, mobile) {
   const ctl = man
     ? `<span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span>`
     : "";
+  // 详情按钮: 点击弹层看完整命令/目录 (行内最多两行,避免长命令把行拉高)
+  const detailBtn = `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify({name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids}))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
   if (mobile) {
     // 手机卡片(合法表格结构): 头行右侧显式 44px 圆形 复制/打开 按钮(无滑扫手势)
     const kv = (k, v) => `<div class='kv'><span class='k'>${k}</span><span class='v'>${v}</span></div>`;
@@ -4040,15 +4074,16 @@ function row(e, mobile) {
     <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
     <td class='addr' data-label='${t("th_addr")}'>${esc(ip)}${loop}</td>
     <td class='pid' data-label='PID'>${e.pids.join(", ")}</td>
-    <td class='cmd' data-label='${t("th_cmd")}'>${esc(cmd)}</td>
-    <td class='cwd' data-label='${t("th_cwd")}'>${esc(cwd)}</td>
-    ${ctl ? `<td class='ctl' data-label='${t("th_ctl")}'>${ctl}</td>` : ""}
+    <td class='cmd' data-label='${t("th_cmd")}'>
+      <div class='cmd-cell'><span class='cmd-text'>${esc(cmd)}</span>${detailBtn}${ctl ? `<span class='cmd-ctl'>${ctl}</span>` : ""}</div></td>
+    <td class='cwd' data-label='${t("th_cwd")}'>
+      <div class='cmd-cell'><span class='cmd-text'>${esc(cwd)}</span>${detailBtn}${ctl ? `<span class='cmd-ctl'>${ctl}</span>` : ""}</div></td>
   </tr>`;
 }
 
 function applyFilter() {
   const shown = FILTERS[filter] ? services.filter(FILTERS[filter]) : [];
-  ["user", "docker", "system", "all"].forEach(f =>
+  ["user", "web", "docker", "system", "all"].forEach(f =>
     $("n-" + f).textContent = services.filter(FILTERS[f]).length);
   document.querySelectorAll("#filters .chip").forEach(c =>
     c.classList.toggle("active", c.dataset.f === filter));
@@ -5182,6 +5217,28 @@ document.addEventListener("click", (e) => {
     if (!g || !isMobile()) return;
     if (e.target.closest(".gcopy")) return;           // 复制 resume 命令: 交给全局 gcopy
     if (g.querySelector(".gextra")) { g.classList.toggle("open"); haptic(6); }
+});
+
+// --- 服务行"详情"按钮: 弹层看完整启动命令/工作目录 (复用主题化 ui-modal) ---
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest(".svc-detail");
+  if (!b) return;
+  let d = {};
+  try { d = JSON.parse(decodeURIComponent(b.dataset.detail || "")); } catch (err) { return; }
+  const modal = $("ui-modal"), title = $("ui-dialog-title"), msg = $("ui-dialog-msg"), cancel = $("ui-cancel");
+  if (!modal || !msg || !title || !cancel) return;
+  const esc = (s) => String(s ?? "").replace(/[&<>\"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  title.innerHTML = icon("doc", 17) + " <span>" + esc(d.name || "") + "</span>";
+  msg.innerHTML = `<div class="svc-detail-kv">`
+    + `<span class="k">${t("th_port")}</span><span class="v">${esc(d.port || "—")}</span>`
+    + `<span class="k">${t("th_addr")}</span><span class="v">${esc(d.ip || "—")}</span>`
+    + `<span class="k">PID</span><span class="v">${esc((d.pids || []).join(", ") || "—")}</span>`
+    + `<span class="k">${t("th_cmd")}</span><span class="v">${esc(d.cmd || "—")}</span>`
+    + `<span class="k">${t("th_cwd")}</span><span class="v">${esc(d.cwd || "—")}</span></div>`;
+  cancel.textContent = t("m_close");
+  modal.hidden = false;
+  const onClose = () => { cancel.textContent = t("m_cancel"); };
+  cancel.addEventListener("click", onClose, { once: true });
 });
 
 // --- 长按(500ms)复制 ---
