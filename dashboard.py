@@ -543,6 +543,77 @@ def fmt_uptime(sec, lang=DEFAULT_LANG):
     return t(lang, "minute", m=m)
 
 
+# ---------------- 内联 SVG 图标系统(零依赖, 与前端 JS 共享同一份 path 表) ----------------
+# 风格: 16x16 viewBox, stroke=currentColor, stroke-width=1.5, round linecap/join。
+# JS 侧经 {{ICONS_JSON}} 注入同一份表, 保证两端图标完全一致。
+ICONS = {
+    "wait":   '<path d="M8 1.5A6.5 6.5 0 1 1 1.5 8"/>',
+    "ok":     '<circle cx="8" cy="8" r="6.5"/><path d="m5.3 8.3 1.9 1.9 3.5-4.2"/>',
+    "warn":   '<path d="M8 1.8 15 13.8H1Z"/><path d="M8 6v3.4"/><path d="M8 11.9h.01"/>',
+    "err":    '<circle cx="8" cy="8" r="6.5"/><path d="m5.7 5.7 4.6 4.6M10.3 5.7l-4.6 4.6"/>',
+    "dot":    '<circle cx="8" cy="8" r="4.5" fill="currentColor" stroke="none"/>',
+    "pause":  '<path d="M5.5 3.5v9M10.5 3.5v9"/>',
+    "retry":  '<path d="M2.6 8a5.4 5.4 0 0 1 9.3-3.7M13.4 8a5.4 5.4 0 0 1-9.3 3.7"/>'
+              '<path d="M12.1 1.7v2.8H9.3M3.9 14.3v-2.8h2.8"/>',
+    "up":     '<circle cx="8" cy="8" r="6.5"/><path d="M8 11V5.6M5.7 7.9 8 5.6l2.3 2.3"/>',
+    "bell":   '<path d="M8 2.2a3.8 3.8 0 0 0-3.8 3.8c0 3-1.1 4.1-1.7 4.8h11c-.6-.7-1.7-1.8-1.7-4.8A3.8 3.8 0 0 0 8 2.2Z"/>'
+              '<path d="M6.6 12.8a1.5 1.5 0 0 0 2.8 0"/>',
+    "trash":  '<path d="M2.8 4.2h10.4M6.4 4.2V2.6h3.2v1.6M4.2 4.2l.6 9.2h6.4l.6-9.2M6.7 6.8v4M9.3 6.8v4"/>',
+    "box":    '<path d="M8 1.8 13.6 4.6v6.8L8 14.2 2.4 11.4V4.6Z"/><path d="M2.4 4.6 8 7.4l5.6-2.8M8 7.4v6.8"/>',
+    "folder": '<path d="M1.8 4.3c0-.6.5-1.1 1.1-1.1h3l1.5 1.7h5.7c.6 0 1.1.5 1.1 1.1v6c0 .6-.5 1.1-1.1 1.1H2.9c-.6 0-1.1-.5-1.1-1.1Z"/>',
+    "file":   '<path d="M4 1.8h5.2L12.4 5v9.2H4Z"/><path d="M9 1.8V5h3.4"/>',
+    "heart":  '<path d="M8 13.6S1.8 10.2 1.8 6C1.8 4 3.3 2.6 5.1 2.6c1.2 0 2.3.7 2.9 1.7.6-1 1.7-1.7 2.9-1.7 1.8 0 3.3 1.4 3.3 3.4 0 4.2-6.2 7.6-6.2 7.6Z"/>',
+    "gauge":  '<path d="M2.4 11.2a5.9 5.9 0 1 1 11.2 0"/><path d="M8 11 10.6 6.8"/><path d="M8 11h.01"/>',
+    "clock":  '<circle cx="8" cy="8" r="6.4"/><path d="M8 4.6V8l2.3 1.7"/>',
+    "ext":    '<path d="M6.8 3.4H4.2c-1 0-1.8.8-1.8 1.8v6.6c0 1 .8 1.8 1.8 1.8h6.6c1 0 1.8-.8 1.8-1.8V9.2"/>'
+              '<path d="M9.4 2.6h4v4M13 3 7.8 8.2"/>',
+    "copy":   '<rect x="5.6" y="5.6" width="7.9" height="7.9" rx="1.3"/>'
+              '<path d="M10.4 5.6V3.9c0-.7-.6-1.3-1.3-1.3H3.9c-.7 0-1.3.6-1.3 1.3v5.2c0 .7.6 1.3 1.3 1.3h1.7"/>',
+    "refresh":'<path d="M13.6 8a5.6 5.6 0 1 1-1.7-4"/><path d="M12.3 1.4v2.8H9.5"/>',
+    "lock":   '<rect x="3.4" y="7" width="9.2" height="6.6" rx="1.3"/><path d="M5.6 7V5.2a2.4 2.4 0 0 1 4.8 0V7"/>',
+    "close":  '<path d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6"/>',
+    "chev":   '<path d="m6 4 4.6 4L6 12"/>',
+    "down":   '<path d="M8 2.6v9.2M4.6 8.4 8 11.8l3.4-3.4"/>',
+    "cpu":    '<rect x="4" y="4" width="8" height="8" rx="1.3"/>'
+              '<path d="M6.2 1.6v2M9.8 1.6v2M6.2 12.4v2M9.8 12.4v2M1.6 6.2h2M1.6 9.8h2M12.4 6.2h2M12.4 9.8h2"/>',
+    "mem":    '<rect x="2.4" y="4.8" width="11.2" height="7" rx="1.1"/><path d="M5.2 8.2v1.6M8 7v2.8M10.8 8.2v1.6"/>',
+    "disk":   '<ellipse cx="8" cy="3.9" rx="5.2" ry="1.9"/>'
+              '<path d="M2.8 3.9v8.2c0 1.05 2.33 1.9 5.2 1.9s5.2-.85 5.2-1.9V3.9"/>'
+              '<path d="M2.8 8c0 1.05 2.33 1.9 5.2 1.9s5.2-.85 5.2-1.9"/>',
+    "load":   '<path d="M1.4 8.6h2.6l2-5.4 3 10 2-4.6h3.6"/>',
+    "swap":   '<path d="M3.2 6.2a5.2 5.2 0 0 1 9.4-1.8M12.8 9.8a5.2 5.2 0 0 1-9.4 1.8"/>'
+              '<path d="M13 2.2v2.6h-2.6M3 13.8v-2.6h2.6"/>',
+    "play":   '<path d="M5.2 3.4 12.4 8l-7.2 4.6Z"/>',
+    "stop":   '<rect x="4" y="4" width="8" height="8" rx="1.2"/>',
+    "sun":    '<circle cx="8" cy="8" r="3.2"/>'
+              '<path d="M8 1.2v1.8M8 13v1.8M1.2 8H3M13 8h1.8M3.2 3.2l1.3 1.3M11.5 11.5l1.3 1.3M12.8 3.2l-1.3 1.3M4.5 11.5l-1.3 1.3"/>',
+    "moon":   '<path d="M13.4 10.4A5.8 5.8 0 0 1 5.6 2.6a6 6 0 1 0 7.8 7.8Z"/>',
+    "auto":   '<circle cx="8" cy="8" r="6.4"/><path d="M8 1.6a6.4 6.4 0 0 1 0 12.8Z" fill="currentColor" stroke="none"/>',
+}
+
+_ICO_PAT = re.compile(r"\{\{ICO:([a-z0-9_]+)(?::(\d+))?\}\}")
+
+
+def icon(name, size=16, cls="ic"):
+    """name -> 内联 SVG 字符串; 未知名字回退为空心圆点。"""
+    path = ICONS.get(name) or ICONS["dot"]
+    c = f' class="{cls}"' if cls else ""
+    return (f'<svg{c} width="{size}" height="{size}" viewBox="0 0 16 16" fill="none" '
+            f'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" '
+            f'stroke-linejoin="round" aria-hidden="true">{path}</svg>')
+
+
+# 事件类型 -> (图标, 语义色 class, i18n key)。前端 EV_META 与此同构。
+KIND_META = {
+    "complete": ("ok", "t-green", "evk_complete"),
+    "recover": ("up", "t-green", "evk_recover"),
+    "restart": ("retry", "t-red", "evk_restart"),
+    "nudge": ("bell", "t-warn", "evk_nudge"),
+    "pause": ("pause", "t-warn", "evk_pause"),
+    "cleanup": ("trash", "t-green", "evk_cleanup"),
+    "commit": ("box", "t-green", "evk_commit"),
+}
+
 def render_sysbar(s, lang=DEFAULT_LANG):
     """系统信息卡片条(打开页面时渲染一次,手动刷新才更新)。"""
     loadavg = " / ".join(f"{x:.2f}" for x in s["loadavg"]) if s.get("loadavg") else "—"
@@ -559,8 +630,10 @@ def render_sysbar(s, lang=DEFAULT_LANG):
         ("up", t(lang, "sys_up"), fmt_uptime(s.get("uptime"), lang)),
     ]
     # data-k: 手机端双击手势定位(负载卡双击→Goal页, 磁盘卡双击→展开top进程)
+    k_ico = {"load": "load", "cpu": "cpu", "mem": "mem", "disk": "disk", "up": "clock"}
     return '<div class="sysbar" id="sysbar">' + "".join(
-        f'<div class="stat" data-k="{k}"><div class="label">{lbl}</div>'
+        f'<div class="stat" data-k="{k}"><div class="label">'
+        f'<span class="lb-ico">{icon(k_ico.get(k, "dot"), 13)}</span>{lbl}</div>'
         f'<div class="value">{val}</div></div>' for k, lbl, val in cards) + "</div>"
 
 
@@ -571,7 +644,7 @@ L10N = {
     "zh": {
         "title": "服务一览", "github_repo": "GitHub 仓库",
         "updated": "更新于", "svc_pre": "", "svc_post": " 个监听端口", "auto_refresh": "自动刷新",
-        "refresh": "⟳ 刷新", "ptr_pull": "下拉刷新", "ptr_release": "松开刷新", "ptr_loading": "刷新中…",
+        "refresh": "刷新", "ptr_pull": "下拉刷新", "ptr_release": "松开刷新", "ptr_loading": "刷新中…",
         "chip_user": "用户服务", "chip_docker": "Docker", "chip_system": "系统服务",
         "chip_all": "全部", "chip_omp": "agent任务", "chip_watchdog": "定时任务",
         "chip_tmux": "tmux状态", "chip_manage": "服务管理",
@@ -606,7 +679,7 @@ L10N = {
         "a_none": "没有检测到 agent", "a_th_agent": "Agent",
         "a_loading": "加载中…", "a_recent": "最近活动", "a_term": "终端画面",
         "a_nolog": "没有可用的日志 / 终端画面", "a_fail": "加载失败: {e}",
-        "aev_exit": "✕ 会话结束: {r}", "aev_goal": "🔀 目标: {o}", "aev_comp": "↻ 压缩: {s}",
+        "aev_exit": "会话结束: {r}", "aev_goal": "目标: {o}", "aev_comp": "压缩: {s}",
         "tmux_panel": "tmux 状态", "tmux_panes": "{n} 个窗格", "tmux_active": "当前",
         "tmux_th_pane": "窗格", "tmux_th_title": "标题", "tmux_th_size": "尺寸",
         "tmux_none": "tmux 未运行",
@@ -639,15 +712,15 @@ L10N = {
         "g_last": "最近活动", "g_stalled": "可能 STALLED",
         "g_copy": "复制 resume 命令", "g_copied": "已复制",
         "g_none": "当前没有在跑的 goal",
-        "g_done_fold": "✅ 已完成 goal（{n}）",
+        "g_done_fold": "已完成 goal（{n}）",
         "ld_title": "建议并发", "ld_ok": "还可开 {n} 个 goal",
         "ld_full": "满载，别再开了", "ld_over": "过载，先别开",
         "ld_load": "load15 {l} / {c}核",
         "ld_cpu": "CPU top5", "ld_mem": "内存 top5",
         "ev_title": "最近事件", "ev_hint": "watchdog 动作 + goal 完成台账",
-        "ev_complete": "✅ 完成", "ev_restart": "🔄 watchdog 重启",
-        "ev_nudge": "🔔 watchdog 催行", "ev_recover": "🟢 已恢复",
-        "ev_pause": "⏸ 目标暂停", "ev_cleanup": "🧹 清理",
+        "ev_complete": "完成", "ev_restart": "watchdog 重启",
+        "ev_nudge": "watchdog 催行", "ev_recover": "已恢复",
+        "ev_pause": "目标暂停", "ev_cleanup": "清理",
         "ev_other": "·", "ev_none": "暂无事件",
         "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分钟前", "g_ago_h": "{h} 小时前",
         "tab_home": "概览", "tab_goal": "Goal", "tab_svc": "服务", "tab_model": "模型", "tab_log": "日志",
@@ -670,7 +743,7 @@ L10N = {
         "lf_wd": "watchdog", "lf_done": "完成", "lf_commit": "commit",
         "lf_3d": "3天", "lf_7d": "7天",
         "ev_loop": "循环 ×{n}", "ev_empty": "该时间范围内没有事件",
-        "ev_commit": "📦 提交",
+        "ev_commit": "提交",
         "evk_complete": "完成", "evk_restart": "重启(进程死亡)",
         "evk_nudge": "催行", "evk_recover": "已恢复", "evk_pause": "暂停",
         "evk_cleanup": "清理", "evk_commit": "提交", "evk_other": "其他",
@@ -696,11 +769,14 @@ L10N = {
         "tl_usvc_hint": "输入 I-KNOW 解锁重启按钮", "tl_usvc_wrong": "确认字符串不匹配",
         "tl_usvc_restart": "重启", "tl_usvc_loading": "读取中…", "tl_usvc_none": "无用户级服务",
         "tl_cron_title": "计划任务一览", "tl_g1_title": "工具直达",
+        "theme_title": "外观", "th_auto": "跟随系统", "th_dark": "深色", "th_light": "浅色",
+        "refresh_title": "点击刷新 · 长按锁定/解锁自动刷新",
+        "locked_toast": "已锁定：自动刷新暂停", "unlocked_toast": "已解锁：自动刷新恢复",
     },
     "en": {
         "title": "Services", "github_repo": "GitHub repo",
         "updated": "updated", "svc_pre": "", "svc_post": " listening ports", "auto_refresh": "Auto refresh",
-        "refresh": "⟳ Refresh", "ptr_pull": "Pull to refresh", "ptr_release": "Release to refresh", "ptr_loading": "Refreshing…",
+        "refresh": "Refresh", "ptr_pull": "Pull to refresh", "ptr_release": "Release to refresh", "ptr_loading": "Refreshing…",
         "chip_user": "User services", "chip_docker": "Docker", "chip_system": "System services",
         "chip_all": "All", "chip_omp": "Agents", "chip_watchdog": "Tasks",
         "chip_tmux": "tmux", "chip_manage": "Manage",
@@ -735,7 +811,7 @@ L10N = {
         "a_none": "No agents detected", "a_th_agent": "Agent",
         "a_loading": "Loading…", "a_recent": "Recent activity", "a_term": "Terminal",
         "a_nolog": "No log / terminal available", "a_fail": "Failed: {e}",
-        "aev_exit": "✕ session ended: {r}", "aev_goal": "🔀 Goal: {o}", "aev_comp": "↻ Compaction: {s}",
+        "aev_exit": "session ended: {r}", "aev_goal": "Goal: {o}", "aev_comp": "Compaction: {s}",
         "tmux_panel": "tmux status", "tmux_panes": "{n} panes", "tmux_active": "active",
         "tmux_th_pane": "Pane", "tmux_th_title": "Title", "tmux_th_size": "Size",
         "tmux_none": "tmux not running",
@@ -768,15 +844,15 @@ L10N = {
         "g_last": "last activity", "g_stalled": "maybe STALLED",
         "g_copy": "Copy resume cmd", "g_copied": "copied",
         "g_none": "No running goals",
-        "g_done_fold": "✅ Completed goals ({n})",
+        "g_done_fold": "Completed goals ({n})",
         "ld_title": "Concurrency", "ld_ok": "room for {n} more goal(s)",
         "ld_full": "at capacity, no more goals", "ld_over": "overloaded, hold off",
         "ld_load": "load15 {l} / {c} cores",
         "ld_cpu": "CPU top5", "ld_mem": "Memory top5",
         "ev_title": "Recent events", "ev_hint": "watchdog actions + completions",
-        "ev_complete": "✅ complete", "ev_restart": "🔄 watchdog restart",
-        "ev_nudge": "🔔 watchdog nudge", "ev_recover": "🟢 recovered",
-        "ev_pause": "⏸ goal paused", "ev_cleanup": "🧹 cleanup",
+        "ev_complete": "complete", "ev_restart": "watchdog restart",
+        "ev_nudge": "watchdog nudge", "ev_recover": "recovered",
+        "ev_pause": "goal paused", "ev_cleanup": "cleanup",
         "ev_other": "·", "ev_none": "No events yet",
         "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago",
         "tab_home": "Overview", "tab_goal": "Goal", "tab_svc": "Services", "tab_model": "Models", "tab_log": "Logs",
@@ -799,7 +875,7 @@ L10N = {
         "lf_wd": "watchdog", "lf_done": "done", "lf_commit": "commit",
         "lf_3d": "3d", "lf_7d": "7d",
         "ev_loop": "loop ×{n}", "ev_empty": "No events in this range",
-        "ev_commit": "📦 commit",
+        "ev_commit": "commit",
         "evk_complete": "complete", "evk_restart": "relaunch (dead)",
         "evk_nudge": "nudge", "evk_recover": "recovered", "evk_pause": "paused",
         "evk_cleanup": "cleanup", "evk_commit": "commit", "evk_other": "other",
@@ -826,11 +902,14 @@ L10N = {
         "tl_usvc_hint": "type I-KNOW to unlock restart buttons", "tl_usvc_wrong": "wrong confirm string",
         "tl_usvc_restart": "restart", "tl_usvc_loading": "loading…", "tl_usvc_none": "no user services",
         "tl_cron_title": "Scheduled tasks", "tl_g1_title": "Quick links",
+        "theme_title": "Appearance", "th_auto": "System", "th_dark": "Dark", "th_light": "Light",
+        "refresh_title": "Tap to refresh · long-press to lock/unlock auto refresh",
+        "locked_toast": "Locked: auto refresh paused", "unlocked_toast": "Unlocked: auto refresh resumed",
     },
     "ja": {
         "title": "サービス一覧", "github_repo": "GitHub リポジトリ",
         "updated": "更新", "svc_pre": "サービス ", "svc_post": "", "auto_refresh": "自動更新",
-        "refresh": "⟳ 更新", "ptr_pull": "引っ張って更新", "ptr_release": "離して更新", "ptr_loading": "更新中…",
+        "refresh": "更新", "ptr_pull": "引っ張って更新", "ptr_release": "離して更新", "ptr_loading": "更新中…",
         "chip_user": "ユーザーサービス", "chip_docker": "Docker", "chip_system": "システムサービス",
         "chip_all": "すべて", "chip_omp": "エージェント", "chip_watchdog": "タスク",
         "chip_tmux": "tmux", "chip_manage": "サービス管理",
@@ -865,7 +944,7 @@ L10N = {
         "a_none": "エージェントが検出されません", "a_th_agent": "エージェント",
         "a_loading": "読み込み中…", "a_recent": "最近の活動", "a_term": "ターミナル",
         "a_nolog": "ログ / ターミナルはありません", "a_fail": "失敗: {e}",
-        "aev_exit": "✕ セッション終了: {r}", "aev_goal": "🔀 目標: {o}", "aev_comp": "↻ 圧縮: {s}",
+        "aev_exit": "セッション終了: {r}", "aev_goal": "目標: {o}", "aev_comp": "圧縮: {s}",
         "tmux_panel": "tmux 状態", "tmux_panes": "{n} ペイン", "tmux_active": "現在",
         "tmux_th_pane": "ペイン", "tmux_th_title": "タイトル", "tmux_th_size": "サイズ",
         "tmux_none": "tmux は起動していません",
@@ -898,15 +977,15 @@ L10N = {
         "g_last": "最終活動", "g_stalled": "STALLED の可能性",
         "ld_ok": "あと {n} 個まで起動可能",
         "g_none": "実行中の goal はありません",
-        "g_done_fold": "✅ 完了済み goal（{n}）",
+        "g_done_fold": "完了済み goal（{n}）",
         "ld_title": "推奨同時実行",
         "ld_full": "満杯、これ以上は不可", "ld_over": "過負荷、控えて",
         "ld_load": "load15 {l} / {c}コア",
         "ld_cpu": "CPU top5", "ld_mem": "メモリ top5",
         "ev_title": "最近のイベント", "ev_hint": "watchdog 操作 + 完了台帳",
-        "ev_complete": "✅ 完了", "ev_restart": "🔄 watchdog 再起動",
-        "ev_nudge": "🔔 watchdog 促し", "ev_recover": "🟢 復旧",
-        "ev_pause": "⏸ goal 一時停止", "ev_cleanup": "🧹 クリーンアップ",
+        "ev_complete": "完了", "ev_restart": "watchdog 再起動",
+        "ev_nudge": "watchdog 促し", "ev_recover": "復旧",
+        "ev_pause": "goal 一時停止", "ev_cleanup": "クリーンアップ",
         "ev_other": "·", "ev_none": "イベントなし",
         "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分前", "g_ago_h": "{h} 時間前",
         "tab_home": "概要", "tab_goal": "Goal", "tab_svc": "サービス", "tab_model": "モデル", "tab_log": "ログ",
@@ -929,7 +1008,7 @@ L10N = {
         "lf_wd": "watchdog", "lf_done": "完了", "lf_commit": "commit",
         "lf_3d": "3日", "lf_7d": "7日",
         "ev_loop": "循環 ×{n}", "ev_empty": "この期間のイベントはありません",
-        "ev_commit": "📦 コミット",
+        "ev_commit": "コミット",
         "evk_complete": "完了", "evk_restart": "再始動(プロセス死亡)",
         "evk_nudge": "催促", "evk_recover": "復旧", "evk_pause": "一時停止",
         "evk_cleanup": "クリーンアップ", "evk_commit": "コミット", "evk_other": "その他",
@@ -956,6 +1035,9 @@ L10N = {
         "tl_usvc_hint": "I-KNOW と入力して再起動ボタンを解除", "tl_usvc_wrong": "確認文字列が違います",
         "tl_usvc_restart": "再起動", "tl_usvc_loading": "読み込み中…", "tl_usvc_none": "ユーザーサービスなし",
         "tl_cron_title": "予定タスク一覧", "tl_g1_title": "ツール直行",
+        "theme_title": "外観", "th_auto": "システム", "th_dark": "ダーク", "th_light": "ライト",
+        "refresh_title": "タップで更新 · 長押しで自動更新のロック切替",
+        "locked_toast": "ロック中: 自動更新停止", "unlocked_toast": "ロック解除: 自動更新再開",
     },
 }
 
@@ -1745,9 +1827,9 @@ def _event_text(event, lang=DEFAULT_LANG):
     if etype == "custom":
         ct = data.get("customType") or event.get("customType") or ""
         if "tool_execution_start" in ct:
-            return ("tool", f"[{ts}] ⚙ {data.get('toolName', '—')}")
+            return ("tool", f"[{ts}] tool: {data.get('toolName', '—')}")
         if "tool_execution_end" in ct:
-            return ("tool", f"[{ts}] ✓ {data.get('toolName', '—')}")
+            return ("tool", f"[{ts}] ok: {data.get('toolName', '—')}")
         if "session_exit" in ct:
             return ("exit", f"[{ts}] {t(lang, 'aev_exit', r=data.get('reason', '—'))}")
         if "mode_change" in ct:
@@ -2266,12 +2348,14 @@ def load_zone(load15):
 
 def render_goal_cards(cards, lang=DEFAULT_LANG):
     """Goal 进度卡片 + 已完成折叠区(服务端渲染,打开页面/手动刷新时更新)。"""
-    light = {"active": ("🟢", "g_active"), "paused": ("🟡", "g_paused"),
-             "retry": ("🟠", "g_retry"), "done": ("✅", "g_done"),
-             "lost": ("⚠️", "g_lost")}
+    # light -> (icon 名, 语义色 class, 状态文案 i18n key); SVG 图标颜色走 CSS 变量
+    light = {"active": ("dot", "t-green", "g_active"), "paused": ("pause", "t-warn", "g_paused"),
+             "retry": ("retry", "t-orange", "g_retry"), "done": ("ok", "t-green", "g_done"),
+             "lost": ("warn", "t-red", "g_lost")}
     out = []
     for c in cards:
-        icon, key = light.get(c["light"], ("⚠️", "g_lost"))
+        ico_name, ico_cls, key = light.get(c["light"], ("warn", "t-red", "g_lost"))
+        glight = f'<span class="glight {ico_cls}">{icon(ico_name, 13)}</span>'
         # 手机端: 状态灯+名称+最近活动 常显;上下文/API重试/进度 收进 .gextra(点标题展开)
         extra, idle_row = [], ""
         if c["ctx_raw"]:
@@ -2290,8 +2374,8 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
         if c["progress"]:
             prog = "<br>".join(escape(x) for x in c["progress"])
             extra.append(f'<div class="gprog">{prog}</div>')
-        more = (f'<span class="gmore" title="{t(lang, "g_detail")}">▸</span>') if extra else ""
-        head = (f'<div class="ghead"><span class="glight">{icon}</span>'
+        more = (f'<span class="gmore" title="{t(lang, "g_detail")}">{icon("chev", 12)}</span>') if extra else ""
+        head = (f'<div class="ghead">{glight}'
                 f'<span class="gname">{escape(c["name"])}</span>'
                 f'<span class="gstate">{t(lang, key)}</span>{more}</div>')
         if c["label"] and c["label"] != c["name"]:
@@ -2304,11 +2388,11 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
         foot = ""
         if c["resume_cmd"]:
             foot = (f'<div class="gfoot"><span class="gcopy" role="button" tabindex="0" '
-                    f'data-cmd="{escape(c["resume_cmd"], quote=True)}">⧉ {t(lang, "g_copy")}</span></div>')
+                    f'data-cmd="{escape(c["resume_cmd"], quote=True)}">{icon("copy", 13)} {t(lang, "g_copy")}</span></div>')
         inner += foot
         # 手机端左滑露「复制 resume」: .swipe-bg 静止在卡片下,.swipe-fg 跟手平移
         back = (f'<div class="swipe-bg"><span class="swipe-act" role="button" tabindex="0" '
-                f'data-copy="{escape(c["resume_cmd"], quote=True)}">⧉ {t(lang, "g_copy")}</span></div>'
+                f'data-copy="{escape(c["resume_cmd"], quote=True)}">{icon("copy", 13)} {t(lang, "g_copy")}</span></div>'
                 if c["resume_cmd"] else "")
         cls = "gcard swipe-item" if back else "gcard"
         out.append(f'<div class="{cls}" data-light="{c["light"]}">{back}<div class="swipe-fg">{inner}</div></div>')
@@ -2321,7 +2405,8 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
             f'<span class="gdone-name">{escape(c["label"] or c["gid"][:8])}</span>'
             f'<span class="gsub">{escape(c["transcript"][:44])}</span></div>'
             for c in completed)
-        fold = (f'<details class="gdone"><summary>{t(lang, "g_done_fold", n=len(completed))}</summary>'
+        fold = (f'<details class="gdone"><summary><span class="t-green">{icon("ok", 13)}</span> '
+                f'{t(lang, "g_done_fold", n=len(completed))}</summary>'
                 f'{items}</details>')
     return (f'<div class="gpanel" id="goals"><h2>{t(lang, "g_panel")} '
             f'<span class="ghint">{t(lang, "g_hint")}</span></h2>'
@@ -2334,22 +2419,22 @@ def render_loadline(s, lang=DEFAULT_LANG):
     zone, n = gl.get("zone", "none"), gl.get("n", 0)
     msg = {"ok": t(lang, "ld_ok", n=n), "full": t(lang, "ld_full"),
            "over": t(lang, "ld_over")}.get(zone, "—")
-    icon, color = {"ok": ("🟢", "#6ec89a"), "full": ("🟡", "#e0b060"),
-                   "over": ("🔴", "#e06c6c")}.get(zone, ("⚪", "#8a8a8a"))
+    ico_name, color = {"ok": ("dot", "var(--c-green)"), "full": ("pause", "var(--c-warn)"),
+                       "over": ("err", "var(--c-red)")}.get(zone, ("dot", "var(--c-gray)"))
     load15 = gl.get("load15")
     sub = t(lang, "ld_load", l=(f"{load15:.1f}" if load15 is not None else "—"),
             c=gl.get("cores", "?"))
 
     def top_rows(items, fmt):
         if not items:
-            return f'<div class="ld-row" style="color:#666">—</div>'
+            return f'<div class="ld-row" style="color:var(--text-dead)">—</div>'
         return "".join(f'<div class="ld-row"><span class="ld-val">{fmt(v)}</span>'
                        f'<span class="ld-name">{escape(k)}</span></div>' for v, k in items)
 
     cpu_rows = top_rows(gl.get("cpu_top") or [], lambda v: f"{v:.0f}%")
     mem_rows = top_rows(gl.get("mem_top") or [], lambda v: f"{v / 1024:.1f}G" if v >= 1024 else f"{v:.0f}M")
     return (f'<div class="gpanel loadline" id="loadline">'
-            f'<div class="ld-head"><span class="ld-ico" style="color:{color}">{icon}</span>'
+            f'<div class="ld-head"><span class="ld-ico" style="color:{color}">{icon(ico_name, 14)}</span>'
             f'<b>{t(lang, "ld_title")}</b>：{msg}'
             f'<span class="ld-sub">（{sub}）</span></div>'
             f'<div class="ld-tops"><div class="ld-top"><div class="ld-t">{t(lang, "ld_cpu")}</div>{cpu_rows}</div>'
@@ -2362,7 +2447,7 @@ def render_toolchips(entries, host_header, lang=DEFAULT_LANG):
     hostname = (host_header or "").split(":")[0] or socket.gethostname()
     chips = "".join(
         f'<a class="chip tchip" href="http://{escape(hostname)}:{port}/" target="_blank" rel="noopener">'
-        f'{name} :{port} ↗</a>'
+        f'{name} :{port} {icon("ext", 11)}</a>'
         for name, port in TOOL_LINKS if port in ports)
     if not chips:
         return ""
@@ -2371,9 +2456,6 @@ def render_toolchips(entries, host_header, lang=DEFAULT_LANG):
 
 def render_events(events, lang=DEFAULT_LANG):
     """最近事件: watchdog 动作 + 完成台账,合并时间倒序。"""
-    kind_key = {"complete": "ev_complete", "restart": "ev_restart",
-                "nudge": "ev_nudge", "recover": "ev_recover",
-                "pause": "ev_pause", "cleanup": "ev_cleanup", "commit": "ev_commit"}
     rows = []
     today = time.strftime("%Y-%m-%d")
     for e in events:
@@ -2382,9 +2464,13 @@ def render_events(events, lang=DEFAULT_LANG):
             show = ts_str[11:16] if ts_str[:10] == today else ts_str[5:16]
         except Exception:
             show = "—"
-        label = t(lang, kind_key.get(e["kind"], "ev_other"))
+        ico_name, ico_cls, key = KIND_META.get(e["kind"], ("", "", "ev_other"))
+        ico_html = (f'<span class="evt-ico {ico_cls}">{icon(ico_name, 13)}</span>'
+                    if ico_name else "")
+        label = t(lang, key)
         rows.append(f'<div class="evt-row"><span class="evt-ts">{escape(show)}</span>'
                     f'<span class="evt-name">[{escape(e["name"])}]</span>'
+                    f'{ico_html}'
                     f'<span class="evt-txt">{escape(label)} {escape(e["text"][:110])}</span></div>')
     body = "".join(rows) if rows else f'<div class="gempty">{t(lang, "ev_none")}</div>'
     return (f'<div class="gpanel" id="events"><h2>{t(lang, "ev_title")} '
@@ -2445,6 +2531,7 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             .replace("{{LANG}}", lang)
             .replace("{{TS_MODE}}", "true" if ts_mode else "false")
             .replace("{{T_JSON}}", json.dumps(L10N.get(lang, L10N[DEFAULT_LANG]), ensure_ascii=False))
+            .replace("{{ICONS_JSON}}", json.dumps(ICONS, ensure_ascii=False))
             .replace("{{TL_CONF}}", json.dumps(tools_conf(), ensure_ascii=False))
             .replace("{{HOST}}", escape(host_header))
             .replace("{{HOSTNAME}}", escape(hostname))
@@ -2458,6 +2545,8 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             .replace("{{UPDATED}}", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(updated_ts)))
             .replace("{{COUNT}}", str(len(entries)))
             .replace("<!--TABLE-->", table))
+    # 模板里的 {{ICO:name:size}} 占位符 -> 内联 SVG(与 JS icon() 同一份数据)
+    body = _ICO_PAT.sub(lambda m: icon(m.group(1), int(m.group(2) or 16)), body)
     return _apply_t(body, lang)
 
 
@@ -2467,24 +2556,144 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a0a0a">
+<script>/* 主题预置: 在 CSS 生效前落 data-theme, 防浅色偏好下闪深色(FOUC) */
+try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")document.documentElement.setAttribute("data-theme",_tm)}catch(e){}</script>
 <title>{{T:title}} · {{HOSTNAME}}</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { color-scheme: dark;
-          /* 语义色规约: 红=严重 黄=关注 绿=正常 灰=历史 蓝=交互。
-             文本档均按 WCAG AA(≥4.5:1)对 #101010-#141414 卡片底校准。 */
-          --c-red: #e06c6c; --c-red-bg: #2a1a1a;
-          --c-warn: #f0b662; --c-warn-bg: #2a2118;
-          --c-green: #6ec89a; --c-green-bg: #14261c;
-          --c-gray: #9a9a9a; --c-blue: #8ab4f8; }
+  /* ============ 主题变量: 深色为默认, 浅色经 prefers-color-scheme / [data-theme] 覆盖 ============
+     语义色规约: 红=严重 黄=关注 绿=正常 灰=历史 蓝=交互。
+     文本档均按 WCAG AA(≥4.5:1)对各自主题底色校准; 终端画面(termlog)双主题保持深色。 */
+  :root {
+    color-scheme: dark;
+    --bg: #0a0a0a; --bg-elev: #141414; --bg-panel: #131313; --bg-deep: #101010;
+    --bg-input: #141414; --bg-hover: #1f1f1f; --bg-active: #262626;
+    --border: #222; --border-soft: #1f1f1f; --border-faint: #1a1a1a;
+    --btn-bg: #262626; --btn-hover: #333; --btn-press: #3a3a3a; --btn-border: #333;
+    --btn-soft-bg: #1d1d1d; --btn-soft-border: #2e2e2e; --btn-soft-hover-bd: #555;
+    --chip-bg: #161616; --chip-border: #2a2a2a;
+    --chip-on-bg: #f2f2f2; --chip-on-tx: #111;
+    --text-title: #f2f2f2; --text-hi: #eee; --text: #d6d6d6; --text-mid: #c9c9c9;
+    --text-soft: #b0b0b0; --text-dim: #909090; --text-faint: #8a8a8a;
+    --text-ghost: #777; --text-dead: #666;
+    --header-bg: rgba(10,10,10,.9); --tabbar-bg: rgba(12,12,12,.82);
+    --scrim: rgba(0,0,0,.92); --skel: #1a1a1a; --focus: #4a90d9;
+    --c-red: #e06c6c; --c-red-bg: #2a1a1a;
+    --c-warn: #f0b662; --c-warn-bg: #2a2118; --c-warn-border: #5a4422;
+    --c-green: #6ec89a; --c-green-bg: #14261c; --c-green-btn: #2e7d4f;
+    --c-orange: #e0884c; --c-gray: #9a9a9a; --c-blue: #8ab4f8;
+    --link-blue: #6ea8dc; --dot-off: #555;
+    --accent-blue-bg: #1d2733; --accent-blue-bd: #2c3a4d; --accent-blue-tx: #9db8d9;
+    --accent-blue-hover: #243445; --detail-bg: #101418;
+    --tbadge-wd-bg: #2a2010; --tbadge-wd-tx: #e0a84c; --tbadge-wd-bd: #4a3a18;
+    --tbadge-rd-bg: #1e2832; --tbadge-rd-tx: #6ea8dc; --tbadge-rd-bd: #26405a;
+    --tbadge-sc-bg: #1c1c1c; --tbadge-sc-tx: #9a9a9a; --tbadge-sc-bd: #2e2e2e;
+    --term-bg: #0a0e12; --term-bd: #1c242e; --term-tx: #9fd4a0;
+    --ts-dim: #5c7a9a; --evt-ts: #63849f;
+    --ch-cpu: #6ea8dc; --ch-load: #6ec89a; --ch-mem: #e0a84c; --ch-swap: #b48ead;
+    --ch-grid: #1c1c1c;
+  }
+  /* 浅色: 同一组变量(跟随系统且未被 [data-theme=dark] 覆盖时生效) */
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --bg: #f5f5f5; --bg-elev: #fff; --bg-panel: #fafafa; --bg-deep: #ececec;
+      --bg-input: #fff; --bg-hover: #e9e9e9; --bg-active: #e2e2e2;
+      --border: #e0e0e0; --border-soft: #e4e4e4; --border-faint: #eaeaea;
+      --btn-bg: #e4e4e4; --btn-hover: #d8d8d8; --btn-press: #d0d0d0; --btn-border: #c9c9c9;
+      --btn-soft-bg: #fff; --btn-soft-border: #c9c9c9; --btn-soft-hover-bd: #999;
+      --chip-bg: #fff; --chip-border: #cfcfcf;
+      --chip-on-bg: #1f1f1f; --chip-on-tx: #fff;
+      --text-title: #111; --text-hi: #1a1a1a; --text: #242424; --text-mid: #333;
+      --text-soft: #464646; --text-dim: #575757; --text-faint: #666;
+      --text-ghost: #757575; --text-dead: #8f8f8f;
+      --header-bg: rgba(245,245,245,.92); --tabbar-bg: rgba(250,250,250,.86);
+      --scrim: rgba(0,0,0,.55); --skel: #e2e2e2; --focus: #2b6cb0;
+      --c-red: #b33939; --c-red-bg: #fbeaea;
+      --c-warn: #8a5800; --c-warn-bg: #fdf3dd; --c-warn-border: #e3c88f;
+      --c-green: #1e7d4f; --c-green-bg: #e6f4ec; --c-green-btn: #1e7d4f;
+      --c-orange: #a85413; --c-gray: #5f6368; --c-blue: #2b6cb0;
+      --link-blue: #2b6cb0; --dot-off: #b8b8b8;
+      --accent-blue-bg: #e8f0fb; --accent-blue-bd: #c4d8f0; --accent-blue-tx: #3a6ea5;
+      --accent-blue-hover: #d8e7fa; --detail-bg: #f0f5fa;
+      --tbadge-wd-bg: #fdf3dd; --tbadge-wd-tx: #8a5800; --tbadge-wd-bd: #e6cf9e;
+      --tbadge-rd-bg: #e8f0fb; --tbadge-rd-tx: #3a6ea5; --tbadge-rd-bd: #c4d8f0;
+      --tbadge-sc-bg: #ececec; --tbadge-sc-tx: #5c5c5c; --tbadge-sc-bd: #d5d5d5;
+      --ts-dim: #5a7a99; --evt-ts: #51708c;
+      --ch-cpu: #3572b0; --ch-load: #1e7d4f; --ch-mem: #a8731a; --ch-swap: #8d6a9e;
+      --ch-grid: #e4e4e4;
+    }
+  }
+  /* 浅色手动覆盖(设置里选「浅色」) */
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f5f5f5; --bg-elev: #fff; --bg-panel: #fafafa; --bg-deep: #ececec;
+    --bg-input: #fff; --bg-hover: #e9e9e9; --bg-active: #e2e2e2;
+    --border: #e0e0e0; --border-soft: #e4e4e4; --border-faint: #eaeaea;
+    --btn-bg: #e4e4e4; --btn-hover: #d8d8d8; --btn-press: #d0d0d0; --btn-border: #c9c9c9;
+    --btn-soft-bg: #fff; --btn-soft-border: #c9c9c9; --btn-soft-hover-bd: #999;
+    --chip-bg: #fff; --chip-border: #cfcfcf;
+    --chip-on-bg: #1f1f1f; --chip-on-tx: #fff;
+    --text-title: #111; --text-hi: #1a1a1a; --text: #242424; --text-mid: #333;
+    --text-soft: #464646; --text-dim: #575757; --text-faint: #666;
+    --text-ghost: #757575; --text-dead: #8f8f8f;
+    --header-bg: rgba(245,245,245,.92); --tabbar-bg: rgba(250,250,250,.86);
+    --scrim: rgba(0,0,0,.55); --skel: #e2e2e2; --focus: #2b6cb0;
+    --c-red: #b33939; --c-red-bg: #fbeaea;
+    --c-warn: #8a5800; --c-warn-bg: #fdf3dd; --c-warn-border: #e3c88f;
+    --c-green: #1e7d4f; --c-green-bg: #e6f4ec; --c-green-btn: #1e7d4f;
+    --c-orange: #a85413; --c-gray: #5f6368; --c-blue: #2b6cb0;
+    --link-blue: #2b6cb0; --dot-off: #b8b8b8;
+    --accent-blue-bg: #e8f0fb; --accent-blue-bd: #c4d8f0; --accent-blue-tx: #3a6ea5;
+    --accent-blue-hover: #d8e7fa; --detail-bg: #f0f5fa;
+    --tbadge-wd-bg: #fdf3dd; --tbadge-wd-tx: #8a5800; --tbadge-wd-bd: #e6cf9e;
+    --tbadge-rd-bg: #e8f0fb; --tbadge-rd-tx: #3a6ea5; --tbadge-rd-bd: #c4d8f0;
+    --tbadge-sc-bg: #ececec; --tbadge-sc-tx: #5c5c5c; --tbadge-sc-bd: #d5d5d5;
+    --ts-dim: #5a7a99; --evt-ts: #51708c;
+    --ch-cpu: #3572b0; --ch-load: #1e7d4f; --ch-mem: #a8731a; --ch-swap: #8d6a9e;
+    --ch-grid: #e4e4e4;
+  }
+  /* 深色手动覆盖(系统浅色时选「深色」) */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a0a0a; --bg-elev: #141414; --bg-panel: #131313; --bg-deep: #101010;
+    --bg-input: #141414; --bg-hover: #1f1f1f; --bg-active: #262626;
+    --border: #222; --border-soft: #1f1f1f; --border-faint: #1a1a1a;
+    --btn-bg: #262626; --btn-hover: #333; --btn-press: #3a3a3a; --btn-border: #333;
+    --btn-soft-bg: #1d1d1d; --btn-soft-border: #2e2e2e; --btn-soft-hover-bd: #555;
+    --chip-bg: #161616; --chip-border: #2a2a2a;
+    --chip-on-bg: #f2f2f2; --chip-on-tx: #111;
+    --text-title: #f2f2f2; --text-hi: #eee; --text: #d6d6d6; --text-mid: #c9c9c9;
+    --text-soft: #b0b0b0; --text-dim: #909090; --text-faint: #8a8a8a;
+    --text-ghost: #777; --text-dead: #666;
+    --header-bg: rgba(10,10,10,.9); --tabbar-bg: rgba(12,12,12,.82);
+    --scrim: rgba(0,0,0,.92); --skel: #1a1a1a; --focus: #4a90d9;
+    --c-red: #e06c6c; --c-red-bg: #2a1a1a;
+    --c-warn: #f0b662; --c-warn-bg: #2a2118; --c-warn-border: #5a4422;
+    --c-green: #6ec89a; --c-green-bg: #14261c; --c-green-btn: #2e7d4f;
+    --c-orange: #e0884c; --c-gray: #9a9a9a; --c-blue: #8ab4f8;
+    --link-blue: #6ea8dc; --dot-off: #555;
+    --accent-blue-bg: #1d2733; --accent-blue-bd: #2c3a4d; --accent-blue-tx: #9db8d9;
+    --accent-blue-hover: #243445; --detail-bg: #101418;
+    --tbadge-wd-bg: #2a2010; --tbadge-wd-tx: #e0a84c; --tbadge-wd-bd: #4a3a18;
+    --tbadge-rd-bg: #1e2832; --tbadge-rd-tx: #6ea8dc; --tbadge-rd-bd: #26405a;
+    --tbadge-sc-bg: #1c1c1c; --tbadge-sc-tx: #9a9a9a; --tbadge-sc-bd: #2e2e2e;
+    --term-bg: #0a0e12; --term-bd: #1c242e; --term-tx: #9fd4a0;
+    --ts-dim: #5c7a9a; --evt-ts: #63849f;
+    --ch-cpu: #6ea8dc; --ch-load: #6ec89a; --ch-mem: #e0a84c; --ch-swap: #b48ead;
+    --ch-grid: #1c1c1c;
+  }
+
   * { box-sizing: border-box; }
   body { margin: 0; font-family: ui-sans-serif, system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-         background: #0a0a0a; color: #d6d6d6; }
-  header { position: sticky; top: 0; z-index: 10; background: rgba(10,10,10,.9); backdrop-filter: blur(6px);
-           border-bottom: 1px solid #1f1f1f; padding: 12px 24px;
+         background: var(--bg); color: var(--text); }
+  header { position: sticky; top: 0; z-index: 10; background: var(--header-bg); backdrop-filter: blur(6px);
+           border-bottom: 1px solid var(--border-soft); padding: 12px 24px;
            display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header h1 { font-size: 17px; margin: 0; font-weight: 600; color: #f2f2f2; }
-  header .meta { color: #a8a8a8; font-size: 12.5px; }  /* 8.3:1 (was #8a8a8a) */
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; color: var(--text-title);
+              display: inline-flex; align-items: center; gap: 8px; }
+  header h1 .h-server { width: 7px; height: 7px; border-radius: 50%; background: var(--c-green); flex: none; }
+  header .meta { color: var(--text-soft); font-size: 12.5px; }
   header .spacer { flex: 1; }
   /* ---------------- 自绘控件体系 ----------------
      不使用任何系统原生控件: 所有按钮/开关均为自绘元素。
@@ -2493,22 +2702,30 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     user-select: none; -webkit-user-select: none; touch-action: manipulation;
     cursor: pointer; transition: background .12s, border-color .12s, color .12s, transform .05s; }
-  .btn { background: #262626; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 7px 14px;
-         font-size: 13px; }
-  .btn:hover { background: #333; }
-  .btn:active { background: #3a3a3a; transform: translateY(1px); }
+  .btn { background: var(--btn-bg); color: var(--text-hi); border: 1px solid var(--btn-border);
+         border-radius: 8px; padding: 7px 14px; font-size: 13px; }
+  .btn:hover { background: var(--btn-hover); }
+  .btn:active { background: var(--btn-press); transform: translateY(1px); }
   .btn.spinning { opacity: .7; }
+  /* topbar 刷新按钮: 点击=立即刷新, 长按=锁定/解锁自动刷新(锁定=琥珀描边+锁形角标) */
+  .icon-btn { width: 38px; height: 38px; padding: 0; position: relative; border-radius: 10px; }
+  #refresh.locked { border-color: var(--c-warn); color: var(--c-warn); }
+  #refresh .ic-badge { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px;
+                       border-radius: 50%; background: var(--c-warn); color: var(--bg);
+                       display: none; align-items: center; justify-content: center; }
+  #refresh.locked .ic-badge { display: inline-flex; }
   /* 移动端下拉刷新指示器；默认完全收起，桌面端不注册事件。 */
   #ptr-indicator { position: fixed; top: 0; left: 50%; z-index: 30;
     width: 132px; height: 48px; margin-left: -66px; margin-top: -48px;
     display: flex; align-items: center; justify-content: center; gap: 8px;
-    background: #141414; border: 1px solid #2c2c2c; border-top: 0;
-    border-radius: 0 0 12px 12px; color: #aaa; font-size: 12px;
+    background: var(--bg-elev); border: 1px solid var(--border-strong, var(--chip-border)); border-top: 0;
+    border-radius: 0 0 12px 12px; color: var(--text-soft); font-size: 12px;
     transform: translateY(0); transition: transform .22s ease, color .15s ease; }
-  #ptr-indicator .ptr-arrow { display: inline-block; font-size: 20px; line-height: 1;
+  #ptr-indicator .ptr-arrow { display: inline-flex; line-height: 1;
     transform: rotate(0deg); transition: transform .12s linear; }
-  #ptr-indicator.ready { color: #8ab4f8; }
-  #ptr-indicator.loading { color: #6ec89a; }
+  #ptr-indicator .ptr-arrow svg { display: block; }
+  #ptr-indicator.ready { color: var(--c-blue); }
+  #ptr-indicator.loading { color: var(--c-green); }
   #ptr-indicator.loading .ptr-arrow { animation: ptr-spin .8s linear infinite; }
   @keyframes ptr-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
@@ -2518,16 +2735,17 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .btn[aria-disabled="true"], .btn.disabled { opacity: .5; cursor: default; pointer-events: none; }
   .btn:focus-visible, .chip:focus-visible, .tcol:focus-visible,
   .ctl-btn:focus-visible, .mbtn:focus-visible, .aglog-refresh:focus-visible {
-    outline: 2px solid #4a90d9; outline-offset: 2px; }
-  .auto { font-size: 13px; color: #b0b0b0; display: flex; align-items: center; gap: 8px; cursor: pointer; }
-  .sw { position: relative; display: inline-flex; width: 40px; height: 22px; flex: none;
-        background: #2e2e2e; border: 1px solid #444; border-radius: 999px; cursor: pointer;
-        transition: background .18s, border-color .18s; }
-  .sw .sw-thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
-                  background: #9a9a9a; transition: transform .18s, background .18s; }
-  .sw[aria-checked="true"] { background: #2e7d4f; border-color: #3a9a63; }
-  .sw[aria-checked="true"] .sw-thumb { transform: translateX(18px); background: #fff; }
-  .sw:focus-visible { outline: 2px solid #4a90d9; outline-offset: 2px; }
+    outline: 2px solid var(--focus); outline-offset: 2px; }
+  /* ---------------- 内联 SVG 图标对齐体系(emoji 全量替换) ---------------- */
+  .ic { display: inline-block; vertical-align: -0.15em; line-height: 1; }
+  .lb-ico, .glight, .al-ico, .rc-ico, .lv-ico, .ld-ico, .evt-ico, .sc-ico {
+    display: inline-flex; align-items: center; flex: none; }
+  .lb-ico { color: var(--text-dim); margin-right: 5px; }
+  .t-green { color: var(--c-green); } .t-warn { color: var(--c-warn); }
+  .t-red { color: var(--c-red); } .t-orange { color: var(--c-orange); }
+  .statuscard.ok .sc-ico { color: var(--c-green); }
+  .statuscard.warn .sc-ico { color: var(--c-warn); }
+  .statuscard.bad .sc-ico { color: var(--c-red); }
   main { padding: 16px 24px 40px; }
 
   /* ---------------- 移动 App 化基础(桌面端多数隐藏) ----------------
@@ -2537,256 +2755,265 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   html { font-size: 100%; -webkit-text-size-adjust: 100%; }
   #pages { display: contents; }          /* 桌面: 透明容器,子元素即 main 内容 */
   #tabbar, #chart-wrap, #logpage, #agents-page,
-  .skel, .gmore, .statusline, .statuscard, .mgrid4, #alerts, #recent,
+  .skel, .gmore, .statuscard, .mgrid4, #alerts, #recent,
   #log-filters, .lv { display: none; }
   .gextra { display: block; }            /* 桌面: goal 卡次要信息全展示 */
   .swipe-item { position: relative; overflow: hidden; }
   .swipe-bg { position: absolute; inset: 0; display: flex; align-items: stretch;
-              justify-content: flex-end; background: #14261c; }
+              justify-content: flex-end; background: var(--c-green-bg); }
   .swipe-act { display: inline-flex; align-items: center; justify-content: center;
-               min-width: 88px; padding: 0 14px; background: #2e7d4f; color: #fff;
+               min-width: 88px; padding: 0 14px; background: var(--c-green-btn); color: #fff;
                font-size: 12.5px; white-space: nowrap; }
-  .swipe-fg { position: relative; background: #131313; will-change: transform;
+  .swipe-fg { position: relative; background: var(--bg-panel); will-change: transform;
               transition: transform .18s ease; }
   .swipe-fg.stick { transition: none; }  /* 跟手阶段禁过渡 */
   .svc-open { display: inline-flex; align-items: center; justify-content: center;
               width: 44px; height: 44px; border-radius: 50%; flex: none;
-              background: #1d2733; border: 1px solid #2c3a4d; color: #9db8d9;
-              font-size: 17px; text-decoration: none; }
+              background: var(--accent-blue-bg); border: 1px solid var(--accent-blue-bd);
+              color: var(--accent-blue-tx); text-decoration: none; }
   .skel { display: none; }
   .skel-line { height: 14px; border-radius: 6px; margin: 10px 0;
-               background: #1a1a1a; animation: skel-pulse 1.1s ease-in-out infinite; }
+               background: var(--skel); animation: skel-pulse 1.1s ease-in-out infinite; }
   @keyframes skel-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
-  .logbar select { width: 100%; background: #141414; color: #d6d6d6;
-                   border: 1px solid #2a2a2a; border-radius: 8px;
+  .logbar select { width: 100%; background: var(--bg-input); color: var(--text);
+                   border: 1px solid var(--chip-border); border-radius: 8px;
                    padding: 10px 12px; font-size: 13px; min-height: 44px; }
   #chart-wrap canvas { width: 100%; height: 150px; display: block; touch-action: none; }
-  #chart-empty { color: #666; font-size: 12px; padding: 18px 0; }
-  .gmore { display: none; color: #909090; font-size: 11px; }
+  #chart-empty { color: var(--text-dead); font-size: 12px; padding: 18px 0; }
+  .gmore { display: none; color: var(--text-dim); font-size: 11px; }
   .sysbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-  .stat { background: #141414; border: 1px solid #222; border-radius: 10px;
+  .stat { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px;
           padding: 10px 16px; min-width: 130px; }
-  .stat .label { color: #909090; font-size: 11px; margin-bottom: 3px; }
-  .stat .value { font-size: 14px; font-weight: 600; font-family: ui-monospace, monospace; color: #e8e8e8; white-space: nowrap; }
+  .stat .label { color: var(--text-dim); font-size: 11px; margin-bottom: 3px;
+                 display: inline-flex; align-items: center; }
+  .stat .value { font-size: 14px; font-weight: 600; font-family: ui-monospace, monospace;
+                 color: var(--text-hi); white-space: nowrap; }
   .tbadge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px;
             margin-right: 6px; vertical-align: 1px; }
-  .tbadge.wd { background: #2a2010; color: #e0a84c; border: 1px solid #4a3a18; }
-  .tbadge.rd { background: #1e2832; color: #6ea8dc; border: 1px solid #26405a; }
-  .tbadge.sc { background: #1c1c1c; color: #9a9a9a; border: 1px solid #2e2e2e; }
+  .tbadge.wd { background: var(--tbadge-wd-bg); color: var(--tbadge-wd-tx); border: 1px solid var(--tbadge-wd-bd); }
+  .tbadge.rd { background: var(--tbadge-rd-bg); color: var(--tbadge-rd-tx); border: 1px solid var(--tbadge-rd-bd); }
+  .tbadge.sc { background: var(--tbadge-sc-bg); color: var(--tbadge-sc-tx); border: 1px solid var(--tbadge-sc-bd); }
   .filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
   .filters .spacer { flex: 1; }
-  .watchdog-panel { background: #141414; border: 1px solid #222; border-radius: 10px;
+  .watchdog-panel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px;
                     padding: 12px 14px; margin-bottom: 14px; }
-  .watchdog-panel h2 { margin: 0 0 8px; font-size: 13px; color: #9a9a9a; font-weight: 500; }
+  .watchdog-panel h2 { margin: 0 0 8px; font-size: 13px; color: var(--text-dim); font-weight: 500; }
   .watchdog-panel table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  .watchdog-panel th { text-align: left; color: #777; font-weight: 400; font-size: 11.5px;
-                       padding: 4px 8px; border-bottom: 1px solid #1f1f1f; white-space: nowrap; }
-  .watchdog-panel td { padding: 5px 8px; border-bottom: 1px solid #1a1a1a; vertical-align: top; }
+  .watchdog-panel th { text-align: left; color: var(--text-ghost); font-weight: 400; font-size: 11.5px;
+                       padding: 4px 8px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+  .watchdog-panel td { padding: 5px 8px; border-bottom: 1px solid var(--border-faint); vertical-align: top; }
   .watchdog-panel tr:last-child td { border-bottom: none; }
-  .watchdog-panel .tname { font-family: ui-monospace, monospace; color: #e8e8e8; word-break: break-all; }
-  .watchdog-panel .tsch { color: #b0b0b0; white-space: nowrap; }
-  .watchdog-panel .tscope { color: #888; font-size: 11px; }
-  .watchdog-panel .tcmd { color: #9a9a9a; font-family: ui-monospace, monospace; font-size: 11px;
+  .watchdog-panel .tname { font-family: ui-monospace, monospace; color: var(--text-hi); word-break: break-all; }
+  .watchdog-panel .tsch { color: var(--text-soft); white-space: nowrap; }
+  .watchdog-panel .tscope { color: var(--text-faint); font-size: 11px; }
+  .watchdog-panel .tcmd { color: var(--text-dim); font-family: ui-monospace, monospace; font-size: 11px;
                           word-break: break-all; max-width: 420px; }
   .watchdog-panel .tlink { cursor: pointer; }
-  .watchdog-panel .tlink:hover { color: #8ab4f8; text-decoration: underline; }
-  .watchdog-panel .agent-detail td { background: #101418; padding: 10px 14px; }
+  .watchdog-panel .tlink:hover { color: var(--c-blue); text-decoration: underline; }
+  .watchdog-panel .agent-detail td { background: var(--detail-bg); padding: 10px 14px; }
   .agentlog { max-height: 380px; overflow-y: auto; }
-  .aglog-title { font-size: 12px; color: #8a8a8a; margin: 6px 0 4px; display: flex;
+  .aglog-title { font-size: 12px; color: var(--text-faint); margin: 6px 0 4px; display: flex;
                  align-items: center; gap: 8px; }
-  .aglog-refresh { background: #1d2733; border: 1px solid #2c3a4d; color: #9db8d9;
+  .aglog-refresh { background: var(--accent-blue-bg); border: 1px solid var(--accent-blue-bd);
+                   color: var(--accent-blue-tx);
                    padding: 2px 10px; font-size: 11px; border-radius: 6px; cursor: pointer; }
-  .aglog-refresh:hover { background: #243445; }
+  .aglog-refresh:hover { background: var(--accent-blue-hover); }
   .aglog-list { display: flex; flex-direction: column; gap: 2px; }
   .aglog-row { display: flex; gap: 10px; font-family: ui-monospace, monospace; font-size: 11.5px;
                line-height: 1.55; }
-  .aglog-ts { color: #5c7a9a; white-space: nowrap; flex: none; }
-  .aglog-txt { color: #c9c9c9; word-break: break-all; }
-  .termlog { background: #0a0e12; border: 1px solid #1c242e; border-radius: 6px; padding: 8px 10px;
+  .aglog-ts { color: var(--ts-dim); white-space: nowrap; flex: none; }
+  .aglog-txt { color: var(--text-mid); word-break: break-all; }
+  .termlog { background: var(--term-bg); border: 1px solid var(--term-bd); border-radius: 6px; padding: 8px 10px;
              font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.45;
-             color: #9fd4a0; overflow-x: auto; white-space: pre; margin: 2px 0 8px; }
-  .aglog-empty { color: #666; font-size: 12px; padding: 8px 0; }
+             color: var(--term-tx); overflow-x: auto; white-space: pre; margin: 2px 0 8px; }
+  .aglog-empty { color: var(--text-dead); font-size: 12px; padding: 8px 0; }
   .mgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; padding: 4px 0 12px; }
-  .mcard { background: #131313; border: 1px solid #222; border-radius: 8px; padding: 12px 14px; }
+  .mcard { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
   .mcard .mhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  .mcard .mname { font-weight: 600; color: #eee; font-size: 14px; }
-  .mcard .mdesc { color: #777; font-size: 11px; }
-  .mcard .mstate { margin: 8px 0 10px; font-size: 12.5px; color: #b0b0b0; display: flex; align-items: center; gap: 6px; }
+  .mcard .mname { font-weight: 600; color: var(--text-hi); font-size: 14px; }
+  .mcard .mdesc { color: var(--text-ghost); font-size: 11px; }
+  .mcard .mstate { margin: 8px 0 10px; font-size: 12.5px; color: var(--text-soft); display: flex; align-items: center; gap: 6px; }
   .mcard .mdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .mcard .mbtns { display: flex; gap: 8px; flex-wrap: wrap; }
-  .mcard .mbtn { background: #1d1d1d; border: 1px solid #2e2e2e; color: #d6d6d6; border-radius: 6px;
-                  padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
-  .mcard .mbtn:hover { border-color: #555; color: #fff; }
+  .mcard .mbtn { background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border); color: var(--text);
+                  border-radius: 6px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
+  .mcard .mbtn:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
   .mcard .mbtn[aria-disabled="true"] { opacity: .5; cursor: default; }
-  .mcard .mresult { margin-top: 8px; font-size: 12px; color: #6ec89a; min-height: 15px; word-break: break-all; }
-  .chip { background: #161616; color: #b0b0b0; border: 1px solid #2a2a2a; border-radius: 999px;
-          padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
-  .chip:hover { background: #1f1f1f; }
-  .chip.active { background: #f2f2f2; border-color: #f2f2f2; color: #111; }
+  .mcard .mresult { margin-top: 8px; font-size: 12px; color: var(--c-green); min-height: 15px; word-break: break-all; }
+  .chip { background: var(--chip-bg); color: var(--text-soft); border: 1px solid var(--chip-border);
+          border-radius: 999px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
+  .chip:hover { background: var(--bg-hover); }
+  .chip.active { background: var(--chip-on-bg); border-color: var(--chip-on-bg); color: var(--chip-on-tx); }
   .chip span { opacity: .6; margin-left: 4px; font-size: 11px; }
   a.chip { text-decoration: none; }
-  a.chip:hover { color: #f2f2f2; border-color: #3a3a3a; }
+  a.chip:hover { color: var(--text-title); border-color: var(--btn-hover); }
   .toolchips { margin-bottom: 14px; }
 
   /* ---------------- Goal 进度卡片 / 负载水位 / 事件时间线 ---------------- */
-  .gpanel { background: #141414; border: 1px solid #222; border-radius: 10px;
+  .gpanel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px;
             padding: 12px 14px; margin-bottom: 14px; }
-  .gpanel h2 { margin: 0 0 10px; font-size: 13px; color: #9a9a9a; font-weight: 500; }
-  .gpanel .ghint { color: #8f8f8f; font-weight: 400; font-size: 11.5px; }
+  .gpanel h2 { margin: 0 0 10px; font-size: 13px; color: var(--text-dim); font-weight: 500; }
+  .gpanel .ghint { color: var(--text-faint); font-weight: 400; font-size: 11.5px; }
   .gcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; align-items: start; }
-  .gcard { background: #131313; border: 1px solid #222; border-radius: 8px; padding: 10px 12px; }
+  .gcard { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
   .gcard .ghead { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
-  .gcard .glight { font-size: 13px; flex: none; }
-  .gcard .gname { font-weight: 600; color: #eee; font-size: 14px; word-break: break-all; }
-  .gcard .gstate { color: #8a8a8a; font-size: 11.5px; }
-  .gcard .gsub { color: #909090; font-size: 11.5px; margin-top: 2px;
+  .gcard .glight { font-size: 13px; }
+  .gcard .gname { font-weight: 600; color: var(--text-hi); font-size: 14px; word-break: break-all; }
+  .gcard .gstate { color: var(--text-faint); font-size: 11.5px; }
+  .gcard .gsub { color: var(--text-dim); font-size: 11.5px; margin-top: 2px;
                  word-break: break-all; line-height: 1.45; }
   .gcard .grow { display: flex; justify-content: space-between; gap: 10px;
-                 font-size: 12.5px; color: #b0b0b0; padding: 3px 0 0; }
-  .gcard .grow > span:first-child { color: #777; flex: none; }
-  .gcard .gtx { font-family: ui-monospace, monospace; color: #c9c9c9; }
-  .gcard .gtx.warn { color: #e0b060; font-weight: 600; }
-  .gcard .gtx.stop { color: #e06c6c; font-weight: 600; }
-  .gcard .gretry { color: #e0884c; font-family: ui-monospace, monospace; }
+                 font-size: 12.5px; color: var(--text-soft); padding: 3px 0 0; }
+  .gcard .grow > span:first-child { color: var(--text-ghost); flex: none; }
+  .gcard .gtx { font-family: ui-monospace, monospace; color: var(--text-mid); }
+  .gcard .gtx.warn { color: var(--c-warn); font-weight: 600; }
+  .gcard .gtx.stop { color: var(--c-red); font-weight: 600; }
+  .gcard .gretry { color: var(--c-orange); font-family: ui-monospace, monospace; }
   .gcard .gidle { font-family: ui-monospace, monospace; }
-  .gcard .gstalled, .gcard .gstalled + * { color: #777 !important; }
+  .gcard .gstalled, .gcard .gstalled + * { color: var(--text-ghost) !important; }
   .gcard .gprog { font-family: ui-monospace, monospace; font-size: 11.5px;
-                  color: #9a9a9a; padding: 4px 0 0 6px; line-height: 1.5;
+                  color: var(--text-dim); padding: 4px 0 0 6px; line-height: 1.5;
                   word-break: break-all; }
   .gcard .gfoot { margin-top: 8px; }
-  .gcopy { display: inline-flex; align-items: center; gap: 6px; background: #1d1d1d;
-           border: 1px solid #2e2e2e; color: #d6d6d6; border-radius: 6px;
+  .gcopy { display: inline-flex; align-items: center; gap: 6px; background: var(--btn-soft-bg);
+           border: 1px solid var(--btn-soft-border); color: var(--text); border-radius: 6px;
            padding: 6px 14px; font-size: 12.5px; cursor: pointer; user-select: none; }
-  .gcopy:hover { border-color: #555; color: #fff; }
-  .gempty { color: #8a8a8a; font-size: 12.5px; padding: 10px 0; }
-  .gdone { margin-top: 12px; border-top: 1px solid #1f1f1f; padding-top: 8px; }
-  .gdone summary { cursor: pointer; color: #9a9a9a; font-size: 12.5px; user-select: none; }
-  .gdone summary:hover { color: #d6d6d6; }
+  .gcopy:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
+  .gempty { color: var(--text-faint); font-size: 12.5px; padding: 10px 0; }
+  .gdone { margin-top: 12px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
+  .gdone summary { cursor: pointer; color: var(--text-dim); font-size: 12.5px; user-select: none;
+                   display: flex; align-items: center; gap: 6px; }
+  .gdone summary:hover { color: var(--text); }
   .gdone-row { display: flex; gap: 10px; align-items: baseline; padding: 4px 0;
-               font-size: 12px; border-bottom: 1px solid #171717; flex-wrap: wrap; }
+               font-size: 12px; border-bottom: 1px solid var(--border-faint); flex-wrap: wrap; }
   .gdone-row:last-child { border-bottom: none; }
-  .gdone-name { color: #c9c9c9; font-weight: 600; word-break: break-all; }
+  .gdone-name { color: var(--text-mid); font-weight: 600; word-break: break-all; }
 
-  .loadline .ld-head { font-size: 13.5px; color: #d6d6d6; display: flex;
+  .loadline .ld-head { font-size: 13.5px; color: var(--text); display: flex;
                        align-items: baseline; gap: 6px; flex-wrap: wrap; }
-  .loadline .ld-ico { font-size: 14px; }
-  .loadline b { color: #eee; font-weight: 600; }
-  .loadline .ld-sub { color: #909090; font-size: 12px; font-family: ui-monospace, monospace; }
+  .loadline .ld-ico { font-size: 14px; display: inline-flex; align-items: center; }
+  .loadline b { color: var(--text-hi); font-weight: 600; }
+  .loadline .ld-sub { color: var(--text-dim); font-size: 12px; font-family: ui-monospace, monospace; }
   .loadline .ld-tops { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 8px; }
   .loadline .ld-top { flex: 1 1 260px; min-width: 0; }
-  .loadline .ld-t { color: #909090; font-size: 11px; margin-bottom: 3px; }
+  .loadline .ld-t { color: var(--text-dim); font-size: 11px; margin-bottom: 3px; }
   .loadline .ld-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.6;
                       font-family: ui-monospace, monospace; }
-  .loadline .ld-val { color: #c9c9c9; min-width: 52px; text-align: right; flex: none; }
-  .loadline .ld-name { color: #9a9a9a; word-break: break-all; }
+  .loadline .ld-val { color: var(--text-mid); min-width: 52px; text-align: right; flex: none; }
+  .loadline .ld-name { color: var(--text-dim); word-break: break-all; }
 
   .evt-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.7;
-             font-family: ui-monospace, monospace; flex-wrap: wrap; }
-  .evt-ts { color: #63849f; flex: none; }  /* 4.7:1 on #131313 (was #5c7a9a 4.4:1) */
-  .evt-name { color: #e0a84c; flex: none; }
-  .evt-txt { color: #b0b0b0; word-break: break-all; min-width: 200px; }
+             font-family: ui-monospace, monospace; flex-wrap: wrap; align-items: baseline; }
+  .evt-ts { color: var(--evt-ts); flex: none; }  /* 4.7:1 on --bg-panel */
+  .evt-name { color: var(--c-warn); flex: none; }
+  .evt-txt { color: var(--text-soft); word-break: break-all; min-width: 200px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th { text-align: left; color: #8a8a8a; font-weight: 500; font-size: 12px;
-             padding: 8px 10px; border-bottom: 1px solid #222; position: sticky; top: 52px;
-             background: #0a0a0a; }
-  tbody td { padding: 9px 10px; border-bottom: 1px solid #1c1c1c; vertical-align: top; }
-  tbody tr:hover { background: #131313; }
+  thead th { text-align: left; color: var(--text-faint); font-weight: 500; font-size: 12px;
+             padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 52px;
+             background: var(--bg); }
+  tbody td { padding: 9px 10px; border-bottom: 1px solid var(--border-faint); vertical-align: top; }
+  tbody tr:hover { background: var(--bg-panel); }
   .name { white-space: nowrap; }
-  .svc { font-weight: 600; color: #eee; }
-  .port a { color: #e8e8e8; font-weight: 600; text-decoration: none; font-family: ui-monospace, monospace; font-size: 14px; }
-  .port a:hover { text-decoration: underline; color: #fff; }
-  .addr, .pid { color: #8a8a8a; font-family: ui-monospace, monospace; white-space: nowrap; }
-  .cmd, .cwd { color: #b0b0b0; white-space: pre-wrap; word-break: break-all;
+  .svc { font-weight: 600; color: var(--text-hi); }
+  .port a { color: var(--text-hi); font-weight: 600; text-decoration: none; font-family: ui-monospace, monospace; font-size: 14px; }
+  .port a:hover { text-decoration: underline; color: var(--text-title); }
+  .addr, .pid { color: var(--text-faint); font-family: ui-monospace, monospace; white-space: nowrap; }
+  .cmd, .cwd { color: var(--text-soft); white-space: pre-wrap; word-break: break-all;
                font-family: ui-monospace, monospace; min-width: 220px; }
   table[data-col="cmd"] td.cwd { display: none; }
   table[data-col="cwd"] td.cmd { display: none; }
   th.colswitch { min-width: 220px; }
-  .tcol { background: transparent; border: 1px solid #2a2a2a; color: #8a8a8a;
+  .tcol { background: transparent; border: 1px solid var(--chip-border); color: var(--text-faint);
           border-radius: 6px; padding: 2px 11px; font-size: 11.5px; cursor: pointer; }
-  .tcol:hover { color: #eee; border-color: #3a3a3a; }
-  .tcol.active { background: #262626; color: #f2f2f2; border-color: #3a3a3a; }
+  .tcol:hover { color: var(--text-hi); border-color: var(--btn-hover); }
+  .tcol.active { background: var(--btn-bg); color: var(--text-title); border-color: var(--btn-hover); }
   .badge { display: inline-block; margin-left: 8px; padding: 2px 7px; border-radius: 999px;
            font-size: 11px; font-weight: 500; vertical-align: 1px; }
-  .badge-docker  { background: #1c1c1c; color: #c9c9c9; border: 1px solid #333; }
-  .badge-systemd { background: #1c1c1c; color: #a8a8a8; border: 1px solid #2e2e2e; }
-  .badge-direct  { background: #161616; color: #8f8f8f; border: 1px solid #2a2a2a; }
-  .badge-self    { background: #262626; color: #f2f2f2; border: 1px solid #3a3a3a; }
-  .badge-paused  { background: #2a2118; color: #e0b060; border: 1px solid #5a4422; }
-  .detail { display: block; color: #777; font-size: 11px; font-family: ui-monospace, monospace; margin-top: 2px; }
-  .local { color: #999; font-size: 11px; }
+  .badge-docker  { background: var(--tbadge-sc-bg); color: var(--text-mid); border: 1px solid var(--btn-hover); }
+  .badge-systemd { background: var(--tbadge-sc-bg); color: var(--text-soft); border: 1px solid var(--tbadge-sc-bd); }
+  .badge-direct  { background: var(--chip-bg); color: var(--text-faint); border: 1px solid var(--chip-border); }
+  .badge-self    { background: var(--btn-bg); color: var(--text-title); border: 1px solid var(--btn-hover); }
+  .badge-paused  { background: var(--c-warn-bg); color: var(--c-warn); border: 1px solid var(--c-warn-border); }
+  .detail { display: block; color: var(--text-ghost); font-size: 11px; font-family: ui-monospace, monospace; margin-top: 2px; }
+  .local { color: var(--text-dim); font-size: 11px; }
   .ctl { white-space: nowrap; }
-  .ctl-btn { background: #1d1d1d; border: 1px solid #2e2e2e; color: #d6d6d6; border-radius: 6px;
-             padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
-  .ctl-btn:hover { border-color: #555; color: #fff; }
+  .ctl-btn { background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border); color: var(--text);
+             border-radius: 6px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
+  .ctl-btn:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
   .ctl-btn[aria-disabled="true"] { opacity: .5; cursor: default; }
-  .empty { color: #8a8a8a; text-align: center; padding: 48px 0; }
+  .empty { color: var(--text-faint); text-align: center; padding: 48px 0; }
   @media (max-width: 900px) { .cmd, .cwd { min-width: 120px; } }
 
   /* ---------------- 手机端 (<768px): App 化布局 ----------------
-     五页横向滑动(概览/日志/Goal/服务/模型) + 底部页签栏 + safe-area;
+     六页横向滑动(概览/日志/Goal/服务/模型/ツール) + 底部页签栏 + safe-area;
      服务表→卡片(左滑复制/圆形打开), goal 卡收起次要信息。
      ≥769px 恢复桌面布局,所有规则只在此断点内生效。 */
   /* ---------------- 概要摘要组件 + 日志时间线(桌面隐藏,手机显示) ----------------
      字号体系: 状态数字 22-24px / 正文 14px / 辅助 12px。 */
-  .stale { display: inline-block; background: var(--c-warn-bg); color: var(--c-warn);
-           border: 1px solid #5a4422; border-radius: 999px; padding: 2px 10px; font-size: 12px; }
-  .statusline { background: #101010; border: 1px solid #222; border-radius: 10px; color: #d6d6d6; }
-  .statuscard { background: #141414; border: 1px solid #232323; border-radius: 12px; padding: 14px 16px; }
+  .stale { display: inline-flex; align-items: center; gap: 5px; background: var(--c-warn-bg);
+           color: var(--c-warn); border: 1px solid var(--c-warn-border); border-radius: 999px;
+           padding: 2px 10px; font-size: 12px; }
+  .statuscard { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px;
+                padding: 14px 16px; }
   .statuscard .sc-head { display: flex; align-items: center; gap: 12px; }
   .statuscard .sc-ico { font-size: 30px; line-height: 1; }
-  .statuscard .sc-big { font-size: 24px; font-weight: 700; color: #f2f2f2; }
-  .statuscard .sc-sub { margin-top: 8px; color: #909090; font-size: 12px; }
+  .statuscard .sc-big { font-size: 24px; font-weight: 700; color: var(--text-title); }
+  .statuscard .sc-sub { margin-top: 8px; color: var(--text-dim); font-size: 12px; }
+  #gh-link { margin-left: auto; color: var(--text-faint); display: inline-flex; padding: 4px;
+             border-radius: 8px; align-self: flex-start; }
+  #gh-link:hover { color: var(--text); background: var(--bg-hover); }
+  #gh-link svg { display: block; }
   .mgrid4 { grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
-  .mcell { background: #141414; border: 1px solid #232323; border-radius: 10px; padding: 10px 12px;
-           display: flex; flex-direction: column; gap: 3px; }
-  .mnum { font-size: 22px; font-weight: 700; color: #f2f2f2; font-variant-numeric: tabular-nums; }
+  .mcell { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px;
+           padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+  .mnum { font-size: 22px; font-weight: 700; color: var(--text-title); font-variant-numeric: tabular-nums; }
   .mnum.alert { color: var(--c-warn); }
-  .mlabel { font-size: 12px; color: #909090; }
-  .al-btn { background: #1d1d1d; border: 1px solid #2e2e2e; color: #d6d6d6; border-radius: 6px;
-            padding: 8px 12px; font-size: 12.5px; cursor: pointer; }
-  .al-btn:hover { border-color: #555; color: #fff; }
-  .al-btn.ignore { color: #909090; }
-  .alert-item { align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid #1a1a1a; }
+  .mlabel { font-size: 12px; color: var(--text-dim); }
+  .al-btn { background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border); color: var(--text);
+            border-radius: 6px; padding: 8px 12px; font-size: 12.5px; cursor: pointer; }
+  .al-btn:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
+  .al-btn.ignore { color: var(--text-dim); }
+  .alert-item { align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border-faint); }
   .alert-item:last-child { border-bottom: none; }
-  .al-ico { flex: none; font-size: 17px; }
+  .al-ico { font-size: 17px; }
   .al-main { flex: 1 1 auto; min-width: 0; }
-  .al-line { font-size: 14px; color: #e8e8e8; display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .al-line { font-size: 14px; color: var(--text-hi); display: flex; gap: 8px; align-items: baseline; min-width: 0; }
   .al-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .al-sub { font-size: 12px; color: #909090; margin-top: 2px; overflow: hidden;
+  .al-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; overflow: hidden;
             text-overflow: ellipsis; white-space: nowrap; }
   .al-act { display: flex; gap: 6px; flex: none; }
-  .rc-row { align-items: center; gap: 8px; padding: 9px 2px; border-bottom: 1px solid #1a1a1a;
-            font-size: 14px; color: #cfcfcf; }
+  .rc-row { align-items: center; gap: 8px; padding: 9px 2px; border-bottom: 1px solid var(--border-faint);
+            font-size: 14px; color: var(--text-mid); }
   .rc-row:last-child { border-bottom: none; }
   .rc-ico { flex: none; }
   .rc-kind { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rc-kind .rc-name { color: #e8e8e8; font-weight: 600; }
-  .rc-ago::before { content: "·"; color: #444; margin-right: 8px; }
-  .rc-name { color: #909090; font-size: 12px; flex: none; max-width: 38%; overflow: hidden;
+  .rc-kind .rc-name { color: var(--text-hi); font-weight: 600; }
+  .rc-ago::before { content: "·"; color: var(--text-dead); margin-right: 8px; }
+  .rc-name { color: var(--text-dim); font-size: 12px; flex: none; max-width: 38%; overflow: hidden;
              text-overflow: ellipsis; white-space: nowrap; }
-  .rc-ago { color: #909090; font-size: 12px; flex: none; }
+  .rc-ago { color: var(--text-dim); font-size: 12px; flex: none; }
   /* 日志时间线: 第一行 图标+类型+相对时间, 第二行一句话摘要, 详情默认折叠 */
-  .lv { border-bottom: 1px solid #1a1a1a; padding: 9px 2px; }
+  .lv { border-bottom: 1px solid var(--border-faint); padding: 9px 2px; }
   .lv:last-child { border-bottom: none; }
-  .lv-line1 { display: flex; align-items: baseline; gap: 8px; font-size: 14px; color: #e8e8e8; min-width: 0; }
-  .lv-ico { flex: none; }
+  .lv-line1 { display: flex; align-items: baseline; gap: 8px; font-size: 14px; color: var(--text-hi); min-width: 0; }
+  .lv-ico { flex: none; display: inline-flex; align-items: center; }
   .lv-kind { font-weight: 600; flex: none; }
   .lv-loop { color: var(--c-warn); font-size: 12.5px; flex: none; }
-  .lv-ago { margin-left: auto; color: #909090; font-size: 12px; flex: none; }
-  .lv-line2 { font-size: 14px; color: #c9c9c9; margin-top: 3px; line-height: 1.5;
+  .lv-ago { margin-left: auto; color: var(--text-dim); font-size: 12px; flex: none; }
+  .lv-line2 { font-size: 14px; color: var(--text-mid); margin-top: 3px; line-height: 1.5;
               display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .lv.open .lv-line2 { display: block; }
   .lv-fold { margin-top: 6px; font-size: 12px; color: var(--c-blue); display: inline-flex;
              align-items: center; gap: 4px; cursor: pointer; }
   .lv-fold::before { content: "▸"; transition: transform .15s; }
   .lv.open .lv-fold::before { transform: rotate(90deg); }
-  .lv-meta { display: none; margin-top: 6px; background: #101010; border: 1px solid #1d1d1d;
+  .lv-meta { display: none; margin-top: 6px; background: var(--bg-deep); border: 1px solid var(--btn-soft-border);
              border-radius: 6px; padding: 8px 10px; font-family: ui-monospace, monospace;
-             font-size: 11px; color: #9a9a9a; word-break: break-all; line-height: 1.6; }
+             font-size: 11px; color: var(--text-dim); word-break: break-all; line-height: 1.6; }
   .lv.open .lv-meta { display: block; }
-  .lv-children { display: none; margin-top: 6px; border-left: 2px solid #1f1f1f; padding-left: 8px; }
+  .lv-children { display: none; margin-top: 6px; border-left: 2px solid var(--border-soft); padding-left: 8px; }
   .lv.open > .lv-children { display: block; }
-  .lv-more { font-size: 12px; color: #909090; padding: 10px 0 2px; }
+  .lv-more { font-size: 12px; color: var(--text-dim); padding: 10px 0 2px; }
 
   @media (max-width: 768px) {
     .meta { display: none !important; }  /* 移动端: 更新时间/端口数与主体状态卡重复,隐藏 */
@@ -2796,15 +3023,13 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
              padding-top: calc(8px + env(safe-area-inset-top)); gap: 8px;
              -webkit-backdrop-filter: blur(6px); }
     header h1 { font-size: 15px; }
-    header h1 a { display: none; }
-    header .meta { width: 100%; order: 3; font-size: 11.5px; line-height: 1.5; }
     header .spacer { display: none; }
-    .auto { font-size: 12px; }
     .btn, .chip, .mbtn, .ctl-btn, .tcol, .aglog-refresh { padding: 9px 14px; font-size: 13px; min-height: 38px; }
+    .icon-btn { min-height: 38px; }
     /* 内部滚动: main 自滚, 底部页签栏固定在文档流尾, 不再遮住最后一屏 */
     html, body { height: 100%; }
   ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb { background: var(--chip-border); border-radius: 2px; }
   ::-webkit-scrollbar-track { background: transparent; }
     body { display: flex; flex-direction: column; overflow: hidden;
            overscroll-behavior: none; }
@@ -2814,25 +3039,17 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
                     max(12px, env(safe-area-inset-left)); }
     /* 每页底部留出 页签栏+safe-area+余量: 滚到内容末尾时最后一条完整露出 */
     #track > .pg { padding-bottom: calc(68px + 24px + env(safe-area-inset-bottom)); }
-    /* 顶部状态摘要(图标+文字双通道; 颜色仅辅助) */
-    .statusline { display: flex; order: 5; width: 100%; gap: 8px; align-items: center;
-                  padding: 9px 12px; font-size: 13.5px; margin-top: 2px; }
-    .statusline #status-ico { font-size: 16px; flex: none; }
-    .statusline.ok #status-ico { color: var(--c-green); }
-    .statusline.warn #status-ico { color: var(--c-warn); }
-    .statusline.bad #status-ico { color: var(--c-red); }
-
 
     /* 底部页签栏(唯一导航): 常规文档流尾部 + 毛玻璃, 不遮内容 */
     #tabbar { display: flex; flex: none; z-index: 40;
-              background: rgba(12,12,12,.82);
+              background: var(--tabbar-bg);
               -webkit-backdrop-filter: blur(16px) saturate(1.4);
               backdrop-filter: blur(16px) saturate(1.4);
-              border-top: 1px solid #232323;
+              border-top: 1px solid var(--border);
               padding: 4px max(8px, env(safe-area-inset-left)) calc(4px + env(safe-area-inset-bottom))
                           max(8px, env(safe-area-inset-right)); }
     #tabbar .tab { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
-                   padding: 7px 0 3px; min-height: 50px; color: #8a8a8a; font-size: 10.5px;
+                   padding: 7px 0 3px; min-height: 50px; color: var(--text-faint); font-size: 10.5px;
                    cursor: pointer; user-select: none; -webkit-user-select: none;
                    -webkit-tap-highlight-color: transparent; }
     #tabbar .tab.active { color: var(--c-blue); }
@@ -2841,8 +3058,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .tbadge-dot { position: absolute; top: 2px; left: calc(50% + 12px); min-width: 17px; height: 17px;
                   padding: 0 4px; border-radius: 999px; background: #c04848; color: #fff;
                   font-size: 10.5px; font-weight: 700; display: flex; align-items: center;
-                  justify-content: center; border: 1.5px solid #141414; }
-
+                  justify-content: center; border: 1.5px solid var(--tabbar-bg); }
 
     /* 两层结构: #pages(裁剪窗口) > #track(600% 轨道) > .pg(各 1/6 = 屏宽) */
     #pages { display: block; width: 100%; overflow: hidden; }
@@ -2886,7 +3102,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 
     /* 服务列表 → 卡片(左滑露「复制地址」, 头行右侧 44px 圆形打开按钮) */
     #svc thead { display: none; }
-    #svc tbody tr { display: block; background: #131313; border: 1px solid #222;
+    #svc tbody tr { display: block; background: var(--bg-panel); border: 1px solid var(--border);
                     border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
     #svc tbody tr:has(> td.empty) { background: none; border: none; }
     #svc tbody td { display: block; border: none; padding: 0; }
@@ -2897,7 +3113,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .td-rows { padding: 4px 12px 10px; }
     .td-rows .kv { display: flex; justify-content: space-between; gap: 12px;
                    align-items: baseline; padding: 3px 0; }
-    .td-rows .k { color: #777; font-size: 11px; flex: none; }
+    .td-rows .k { color: var(--text-ghost); font-size: 11px; flex: none; }
     .td-rows .v { text-align: right; word-break: break-all; white-space: normal; min-width: 0; }
     .ctl-btn { min-height: 44px; padding: 10px 16px; font-size: 13px; }
     .colswitch, .tcol { display: none; }
@@ -2910,7 +3126,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .watchdog-panel td { display: flex; justify-content: space-between; gap: 12px;
                          align-items: baseline; border: none; padding: 3px 0;
                          white-space: normal !important; }
-    .watchdog-panel td::before { content: attr(data-label); color: #777; font-size: 11px;
+    .watchdog-panel td::before { content: attr(data-label); color: var(--text-ghost); font-size: 11px;
                                  flex: none; }
     .watchdog-panel td:first-child { display: block; padding: 2px 0 4px; }
     .watchdog-panel td:first-child::before { content: none; }
@@ -2952,104 +3168,107 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .skel-line { animation: none; }
   }
   /* ---------------- ツール页 ---------------- */
-  .toolspage .tl-sec + .tl-sec { border-top: 1px solid #222; margin-top: 14px; padding-top: 12px; }
-  .toolspage .tl-sec h3 { margin: 0 0 8px; font-size: 12.5px; color: #9a9a9a; font-weight: 500; }
+  .toolspage .tl-sec + .tl-sec { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
+  .toolspage .tl-sec h3 { margin: 0 0 8px; font-size: 12.5px; color: var(--text-dim); font-weight: 500;
+                          display: flex; align-items: center; gap: 6px; }
   .tl-sechead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .tl-sechead h3 { margin: 0; flex: 1 1 auto; }
   .tl-run { flex: none; cursor: pointer; user-select: none; }
   .tl-row { display: flex; align-items: center; gap: 8px; padding: 5px 0;
-            font-size: 12.5px; border-bottom: 1px dashed #1c1c1c; }
+            font-size: 12.5px; border-bottom: 1px dashed var(--border-faint); }
   .tl-row:last-child { border-bottom: none; }
-  .tl-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #6ec89a; }
-  .tl-dot.warn { background: #e0a84c; }
-  .tl-dot.bad { background: #e06c6c; }
-  .tl-dot.off { background: #555; }
-  .tl-name { color: #c8c8c8; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tl-val { margin-left: auto; color: #8f8f8f; font-family: ui-monospace, monospace;
+  .tl-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c-green); }
+  .tl-dot.warn { background: var(--c-warn); }
+  .tl-dot.bad { background: var(--c-red); }
+  .tl-dot.off { background: var(--dot-off); }
+  .tl-name { color: var(--text-mid); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-val { margin-left: auto; color: var(--text-faint); font-family: ui-monospace, monospace;
             font-size: 11.5px; white-space: nowrap; }
-  .tl-val b { color: #e8e8e8; font-weight: 600; }
+  .tl-val b { color: var(--text-hi); font-weight: 600; }
   .tl-head-big { font-size: 15px; font-weight: 600; }
+  .tl-head-big > span:first-child { display: inline-flex; align-items: center; }
   .tl-copyrow { display: flex; gap: 8px; flex-wrap: wrap; }
   .tl-copyrow .btn { font-size: 12px; padding: 6px 12px; }
+  .themechips { margin-bottom: 0; }
   .tl-fsbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
-  .tl-crumbs { font-size: 12px; color: #8f8f8f; word-break: break-all; line-height: 1.7; }
-  .tl-crumbs a { color: #6ea8dc; text-decoration: none; cursor: pointer; }
+  .tl-crumbs { font-size: 12px; color: var(--text-faint); word-break: break-all; line-height: 1.7; }
+  .tl-crumbs a { color: var(--link-blue); text-decoration: none; cursor: pointer; }
   .tl-crumbs a:hover { text-decoration: underline; }
-  .tl-crumbs .cur { color: #e8e8e8; }
+  .tl-crumbs .cur { color: var(--text-hi); }
   .tl-fsctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .tl-fsctl input[type="search"] { flex: 1 1 120px; background: #141414; color: #d6d6d6;
-      border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px 10px; font-size: 13px; min-height: 38px; }
+  .tl-fsctl input[type="search"] { flex: 1 1 120px; background: var(--bg-input); color: var(--text);
+      border: 1px solid var(--chip-border); border-radius: 8px; padding: 8px 10px; font-size: 13px; min-height: 38px; }
   .tl-switch { display: inline-flex; gap: 6px; align-items: center; font-size: 12px;
-               color: #8f8f8f; cursor: pointer; min-height: 38px; }
-  .tl-fslist { border: 1px solid #222; border-radius: 8px; overflow: hidden; }
+               color: var(--text-faint); cursor: pointer; min-height: 38px; }
+  .tl-fslist { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .tl-fsrow { display: flex; align-items: center; gap: 8px; padding: 9px 10px; font-size: 13px;
-              border-bottom: 1px solid #1c1c1c; cursor: pointer; background: #131313; }
-  .tl-fsrow:hover { background: #191919; }
+              border-bottom: 1px solid var(--border-faint); cursor: pointer; background: var(--bg-panel); }
+  .tl-fsrow:hover { background: var(--bg-hover); }
   .tl-fsrow:last-child { border-bottom: none; }
-  .tl-fsrow .ico { flex: none; width: 18px; text-align: center; }
+  .tl-fsrow .ico { flex: none; width: 18px; display: inline-flex; align-items: center; justify-content: center; }
   .tl-fsrow .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
                   white-space: nowrap; }
-  .tl-fsrow .mt { flex: none; color: #666; font-size: 11px; font-family: ui-monospace, monospace; }
-  .tl-fsrow .sz { flex: none; color: #8f8f8f; font-size: 11.5px; font-family: ui-monospace, monospace;
+  .tl-fsrow .mt { flex: none; color: var(--text-dead); font-size: 11px; font-family: ui-monospace, monospace; }
+  .tl-fsrow .sz { flex: none; color: var(--text-faint); font-size: 11.5px; font-family: ui-monospace, monospace;
                  min-width: 56px; text-align: right; }
-  .tl-fsrow .du { color: #6ea8dc; }
+  .tl-fsrow .du { color: var(--link-blue); }
   .tl-cleanrow { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 12.5px;
-                 border-bottom: 1px dashed #1c1c1c; }
+                 border-bottom: 1px dashed var(--border-faint); }
   .tl-cleanrow:last-child { border-bottom: none; }
-  .tl-cleanrow input[type="checkbox"] { flex: none; width: 16px; height: 16px; accent-color: #2e7d4f; }
+  .tl-cleanrow input[type="checkbox"] { flex: none; width: 16px; height: 16px; accent-color: var(--c-green-btn); }
   .tl-cleanrow .lbl { flex: 1 1 auto; min-width: 0; }
-  .tl-cleanrow .lbl small { display: block; color: #666; font-size: 11px; margin-top: 1px;
+  .tl-cleanrow .lbl small { display: block; color: var(--text-dead); font-size: 11px; margin-top: 1px;
                             word-break: break-all; }
-  .tl-cleanrow .sz { flex: none; color: #e8e8e8; font-family: ui-monospace, monospace; font-size: 12px; }
-  .tl-docker-pre { background: #101010; border: 1px solid #222; border-radius: 8px;
-                   padding: 8px 10px; font: 11px ui-monospace, monospace; color: #9a9a9a;
+  .tl-cleanrow .sz { flex: none; color: var(--text-hi); font-family: ui-monospace, monospace; font-size: 12px; }
+  .tl-docker-pre { background: var(--bg-deep); border: 1px solid var(--border); border-radius: 8px;
+                   padding: 8px 10px; font: 11px ui-monospace, monospace; color: var(--text-dim);
                    overflow-x: auto; white-space: pre; margin: 8px 0; }
-  #tl-lightbox, #tl-textview { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.92);
+  #tl-lightbox, #tl-textview { position: fixed; inset: 0; z-index: 80; background: var(--scrim);
       display: flex; align-items: center; justify-content: center; flex-direction: column; }
   #tl-lightbox img { max-width: 96vw; max-height: 88vh; object-fit: contain; }
   .tl-lb-close { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 12px;
       width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
-      font-size: 18px; color: #ccc; background: #1c1c1c; border: 1px solid #333;
+      font-size: 18px; color: var(--text-mid); background: var(--btn-soft-bg);
+      border: 1px solid var(--chip-border);
       border-radius: 50%; cursor: pointer; }
   #tl-textview { align-items: stretch; }
   .tl-tv-head { display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 14px; font-size: 13px; color: #9a9a9a; position: relative; }
+      padding: 10px 14px; font-size: 13px; color: var(--text-dim); position: relative; }
   .tl-tv-head .tl-lb-close { position: static; }
   #tl-tv-pre { flex: 1 1 auto; margin: 0; padding: 0 14px 16px; overflow: auto;
-      font: 12px/1.6 ui-monospace, monospace; color: #d6d6d6; white-space: pre-wrap;
+      font: 12px/1.6 ui-monospace, monospace; color: var(--text); white-space: pre-wrap;
       word-break: break-all; }
   .tl-usvc-unlock { display: inline-flex; gap: 6px; align-items: center; }
-  .tl-usvc-unlock input { width: 110px; background: #141414; color: #d6d6d6;
-      border: 1px solid #2a2a2a; border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+  .tl-usvc-unlock input { width: 110px; background: var(--bg-input); color: var(--text);
+      border: 1px solid var(--chip-border); border-radius: 8px; padding: 7px 10px; font-size: 13px; }
   .tl-netrow { display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 12.5px; }
   .tl-netrow .tl-val { margin-left: 0; }
-  .tl-netrow .sep { flex: 1 1 auto; border-bottom: 1px dotted #333; }
+  .tl-netrow .sep { flex: 1 1 auto; border-bottom: 1px dotted var(--btn-hover); }
+  .copy-toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom));
+      transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px;
+      background: var(--c-green-bg); color: var(--c-green); border: 1px solid var(--c-green-btn);
+      border-radius: 999px; padding: 8px 18px; font-size: 12.5px; z-index: 60;
+      pointer-events: none; transition: opacity .3s; }
 </style>
-</head>
-<body>
 <header>
-  <h1>{{T:title}}
-    <a href="https://github.com/iamcheyan/svc-dashboard" target="_blank" rel="noopener"
-       title="{{T:github_repo}}" style="text-decoration:none; margin-left:8px; vertical-align:-3px;">
-      <svg width="18" height="18" viewBox="0 0 16 16" fill="#d6d6d6" aria-hidden="true">
-        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-      </svg>
-    </a>
-  </h1>
-  <span class="meta" id="meta-line">{{T:updated}} <span id="updated">{{UPDATED}}</span> · {{T:svc_pre}}<span id="count">{{COUNT}}</span>{{T:svc_post}}</span>
-  <span class="spacer"></span>
-  <span class="auto">
-    <span class="sw" id="auto" role="switch" aria-checked="false" tabindex="0"
-          title="{{T:auto_refresh}}"><span class="sw-thumb"></span></span>
-    {{T:auto_refresh}} (<span id="auto-sec">{{AUTO}}s</span>)
+  <!-- topbar 重设计: 左=服务器名(HOSTNAME), 右=刷新按钮(点击刷新/长按锁定自动刷新)。
+       原 meta 行与自动刷新开关已并入按钮; updated/count 保留为隐藏节点供 JS 写入。 -->
+  <h1 title="{{T:title}}"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</h1>
+  <span class="meta" id="meta-line" hidden>
+    <span id="updated">{{UPDATED}}</span> <span id="count">{{COUNT}}</span>
   </span>
-  <span class="btn" id="refresh" role="button" tabindex="0">{{T:refresh}}</span>
+  <span class="spacer"></span>
+  <span class="btn icon-btn" id="refresh" role="button" tabindex="0"
+        title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:17}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
 </header>
-<div id="ptr-indicator" aria-hidden="true"><span class="ptr-arrow">↓</span><span class="ptr-label">{{T:ptr_pull}}</span></div>
+<div id="ptr-indicator" aria-hidden="true"><span class="ptr-arrow">{{ICO:down:20}}</span><span class="ptr-label">{{T:ptr_pull}}</span></div>
 <main>
 <div id="pages">
 <div class="statuscard" id="statuscard" role="button" tabindex="0">
-  <div class="sc-head"><span class="sc-ico" id="sc-ico">⏳</span><span class="sc-big" id="sc-text">{{T:st_loading}}</span></div>
+  <div class="sc-head"><span class="sc-ico" id="sc-ico">{{ICO:wait:28}}</span><span class="sc-big" id="sc-text">{{T:st_loading}}</span>
+    <a id="gh-link" href="https://github.com/iamcheyan/svc-dashboard" target="_blank" rel="noopener" title="{{T:github_repo}}" aria-label="{{T:github_repo}}">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a></div>
   <div class="sc-sub"><span id="sc-fresh"></span><span class="stale" id="sc-stale" hidden> {{T:st_stale}}</span></div>
 </div>
 <div class="mgrid4">
@@ -3125,6 +3344,15 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 </div>
 <div class="gpanel toolspage" id="toolspage" hidden>
   <h2>{{T:tab_tools}}</h2>
+  <!-- 主题三选: 跟随系统 / 深色 / 浅色(localStorage 记住, html[data-theme] 生效) -->
+  <div class="tl-sec" id="tl-theme">
+    <div class="tl-sechead"><h3>{{T:theme_title}}</h3></div>
+    <div class="filters themechips" id="theme-chips">
+      <span class="chip active" data-thm="auto" role="button" tabindex="0">{{T:th_auto}}</span>
+      <span class="chip" data-thm="dark" role="button" tabindex="0">{{T:th_dark}}</span>
+      <span class="chip" data-thm="light" role="button" tabindex="0">{{T:th_light}}</span>
+    </div>
+  </div>
 
   <!-- F2 健康检查 -->
   <div class="tl-sec" id="tl-health">
@@ -3161,8 +3389,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div id="tl-fs-list" class="tl-fslist"></div>
   </div>
-  <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">✕</div></div>
-  <div id="tl-textview" hidden><div class="tl-tv-head"><span id="tl-tv-name"></span><span class="tl-lb-close" role="button" tabindex="0">✕</span></div><pre id="tl-tv-pre"></pre></div>
+  <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
+  <div id="tl-textview" hidden><div class="tl-tv-head"><span id="tl-tv-name"></span><span class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</span></div><pre id="tl-tv-pre"></pre></div>
 
   <!-- F3 垃圾清理 -->
   <div class="tl-sec" id="tl-clean">
@@ -3191,7 +3419,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
         <input type="text" id="tl-usvc-code" placeholder="I-KNOW" autocomplete="off">
         <span class="btn tl-run" id="tl-usvc-unlock" role="button" tabindex="0">{{T:tl_usvc_unlock}}</span>
       </span>
-      <span class="btn tl-run" id="tl-usvc-showlock" role="button" tabindex="0">🔒</span>
+      <span class="btn tl-run" id="tl-usvc-showlock" role="button" tabindex="0" title="{{T:tl_usvc_title}}">{{ICO:lock:14}}</span>
     </div>
     <div id="tl-usvc-body"></div>
   </div>
@@ -3226,7 +3454,14 @@ const TS_HOST = "100.76.219.104";
 const linkHost = (h) => (TS_MODE && (h === "192.168.3.82")) ? TS_HOST : h;  // 来源为 tailscale(100.64.0.0/10) 时链接主机改用 tailscale IP
 const T = {{T_JSON}};
 const t = (k, p) => { let s = T[k] ?? k; if (p !== undefined) { for (const [a, b] of Object.entries(p)) s = s.split("{" + a + "}").join(b); } return s; };
-let autoOn = false;
+// --- 内联 SVG 图标(与 Python 端 ICONS 同一份 path 表, stroke=currentColor) ---
+const ICONS = {{ICONS_JSON}};
+function icon(name, size = 16, cls = "ic") {
+  const p = ICONS[name] || ICONS.dot;
+  return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+}
+let autoOn = false;          // 自动刷新总开关(刷新按钮长按锁定时强制 false)
+let autoLocked = false;      // 长按锁定: true = 30s 自动刷新完全停止
 let filter = "user"; // 默认只显示用户服务, 隐藏系统服务
 let services = [];
 const $ = (id) => document.getElementById(id);
@@ -3272,10 +3507,10 @@ function row(e, mobile) {
       kv(t("th_cwd"), esc(cwd)) +
       (man ? kv(t("th_ctl"), ctl) : "");
     return `<tr><td class='swipe-item'><div class='swipe-bg'>` +
-      `<span class='swipe-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}'>⧉ ${t("act_copy_addr")}</span></div>` +
+      `<span class='swipe-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}'>${icon("copy", 12)} ${t("act_copy_addr")}</span></div>` +
       `<div class='swipe-fg'><div class='td-head'><span class='svc'>${esc(e.name)}</span>` +
       `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
-      `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>↗</a></div>` +
+      `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>${icon("ext", 15)}</a></div>` +
       `<div class='td-rows'>${rows}</div></div></td></tr>`;
   }
   return `<tr>
@@ -3301,7 +3536,7 @@ function applyFilter() {
     // 之前面板一直 hidden,数据回来前用户看到的是一片空白。
     const tasksEl = $("tasks");
     tasksEl.hidden = false; tasksEl.className = "watchdog-panel";
-    tasksEl.innerHTML = "<h2>" + t("a_title") + " <span style='color:#666;font-weight:400'>" + t("a_loading") + "</span></h2>";
+    tasksEl.innerHTML = "<h2>" + t("a_title") + " <span style='color:var(--text-dead);font-weight:400'>" + t("a_loading") + "</span></h2>";
     loadAgents().then(renderAgentPanel);
     $("count").textContent = t("chip_omp");
     return;
@@ -3344,6 +3579,7 @@ function renderSys(s) {
     return t("minute", { m });
   };
   const mem = s.mem || {}, disk = s.disk || {};
+  const SYS_ICONS = { load: "load", cpu: "cpu", mem: "mem", disk: "disk", up: "clock" };
   const cards = [
     ["load", t("sys_load"), (s.loadavg || []).join(" / ") || "—"],
     ["cpu", "CPU", `${s.cpu_usage}% · ${s.cpu_count} ${t("unit_core")}`],
@@ -3352,7 +3588,7 @@ function renderSys(s) {
     ["up", t("sys_up"), fmtUp(s.uptime)],
   ];
   $("sysbar").innerHTML = cards.map(([k, l, v]) =>
-    `<div class='stat' data-k='${k}'><div class='label'>${l}</div><div class='value'>${v}</div></div>`).join("");
+    `<div class='stat' data-k='${k}'><div class='label'><span class='lb-ico'>${icon(SYS_ICONS[k] || "dot", 13)}</span>${l}</div><div class='value'>${v}</div></div>`).join("");
   renderLoadline(s);
   chartSample(s); // 手机端趋势图采样(桌面 no-op)
 }
@@ -3364,12 +3600,12 @@ function renderLoadline(s) {
   const gl = s.goalload, esc = (x) => String(x ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const zone = gl.zone || "none";
   const msg = zone === "ok" ? t("ld_ok", { n: gl.n }) : zone === "full" ? t("ld_full") : zone === "over" ? t("ld_over") : "—";
-  const [ico, color] = zone === "ok" ? ["🟢", "#6ec89a"] : zone === "full" ? ["🟡", "#e0b060"] : zone === "over" ? ["🔴", "#e06c6c"] : ["⚪", "#8a8a8a"];
+  const [ico, color] = zone === "ok" ? ["dot", "var(--c-green)"] : zone === "full" ? ["pause", "var(--c-warn)"] : zone === "over" ? ["err", "var(--c-red)"] : ["dot", "var(--c-gray)"];
   const sub = t("ld_load", { l: gl.load15 != null ? gl.load15.toFixed(1) : "—", c: gl.cores ?? "?" });
   const rows = (items, fmt) => (items || []).length
     ? items.map(([v, k]) => `<div class='ld-row'><span class='ld-val'>${fmt(v)}</span><span class='ld-name'>${esc(k)}</span></div>`).join("")
-    : `<div class='ld-row' style='color:#666'>—</div>`;
-  el.innerHTML = `<div class='ld-head'><span class='ld-ico' style='color:${color}'>${ico}</span><b>${t("ld_title")}</b>：${msg}` +
+    : `<div class='ld-row' style='color:var(--text-dead)'>—</div>`;
+  el.innerHTML = `<div class='ld-head'><span class='ld-ico' style='color:${color}'>${icon(ico, 14)}</span><b>${t("ld_title")}</b>：${msg}` +
     `<span class='ld-sub'>（${sub}）</span></div><div class='ld-tops'>` +
     `<div class='ld-top'><div class='ld-t'>${t("ld_cpu")}</div>${rows(gl.cpu_top, v => v.toFixed(0) + "%")}</div>` +
     `<div class='ld-top'><div class='ld-t'>${t("ld_mem")}</div>${rows(gl.mem_top, v => v >= 1024 ? (v / 1024).toFixed(1) + "G" : v.toFixed(0) + "M")}</div></div>`;
@@ -3382,7 +3618,7 @@ function renderToolchips() {
   if (!el) return;
   const ports = new Set(services.map(s => s.port));
   const chips = TOOL_LINKS.filter(([n, p]) => ports.has(p)).map(([n, p]) =>
-    `<a class='chip tchip' href='http://${linkHost(location.hostname)}:${p}/' target='_blank' rel='noopener'>${n} :${p} ↗</a>`).join("");
+    `<a class='chip tchip' href='http://${linkHost(location.hostname)}:${p}/' target='_blank' rel='noopener'>${n} :${p} ${icon("ext", 11)}</a>`).join("");
   el.innerHTML = chips;
   el.style.display = chips ? "" : "none";
 }
@@ -3400,9 +3636,9 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const txt = b.dataset.cmd || b.dataset.copy || "";
   const done = () => {
-    const old = b.textContent; b.textContent = "✓ " + t("g_copied");
+    const old = b.innerHTML; b.innerHTML = icon("ok", 12) + " " + t("g_copied");
     haptic(12);
-    setTimeout(() => b.textContent = old, 1600);
+    setTimeout(() => b.innerHTML = old, 1600);
   };
   if (navigator.clipboard && window.isSecureContext)
     navigator.clipboard.writeText(txt).then(done).catch(() => fallbackCopy(txt, done));
@@ -3463,7 +3699,7 @@ function renderAgentPanel(agents) {
       esc(x.last_activity) + "<br>" + t("a_ago", { s: x.idle_seconds }) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>pid " + esc(x.pid) + "</td></tr>";
   });
   const total = agents.omp.length + agents.codex.length;
-  el.innerHTML = "<h2>" + t("a_title") + " <span style='color:#666;font-weight:400'>" + t("a_hint", { n: total }) + "</span></h2><table><thead><tr><th>" + t("a_th_agent") + "</th><th>" + t("a_status") + "</th><th>" + t("a_loc") + "</th><th>" + t("a_active") + "</th><th>" + t("a_tool") + "</th></tr></thead><tbody>" +
+  el.innerHTML = "<h2>" + t("a_title") + " <span style='color:var(--text-dead);font-weight:400'>" + t("a_hint", { n: total }) + "</span></h2><table><thead><tr><th>" + t("a_th_agent") + "</th><th>" + t("a_status") + "</th><th>" + t("a_loc") + "</th><th>" + t("a_active") + "</th><th>" + t("a_tool") + "</th></tr></thead><tbody>" +
     (rows || "<tr><td class='empty' colspan='5'>" + t("a_none") + "</td></tr>") + "</tbody></table>";
   el.querySelectorAll(".tlink").forEach(a => a.addEventListener("click", () => toggleAgentLog(a)));
 }
@@ -3536,7 +3772,7 @@ function renderTmuxPanel(panes) {
     (x.active ? " <span class='tbadge wd'>" + t("tmux_active") + "</span>" : "") + "</td><td data-label='" + t("t_cmd") + "'>" + esc(x.command) +
     "</td><td class='tscope' data-label='" + t("tmux_th_title") + "'>" + esc(x.title) + "</td><td class='tcmd' data-label='" + t("th_cwd") + "'>" + esc(x.cwd) +
     "</td><td class='tsch' data-label='" + t("tmux_th_size") + "'>" + esc(x.size) + "</td></tr>").join("");
-  el.innerHTML = "<h2>" + t("tmux_panel") + " <span style='color:#666;font-weight:400'>" + t("tmux_panes", { n: panes.length }) +
+  el.innerHTML = "<h2>" + t("tmux_panel") + " <span style='color:var(--text-dead);font-weight:400'>" + t("tmux_panes", { n: panes.length }) +
     "</span></h2><table><thead><tr><th>" + t("tmux_th_pane") + "</th><th>" + t("t_cmd") + "</th><th>" + t("tmux_th_title") + "</th><th>" + t("th_cwd") + "</th><th>" + t("tmux_th_size") + "</th></tr></thead><tbody>" +
     (rows || "<tr><td class='empty' colspan='5'>" + t("tmux_none") + "</td></tr>") + "</tbody></table>";
 }
@@ -3565,10 +3801,10 @@ function renderWatchdogPanel(tasks) {
   const nrd = tasks.filter(t => t.type === "reminder").length;
   const nsc = tasks.length - nwd - nrd;
   el.innerHTML = `<h2>${t("panel_watchdog")}
-    <span style='color:#e0a84c'>${nwd} ${t("tbd_wd")}</span> ·
-    <span style='color:#6ea8dc'>${nrd} ${t("tbd_rd")}</span> ·
-    <span style='color:#9a9a9a'>${nsc} ${t("tbd_sc")}</span> ·
-    <span style='color:#666;font-weight:400'>${t("t_total", { n: tasks.length })}</span></h2>
+    <span style='color:var(--ch-mem)'>${nwd} ${t("tbd_wd")}</span> ·
+    <span style='color:var(--ch-cpu)'>${nrd} ${t("tbd_rd")}</span> ·
+    <span style='color:var(--text-dim)'>${nsc} ${t("tbd_sc")}</span> ·
+    <span style='color:var(--text-dead);font-weight:400'>${t("t_total", { n: tasks.length })}</span></h2>
     <table><thead><tr><th>${t("t_task")}</th><th>${t("t_cycle")}</th><th>${t("t_source")}</th><th>${t("t_cmd")}</th><th>${t("t_lastrun")}</th></tr></thead>
     <tbody>${tasks.length ? tasks.map(taskRow).join("") : "<tr><td class='empty' colspan='5'>" + t("t_none") + "</td></tr>"}</tbody></table>`;
 }
@@ -3605,7 +3841,7 @@ async function fillCtl() {
       b.dataset.action = running ? "stop" : "start";
       b.setAttribute("aria-disabled", "false");
     } catch (e) {
-      b.textContent = "✗";
+      b.innerHTML = icon("err", 13);
       b.title = e.message;
     }
   }));
@@ -3624,11 +3860,11 @@ async function doCtl(btn) {
       body: JSON.stringify({ unit: uid, action }),
     });
     const d = await r.json();
-    btn.textContent = (d.ok ? "✓ " : "✗ ") + (d.msg || "");
+    btn.innerHTML = icon(d.ok ? "ok" : "err", 13) + " " + escHtml(d.msg || "");
     btn.title = d.msg || "";
     setTimeout(() => { load(true); fillCtl(); }, 800); // 刷新状态
   } catch (e) {
-    btn.textContent = "✗";
+    btn.innerHTML = icon("err", 13);
     btn.title = e.message;
   }
 }
@@ -3638,7 +3874,7 @@ function manageCard(u, st, result) {
   const ok = st && st.ok;
   const active = ok && st.active === "active";
   const stopped = ok && st.stopped;
-  const color = !ok ? "#8a8a8a" : (stopped ? "#e0a84c" : (active ? "#6ec89a" : "#e06c6c"));
+  const color = !ok ? "var(--c-gray)" : (stopped ? "var(--c-warn)" : (active ? "var(--c-green)" : "var(--c-red)"));
   const stateTxt = !ok ? (st && st.msg ? st.msg : t("m_state_fail"))
     : (stopped ? t("m_paused") : (active ? st.sub : st.active));
   const pid = ok && st.pid && st.pid !== "0" ? " · PID " + esc(st.pid) : "";
@@ -3647,17 +3883,17 @@ function manageCard(u, st, result) {
   if (active) {
     // 手动进程: 暂停=终止进程;systemd: 停止/暂停(SIGSTOP)分开
     if (isProc) {
-      btns += `<span class='mbtn' data-unit='${u.id}' data-action='stop' role='button' tabindex='0' title='${t("m_title_stop")}'>⏸ ${t("m_pause")}</span>`;
-      btns += `<span class='mbtn' data-unit='${u.id}' data-action='restart' role='button' tabindex='0' title='${t("m_title_restart")}'>⟳ ${t("m_restart")}</span>`;
+      btns += `<span class='mbtn' data-unit='${u.id}' data-action='stop' role='button' tabindex='0' title='${t("m_title_stop")}'>${icon("pause", 13)} ${t("m_pause")}</span>`;
+      btns += `<span class='mbtn' data-unit='${u.id}' data-action='restart' role='button' tabindex='0' title='${t("m_title_restart")}'>${icon("refresh", 13)} ${t("m_restart")}</span>`;
     } else {
-      btns += `<span class='mbtn' data-unit='${u.id}' data-action='stop' role='button' tabindex='0' title='${t("m_title_stop")}'>■ ${t("m_stop")}</span>`;
-      btns += `<span class='mbtn' data-unit='${u.id}' data-action='restart' role='button' tabindex='0' title='${t("m_title_restart")}'>⟳ ${t("m_restart")}</span>`;
+      btns += `<span class='mbtn' data-unit='${u.id}' data-action='stop' role='button' tabindex='0' title='${t("m_title_stop")}'>${icon("stop", 13)} ${t("m_stop")}</span>`;
+      btns += `<span class='mbtn' data-unit='${u.id}' data-action='restart' role='button' tabindex='0' title='${t("m_title_restart")}'>${icon("refresh", 13)} ${t("m_restart")}</span>`;
       btns += stopped
-        ? `<span class='mbtn' data-unit='${u.id}' data-action='resume' role='button' tabindex='0' title='${t("m_title_resume")}'>▶ ${t("m_resume")}</span>`
-        : `<span class='mbtn' data-unit='${u.id}' data-action='pause' role='button' tabindex='0' title='${t("m_title_pause")}'>⏸ ${t("m_pause")}</span>`;
+        ? `<span class='mbtn' data-unit='${u.id}' data-action='resume' role='button' tabindex='0' title='${t("m_title_resume")}'>${icon("play", 13)} ${t("m_resume")}</span>`
+        : `<span class='mbtn' data-unit='${u.id}' data-action='pause' role='button' tabindex='0' title='${t("m_title_pause")}'>${icon("pause", 13)} ${t("m_pause")}</span>`;
     }
   } else if (ok) {
-    btns += `<span class='mbtn' data-unit='${u.id}' data-action='start' role='button' tabindex='0' title='${t("m_title_start")}'>▶ ${isProc ? t("m_enable") : t("m_start")}</span>`;
+    btns += `<span class='mbtn' data-unit='${u.id}' data-action='start' role='button' tabindex='0' title='${t("m_title_start")}'>${icon("play", 13)} ${isProc ? t("m_enable") : t("m_start")}</span>`;
   }
   const res = result ? `<div class='mresult'>${esc(result)}</div>` : "<div class='mresult'></div>";
   return `<div class='mcard' data-unit='${u.id}'>
@@ -3687,7 +3923,7 @@ async function loadManage() {
     } catch (e) { st = null; }
     return manageCard(u, st, prevResults[u.id] || "");
   }));
-  el.innerHTML = `<h2>${t("m_panel")} <span style='color:#666;font-weight:400'>${t("m_hint")}</span></h2>
+  el.innerHTML = `<h2>${t("m_panel")} <span style='color:var(--text-dead);font-weight:400'>${t("m_hint")}</span></h2>
     <div class='mgrid'>${cards.join("")}</div>`;
   el.querySelectorAll(".mbtn").forEach(b => b.addEventListener("click", () => doManage(b)));
 }
@@ -3705,11 +3941,11 @@ async function doManage(btn) {
       body: JSON.stringify({ unit, action }),
     });
     const d = await r.json();
-    res.textContent = (d.ok ? "✓ " : "✗ ") + (d.msg || "");
-    res.style.color = d.ok ? "#6ec89a" : "#e06c6c";
+    res.innerHTML = icon(d.ok ? "ok" : "err", 13) + " " + escHtml(d.msg || "");
+    res.style.color = d.ok ? "var(--c-green)" : "var(--c-red)";
   } catch (e) {
-    res.textContent = "✗ " + e.message;
-    res.style.color = "#e06c6c";
+    res.innerHTML = icon("err", 13) + " " + escHtml(e.message);
+    res.style.color = "var(--c-red)";
   }
   btn.setAttribute("aria-disabled", "false");
   setTimeout(() => loadManage(), 600); // 等 systemd 状态落地再刷新
@@ -3776,13 +4012,13 @@ function agoFromTs(ts) { return agoStr((Date.now() - ts * 1000) / 1000); }
 
 // --- 事件类型元数据: 图标(双通道) + 语义组(ok/warn/fail/recover) ---
 const EV_META = {
-  complete: { ico: "✅", grp: "ok", key: "evk_complete" },
-  recover:  { ico: "🟢", grp: "recover", key: "evk_recover" },
-  restart:  { ico: "🔄", grp: "fail", key: "evk_restart" },
-  nudge:    { ico: "🔔", grp: "warn", key: "evk_nudge" },
+  complete: { ico: "ok", grp: "ok", key: "evk_complete" },
+  recover:  { ico: "up", grp: "recover", key: "evk_recover" },
+  restart:  { ico: "retry", grp: "fail", key: "evk_restart" },
+  nudge:    { ico: "bell", grp: "warn", key: "evk_nudge" },
   pause:    { ico: "⏸", grp: "warn", key: "evk_pause" },
-  cleanup:  { ico: "🧹", grp: "ok", key: "evk_cleanup" },
-  commit:   { ico: "📦", grp: "ok", key: "evk_commit" },
+  cleanup:  { ico: "trash", grp: "ok", key: "evk_cleanup" },
+  commit:   { ico: "box", grp: "ok", key: "evk_commit" },
   other:    { ico: "·", grp: "ok", key: "evk_other" },
 };
 
@@ -3799,11 +4035,11 @@ function goalAlerts(goals) {
     const id = g.gid || g.session || g.name;
     const sub = g.idle_sec != null ? t("g_last") + ": " + agoStr(g.idle_sec) : "";
     let a = null;
-    if (g.light === "paused") a = { sev: "warn", key: "paused|" + id, icon: "⏸", msg: t("al_paused") };
-    else if (g.light === "lost") a = { sev: "bad", key: "lost|" + id, icon: "⚠️", msg: t("al_lost") };
-    else if (g.light === "done") a = { sev: "done", key: "done|" + id, icon: "✅", msg: t("al_done") };
-    else if (g.stalled) a = { sev: "warn", key: "stalled|" + id, icon: "🐌", msg: t("al_stalled") };
-    else if (g.light === "retry") a = { sev: "warn", key: "retry|" + id, icon: "🔁", msg: t("g_retry") };
+    if (g.light === "paused") a = { sev: "warn", key: "paused|" + id, icon: ["pause", "t-warn"], msg: t("al_paused") };
+    else if (g.light === "lost") a = { sev: "bad", key: "lost|" + id, icon: ["warn", "t-red"], msg: t("al_lost") };
+    else if (g.light === "done") a = { sev: "done", key: "done|" + id, icon: ["ok", "t-green"], msg: t("al_done") };
+    else if (g.stalled) a = { sev: "warn", key: "stalled|" + id, icon: ["clock", "t-warn"], msg: t("al_stalled") };
+    else if (g.light === "retry") a = { sev: "warn", key: "retry|" + id, icon: ["retry", "t-warn"], msg: t("g_retry") };
     if (a) out.push({ sev: a.sev, key: a.key, icon: a.icon, msg: a.msg,
                       name: g.name || g.session || "—", sub: sub, cmd: g.resume_cmd || "" });
   });
@@ -3815,13 +4051,13 @@ function renderAlerts(alerts) {
   if (!alerts.length) { el.innerHTML = `<div class="gempty">${t("al_none")}</div>`; return; }
   el.innerHTML = alerts.map(a => `
     <div class="alert-item" data-key="${escAttr(a.key)}">
-      <span class="al-ico">${a.icon}</span>
+      <span class="al-ico ${a.icon[1]}">${icon(a.icon[0], 15)}</span>
       <div class="al-main">
         <div class="al-line"><span class="al-name">${escHtml(a.name)}</span><span class="al-msg">${escHtml(a.msg)}</span></div>
         ${a.sub ? `<div class="al-sub">${escHtml(a.sub)}</div>` : ""}
       </div>
       <div class="al-act">
-        ${a.cmd ? `<span class="al-btn gcopy" data-cmd="${escAttr(a.cmd)}" role="button" tabindex="0" title="${escAttr(a.cmd)}">⧉</span>` : ""}
+        ${a.cmd ? `<span class="al-btn gcopy" data-cmd="${escAttr(a.cmd)}" role="button" tabindex="0" title="${escAttr(a.cmd)}">${icon("copy", 13)}</span>` : ""}
         <span class="al-btn detail" role="button" tabindex="0">${t("al_detail")}</span>
         <span class="al-btn ignore" role="button" tabindex="0">${t("al_ignore")}</span>
       </div>
@@ -3845,10 +4081,10 @@ async function renderOverview(apiData) {
   const ok = nAlert === 0;
   const cls = ok ? "ok" : alerts.some(a => a.sev === "bad") ? "bad" : "warn";
   const txt = ok ? t("st_all_ok") : t("st_alert", { n: nAlert });
-  const ico = ok ? "✅" : "⚠";
+  const ico = ok ? "ok" : "warn";
   const sc = $("statuscard"), sl = $("statusline"); // sl 可为 null(已移除)
-  if (sc) { sc.className = "statuscard " + cls; $("sc-ico").textContent = ico; $("sc-text").textContent = txt; }
-  if (sl) { sl.className = "statusline " + cls; $("status-ico").textContent = ico; $("status-text").textContent = txt; }
+  if (sc) { sc.className = "statuscard " + cls; $("sc-ico").innerHTML = icon(ico, 28); $("sc-text").textContent = txt; }
+  if (sl) { sl.className = "statusline " + cls; const si = $("status-ico"); if (si) si.innerHTML = icon(ico, 16); const st = $("status-text"); if (st) st.textContent = txt; }
   $("m-svc").textContent = lastSvc.ok + "/" + lastSvc.total;
   $("m-run").textContent = nRun;
   $("m-bad").textContent = nBad;
@@ -3860,7 +4096,7 @@ async function renderOverview(apiData) {
   const recent = events.slice(0, 5);
   $("recent-body").innerHTML = recent.length ? recent.map(e => {
     const m = EV_META[e.kind] || EV_META.other;
-    return `<div class="rc-row" role="button" tabindex="0"><span class="rc-ico">${m.ico}</span>` +
+    return `<div class="rc-row" role="button" tabindex="0"><span class="rc-ico">${icon(m.ico, 14)}</span>` +
       `<span class="rc-kind">${escHtml(t(m.key))} · <b class="rc-name">${escHtml(e.name)}</b></span>` +
       `<span class="rc-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
   }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
@@ -3877,8 +4113,9 @@ function refreshFreshness() {
   const age = Date.now() - lastUpdatedTs;
   const stale = age > 2 * autoSec * 1000;   // 超过 2× 刷新周期 → 数据过期
   const h = $("stale-badge"), s = $("sc-stale");
-  if (h) { h.hidden = !stale; h.textContent = "⚠ " + t("st_stale"); }
-  if (s) { s.hidden = !stale; s.textContent = "⚠ " + t("st_stale"); }
+const staleHtml = icon("warn", 12) + " " + t("st_stale");
+  if (h) { h.hidden = !stale; h.innerHTML = staleHtml; }
+  if (s) { s.hidden = !stale; s.innerHTML = staleHtml; }
   const f = $("sc-fresh");
   if (f) f.textContent = t("g_last") + ": " + agoStr(age / 1000);
 }
@@ -3922,7 +4159,7 @@ function filterEvents(evs) {
 }
 function lvHead(e, extra) {
   const m = EV_META[e.kind] || EV_META.other;
-  return `<div class="lv-line1"><span class="lv-ico">${m.ico}</span>` +
+  return `<div class="lv-line1"><span class="lv-ico">${icon(m.ico, 14)}</span>` +
     `<span class="lv-kind">${escHtml(t(m.key))}</span>` +
     `<span class="rc-name">${escHtml(e.name)}</span>${extra || ""}` +
     `<span class="lv-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
@@ -4042,18 +4279,28 @@ document.querySelectorAll(".tcol").forEach(b =>
     document.querySelectorAll(".tcol").forEach(x =>
       x.classList.toggle("active", x === b));
   }));
-$("refresh").addEventListener("click", () => load(true));
-// 自绘开关: 点击 / Enter / Space 切换
-const sw = $("auto");
-function toggleAuto() {
-  autoOn = !autoOn;
-  sw.setAttribute("aria-checked", autoOn);
-  if (autoOn) load(false);
-}
-sw.addEventListener("click", toggleAuto);
-sw.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleAuto(); }
+$("refresh").addEventListener("click", () => {
+  if (refreshHoldDone) return;   // 长按已处理, 吞掉后续 click
+  haptic(8);
+  load(true);
 });
+// 长按(500ms)锁定/解锁自动刷新: 锁定时按钮变琥珀描边+锁形角标, 点击仍可手动刷新
+let refreshHoldTimer = null, refreshHoldDone = false;
+["pointerdown", "touchstart"].forEach(ev => $("refresh").addEventListener(ev, () => {
+  refreshHoldDone = false;
+  clearTimeout(refreshHoldTimer);
+  refreshHoldTimer = setTimeout(() => {
+    refreshHoldDone = true;
+    autoLocked = !autoLocked;
+    $("refresh").classList.toggle("locked", autoLocked);
+    $("refresh").setAttribute("aria-pressed", autoLocked);
+    haptic(15);
+    themeToast(t(autoLocked ? "locked_toast" : "unlocked_toast"));
+    console.log("[svc-dashboard] auto refresh " + (autoLocked ? "locked" : "unlocked"));
+  }, 500);
+}, { passive: true }));
+["pointerup", "pointercancel", "touchend", "touchcancel", "pointerleave"].forEach(ev =>
+  $("refresh").addEventListener(ev, () => clearTimeout(refreshHoldTimer), { passive: true }));
 // 全局键盘委托: 所有 span[role=button] 控件支持 Enter/Space 触发
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") return;
@@ -4178,7 +4425,7 @@ function mobileSkelDiv(n) {
 function copyText(txt, btn) {
   const done = () => {
     haptic(12);
-    if (btn) { const old = btn.textContent; btn.textContent = "✓ " + t("g_copied"); setTimeout(() => btn.textContent = old, 1600); }
+    if (btn) { const old = btn.innerHTML; btn.innerHTML = icon("ok", 12) + " " + t("g_copied"); setTimeout(() => btn.innerHTML = old, 1600); }
   };
   if (navigator.clipboard && window.isSecureContext)
     navigator.clipboard.writeText(txt).then(done).catch(() => fallbackCopy(txt, done));
@@ -4224,8 +4471,8 @@ async function loadLogView() {
 }
 function toastCopied(anchor) {
   const d = document.createElement("div");
-  d.textContent = "✓ " + t("g_copied");
-  d.style.cssText = "position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#1c2a20;color:#6ec89a;border:1px solid #2e7d4f;border-radius:999px;padding:8px 18px;font-size:12.5px;z-index:60;pointer-events:none;transition:opacity .3s";
+  d.className = "copy-toast";
+  d.innerHTML = icon("ok", 13) + " " + t("g_copied");
   document.body.appendChild(d);
   setTimeout(() => { d.style.opacity = "0"; setTimeout(() => d.remove(), 350); }, 1400);
 }
@@ -4245,9 +4492,9 @@ async function initAgentsPage() {
   const total = agents.omp.length + agents.codex.length;
   const cards = [];
   agents.omp.forEach(x => {
-    const [dot, txt] = x.health === "running" ? ["#6ec89a", t("a_running")]
-      : x.health === "blocked" ? ["#e0b060", t("a_blocked")]
-      : x.health === "completed" ? ["#8a8a8a", t("a_done")] : ["#777", t("a_idle")];
+    const [dot, txt] = x.health === "running" ? ["var(--c-green)", t("a_running")]
+      : x.health === "blocked" ? ["var(--c-warn)", t("a_blocked")]
+      : x.health === "completed" ? ["var(--c-gray)", t("a_done")] : ["var(--text-ghost)", t("a_idle")];
     cards.push(`<div class="gcard" data-sid="${escAttr(x.id)}" data-cwd="${escAttr(x.cwd)}" data-tmux="${escAttr(x.tmux)}" role="button" tabindex="0">
       <div class="ghead"><span class="mdot" style="background:${dot};width:9px;height:9px;border-radius:50%;display:inline-block"></span>
       <span class="gname">OMP</span><span class="gstate">${txt}</span></div>
@@ -4257,7 +4504,7 @@ async function initAgentsPage() {
   });
   agents.codex.forEach(x => {
     cards.push(`<div class="gcard" data-sid="" data-cwd="${escAttr(x.cwd)}" data-tmux="" role="button" tabindex="0">
-      <div class="ghead"><span style="background:#6ec89a;width:9px;height:9px;border-radius:50%;display:inline-block"></span>
+      <div class="ghead"><span style="background:var(--c-green);width:9px;height:9px;border-radius:50%;display:inline-block"></span>
       <span class="gname">Codex</span><span class="gstate">${t("a_running")}</span></div>
       <div class="gsub">${escHtml(x.cwd)}</div>
       <div class="grow"><span>${t("a_active")}</span><span class="gidle">${t("a_ago", { s: x.idle_seconds })}</span></div></div>`);
@@ -4465,31 +4712,36 @@ function drawChart() {
   const data = all.slice(-chartWin);
   const maxL = Math.max(2, ...data.map(d => d.load || 0));
   const X = i => 6 + i * ((w - 12) / (data.length - 1));
+  // 主题色从 CSS 变量读取(getComputedStyle), 明暗主题切换即跟随
+  const cs = getComputedStyle(document.documentElement);
+  const cssVar = (n) => cs.getPropertyValue(n).trim();
+  const CH = { cpu: cssVar("--ch-cpu"), load: cssVar("--ch-load"),
+               mem: cssVar("--ch-mem"), swap: cssVar("--ch-swap"), grid: cssVar("--ch-grid") };
   // 网格线
-  ctx.strokeStyle = "#1c1c1c"; ctx.lineWidth = 1;
+  ctx.strokeStyle = CH.grid; ctx.lineWidth = 1;
   [0.25, 0.5, 0.75].forEach(f => { ctx.beginPath(); ctx.moveTo(0, h * f); ctx.lineTo(w, h * f); ctx.stroke(); });
   // CPU %: 0-100 映射
-  ctx.strokeStyle = "#6ea8dc"; ctx.lineWidth = 1.6; ctx.beginPath();
+  ctx.strokeStyle = CH.cpu; ctx.lineWidth = 1.6; ctx.beginPath();
   data.forEach((d, i) => { const y = h - 6 - (d.cpu || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
   ctx.stroke();
   // 内存 %: 0-100 映射(橙)
-  ctx.strokeStyle = "#e0a84c"; ctx.lineWidth = 1.6; ctx.beginPath();
+  ctx.strokeStyle = CH.mem; ctx.lineWidth = 1.6; ctx.beginPath();
   data.forEach((d, i) => { if (d.mem == null) return; const y = h - 6 - (d.mem || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
   ctx.stroke();
   // Swap %: 0-100 映射(紫; 无 swap 或 0% 时贴底直线,仍显示以便观察趋势)
-  ctx.strokeStyle = "#b48ead"; ctx.lineWidth = 1.6; ctx.beginPath();
+  ctx.strokeStyle = CH.swap; ctx.lineWidth = 1.6; ctx.beginPath();
   data.forEach((d, i) => { const y = h - 6 - (d.swap || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
   ctx.stroke();
   // 负载: 按各自 max 缩放
-  ctx.strokeStyle = "#6ec89a"; ctx.lineWidth = 1.8; ctx.beginPath();
+  ctx.strokeStyle = CH.load; ctx.lineWidth = 1.8; ctx.beginPath();
   data.forEach((d, i) => { const y = h - 6 - (d.load || 0) / maxL * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
   ctx.stroke();
-  // 图例(两行: 左上 CPU/mem/swap, 右上 load)
+  // 图例(左上 CPU/mem/swap, 右上 load; 颜色同线)
   ctx.font = "10px ui-monospace, monospace";
-  ctx.fillStyle = "#6ea8dc"; ctx.fillText("CPU " + Math.round(data[data.length-1].cpu || 0) + "%", 8, 12);
-  ctx.fillStyle = "#e0a84c"; ctx.fillText("mem " + Math.round(data[data.length-1].mem || 0) + "%", 8, 26);
-  ctx.fillStyle = "#b48ead"; ctx.fillText("swap " + Math.round(data[data.length-1].swap || 0) + "%", 8, 40);
-  ctx.fillStyle = "#6ec89a"; ctx.textAlign = "right"; ctx.fillText("load " + maxL.toFixed(1), w - 8, 12); ctx.textAlign = "left";
+  ctx.fillStyle = CH.cpu; ctx.fillText("CPU " + Math.round(data[data.length-1].cpu || 0) + "%", 8, 12);
+  ctx.fillStyle = CH.mem; ctx.fillText("mem " + Math.round(data[data.length-1].mem || 0) + "%", 8, 26);
+  ctx.fillStyle = CH.swap; ctx.fillText("swap " + Math.round(data[data.length-1].swap || 0) + "%", 8, 40);
+  ctx.fillStyle = CH.load; ctx.textAlign = "right"; ctx.fillText("load " + maxL.toFixed(1), w - 8, 12); ctx.textAlign = "left";
 }
 if (chart) {
   window.addEventListener("resize", drawChart);
@@ -4519,7 +4771,7 @@ document.addEventListener("visibilitychange", () => {
     console.log("[svc-dashboard] visibilitychange -> hidden, polling paused");
   } else {
     console.log("[svc-dashboard] visibilitychange -> visible, polling resumed");
-    if (autoOn) load(false); // 回前台立即刷一次
+    if (autoOn && !autoLocked) load(false); // 回前台立即刷一次(锁定时不刷)
   }
 });
 
@@ -4530,7 +4782,6 @@ function applyAutoSec() {
   const sec = isMobile() ? MOBILE_REFRESH_SEC : AUTO;
   if (sec !== autoSec) {
     autoSec = sec;
-    $("auto-sec").textContent = sec + "s";
     clearInterval(autoTimer);
     autoTimer = setInterval(autoTick, autoSec * 1000);
     console.log("[svc-dashboard] auto refresh interval -> " + autoSec + "s");
@@ -4539,13 +4790,58 @@ function applyAutoSec() {
 mqMobile.addEventListener("change", applyAutoSec);
 let autoTimer = setInterval(autoTick, autoSec * 1000);
 function autoTick() {
-  if (autoOn && !document.hidden) {
+  if (autoOn && !autoLocked && !document.hidden) {  // 长按锁定时 30s 自动刷新完全停止
     console.log("[svc-dashboard] auto refresh tick");
     if (filter === "manage") loadManage();
     else load(false);
   }
 }
 applyAutoSec();
+
+/* ================================================================
+   明暗主题: 跟随系统 / 手动深色 / 手动浅色(localStorage 记住)。
+   html[data-theme] 覆盖 prefers-color-scheme; meta theme-color 同步;
+   切换后 canvas 图表按新 CSS 变量重绘。 */
+const THEME_KEY = "svc-theme";
+let themeMQ = window.matchMedia("(prefers-color-scheme: light)");
+function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") || "auto";
+}
+function applyThemeMeta() {
+  const cs = getComputedStyle(document.documentElement);
+  const bg = cs.getPropertyValue("--bg").trim() || "#0a0a0a";
+  document.querySelector('meta[name="theme-color"]').setAttribute("content", bg);
+}
+function setTheme(mode) {
+  if (mode === "auto") {
+    document.documentElement.removeAttribute("data-theme");
+    try { localStorage.removeItem(THEME_KEY); } catch (e) {}
+  } else {
+    document.documentElement.setAttribute("data-theme", mode);
+    try { localStorage.setItem(THEME_KEY, mode); } catch (e) {}
+  }
+  document.querySelectorAll("#theme-chips .chip").forEach(c =>
+    c.classList.toggle("active", c.dataset.thm === mode));
+  applyThemeMeta();
+  drawChart();          // canvas 色值跟随 CSS 变量重绘
+  console.log("[svc-dashboard] theme -> " + mode);
+}
+// 主题切换 toast(与长按锁定共用)
+function themeToast(msg) {
+  const d = document.createElement("div");
+  d.className = "copy-toast";
+  d.innerHTML = icon("auto", 13) + " " + msg;
+  document.body.appendChild(d);
+  setTimeout(() => { d.style.opacity = "0"; setTimeout(() => d.remove(), 350); }, 1400);
+}
+document.addEventListener("click", (e) => {
+  const c = e.target.closest("#theme-chips .chip");
+  if (!c) return;
+  haptic(6);
+  setTheme(c.dataset.thm);
+});
+setTheme(currentTheme());   // 初始化(含 localStorage 恢复 + meta 同步)
+themeMQ.addEventListener("change", () => { applyThemeMeta(); drawChart(); });  // 跟随系统档: 系统切换即更新
 
 // --- 日志页选择器变化 ---
 if ($("logagent-sel")) $("logagent-sel").addEventListener("change", loadLogView);
@@ -4585,14 +4881,16 @@ async function runHealth() {
     const h = await tlGet("/api/health");
     renderHealth(h);
   } catch (e) {
-    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+    body.innerHTML = `<div class='gempty t-red'>${icon("err", 13)} ${escHtml(e.message)}</div>`;
   }
   btn.textContent = t("tl_health_run");
 }
 
 function renderHealth(h) {
   const body = $("tl-health-body");
-  const big = h.overall === "ok" ? "✅" : h.overall === "warn" ? "⚠️" : "❌";
+  const big = h.overall === "ok" ? "<span class='t-green'>" + icon("ok", 18) + "</span>"
+    : h.overall === "warn" ? "<span class='t-warn'>" + icon("warn", 18) + "</span>"
+    : "<span class='t-red'>" + icon("err", 18) + "</span>";
   const rows = [];
   const row = (cls, name, val) =>
     `<div class='tl-row'><span class='tl-dot ${cls}'></span><span class='tl-name'>${escHtml(name)}</span><span class='tl-val'>${val}</span></div>`;
@@ -4648,7 +4946,7 @@ async function renderG1() {
     const d = await tlGet("/api/toolports");
     const alive = new Set(d.alive || []);
     el.innerHTML = (TL_CONF.g1 || []).map(([n, p]) => alive.has(p)
-      ? `<a class='chip tchip' href='http://${host}:${p}/' target='_blank' rel='noopener'>${n} :${p} ↗</a>`
+      ? `<a class='chip tchip' href='http://${host}:${p}/' target='_blank' rel='noopener'>${n} :${p} ${icon("ext", 11)}</a>`
       : `<span class='chip tchip' style='opacity:.35;cursor:default'>${n} :${p}</span>`).join("");
   } catch (e) {
     el.innerHTML = "";
@@ -4696,7 +4994,7 @@ function fsRender() {
       const sz = isDir ? (du != null ? `<span class='du'>${fmtB(du)}</span>` : "—")
                        : fmtB(e.size);
       return `<div class='tl-fsrow' data-name='${escAttr(e.name)}' data-type='${e.type}' role='button' tabindex="0">` +
-        `<span class='ico'>${isDir ? "📁" : "📄"}</span><span class='nm'>${escHtml(e.name)}</span>` +
+        `<span class='ico'>${icon(isDir ? "folder" : "file", 15)}</span><span class='nm'>${escHtml(e.name)}</span>` +
         `<span class='mt'>${new Date(e.mtime * 1000).toLocaleDateString()}</span><span class='sz'>${sz}</span></div>`;
     }).join("");
   list.innerHTML = rows || `<div class='gempty'>${t("tl_fs_empty")}</div>`;
@@ -4713,7 +5011,7 @@ async function fsOpen(path) {
     fsRender();
   } catch (e) {
     fsCwd = null; fsEntries = [];
-    list.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)} — ${t("tl_fs_title")}</div>`;
+    list.innerHTML = `<div class='gempty t-red'>${icon("err", 13)} ${escHtml(e.message)} — ${t("tl_fs_title")}</div>`;
     fsRender();
   }
 }
@@ -4730,10 +5028,10 @@ async function fsDu() {
       const el = $("tl-fs-crumbs");
       el.innerHTML = fsCrumbHtml(fsCwd) + ` · du: <b>${fmtB(d.size)}</b>`;
     } else {
-      $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd) + ` · du ✗ ${escHtml(d.msg || "")}`;
+      $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd) + ` · du <span class="t-red">${icon("err", 11)}</span> ${escHtml(d.msg || "")}`;
     }
   } catch (e) {
-    $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd) + ` · du ✗`;
+    $("tl-fs-crumbs").innerHTML = fsCrumbHtml(fsCwd) + ` · du <span class="t-red">${icon("err", 11)}</span>`;
   }
   btn.textContent = t("tl_fs_du");
 }
@@ -4777,7 +5075,7 @@ async function cleanScan() {
       const def = x.safe === false;
       return `<div class='tl-cleanrow'>` +
         `<input type='checkbox' data-clean='${x.id}' ${def ? "" : "checked"}>` +
-        `<span class='lbl'>${escHtml(x.detail || x.id)}${x.error ? ` <small style='color:#e06c6c'>${escHtml(x.error)}</small>` : ""}</span>` +
+        `<span class='lbl'>${escHtml(x.detail || x.id)}${x.error ? ` <small style='color:var(--c-red)'>${escHtml(x.error)}</small>` : ""}</span>` +
         `<span class='sz'>${fmtB(x.size)}</span></div>`;
     }).join("");
     h += `<div class='tl-row'><span class='tl-dot off'></span><span class='tl-name'>${t("tl_clean_total")}</span>` +
@@ -4793,11 +5091,11 @@ async function cleanScan() {
       if (!confirm(t("tl_clean_docker_confirm"))) return;
       dp.textContent = "…";
       const r = await tlPost("/api/cleanup", { action: "docker_prune" });
-      dp.textContent = (r.ok ? "✓ " : "✗ ") + t("tl_clean_docker_prune");
+      dp.innerHTML = icon(r.ok ? "ok" : "err", 13) + " " + t("tl_clean_docker_prune");
       alert(r.msg || "");
     });
   } catch (e) {
-    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+    body.innerHTML = `<div class='gempty t-red'>${icon("err", 13)} ${escHtml(e.message)}</div>`;
   }
   btn.textContent = t("tl_clean_scan");
 }
@@ -4829,10 +5127,10 @@ async function netRun() {
     const d = await tlGet("/api/nettest");
     const ts = d.tailscale || {};
     body.innerHTML =
-      `<div class='tl-netrow'><span class='tl-name'>${t("tl_net_ext")} (min ${d.samples.length})</span><span class='sep'></span><span class='tl-val'><b>${d.latency_ms != null ? d.latency_ms + " ms" : "✗"}</b> ${escHtml(d.error || "")}</span></div>` +
+      `<div class='tl-netrow'><span class='tl-name'>${t("tl_net_ext")} (min ${d.samples.length})</span><span class='sep'></span><span class='tl-val'><b>${d.latency_ms != null ? d.latency_ms + " ms" : icon("err", 12)}</b> ${escHtml(d.error || "")}</span></div>` +
       `<div class='tl-netrow'><span class='tl-name'>${t("tl_net_ts")}${ts.peer ? " · " + escHtml(ts.peer) : ""}</span><span class='sep'></span><span class='tl-val'><b>${ts.rtt_ms != null ? ts.rtt_ms + " ms" : escHtml(ts.msg || "—")}</b></span></div>`;
   } catch (e) {
-    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+    body.innerHTML = `<div class='gempty t-red'>${icon("err", 13)} ${escHtml(e.message)}</div>`;
   }
   btn.textContent = t("tl_net_run");
 }
@@ -4847,7 +5145,7 @@ async function usvcLoad() {
     body.innerHTML = (d.units || []).length ? (d.units || []).map(u => {
       const act = u.active === "active";
       return `<div class='tl-row'><span class='tl-dot ${act ? "" : "warn"}'></span>` +
-        `<span class='tl-name'>${escHtml(u.unit)}<br><small style='color:#666'>${escHtml(u.desc)}</small></span>` +
+        `<span class='tl-name'>${escHtml(u.unit)}<br><small style='color:var(--text-dead)'>${escHtml(u.desc)}</small></span>` +
         (unlocked ? `<span class='btn tl-run' data-usvc='${escAttr(u.unit)}' role='button' tabindex='0'>${t("tl_usvc_restart")}</span>` : "") +
         `</div>`;
     }).join("") : `<div class='gempty'>${t("tl_usvc_none")}</div>`;
@@ -4855,11 +5153,11 @@ async function usvcLoad() {
       if (!confirm(`${t("tl_usvc_restart")} ${b.dataset.usvc}?`)) return;
       b.textContent = "…";
       const r = await tlPost("/api/uservice", { unit: b.dataset.usvc, action: "restart" });
-      b.textContent = (r.ok ? "✓ " : "✗ ") + t("tl_usvc_restart");
+      b.innerHTML = icon(r.ok ? "ok" : "err", 13) + " " + t("tl_usvc_restart");
       setTimeout(usvcLoad, 1500);
     }));
   } catch (e) {
-    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+    body.innerHTML = `<div class='gempty t-red'>${icon("err", 13)} ${escHtml(e.message)}</div>`;
   }
 }
 
@@ -4867,8 +5165,7 @@ function usvcUnlock() {
   const v = ($("tl-usvc-code").value || "").trim();
   if (v !== "I-KNOW") { alert(t("tl_usvc_wrong")); return; }
   localStorage.setItem("svc-usvc", "I-KNOW");
-  $("tl-usvc-showlock").hidden = false;
-  $("tl-usvc-unlockwrap").hidden = true;
+  $("tl-usvc-unlockwrap").hidden = true;   // 解锁成功: 收起输入行(锁按钮本来就在, 无需翻转)
   usvcLoad();
 }
 
@@ -4883,7 +5180,7 @@ async function cronLoad() {
       `<span class='tl-val'>${escHtml(x.schedule)}</span></div>`).join("")
       : `<div class='gempty'>—</div>`;
   } catch (e) {
-    body.innerHTML = `<div class='gempty'>✗ ${escHtml(e.message)}</div>`;
+    body.innerHTML = `<div class='gempty t-red'>${icon("err", 13)} ${escHtml(e.message)}</div>`;
   }
 }
 
@@ -5892,7 +6189,7 @@ def selftest():
     html = render_html("localhost:8899", gather(), time.time(), "zh", sysdata=s)
     checks = ["Goal 进度", "建议并发", "已完成 goal", "最近事件", "tchip"]
     for c in checks:
-        mark = "✓" if c in html else "✗"
+        mark = "ok" if c in html else "FAIL"
         print(f"  {mark} html contains {c!r}")
     ok = all(c in html for c in checks)
     return 0 if ok else 1
