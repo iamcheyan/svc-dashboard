@@ -465,17 +465,25 @@ def cpu_usage_once():
 
 
 def mem_info():
-    total = available = 0
+    total = available = swap_total = swap_free = 0
     for line in read("/proc/meminfo").splitlines():
         parts = line.split()
         if parts[0] == "MemTotal:":
             total = int(parts[1]) * 1024
         elif parts[0] == "MemAvailable:":
             available = int(parts[1]) * 1024
+        elif parts[0] == "SwapTotal:":
+            swap_total = int(parts[1]) * 1024
+        elif parts[0] == "SwapFree:":
+            swap_free = int(parts[1]) * 1024
     used = total - available
     percent = round(100 * used / total, 1) if total else 0.0
+    swap_used = swap_total - swap_free
+    swap_percent = round(100 * swap_used / swap_total, 1) if swap_total else 0.0
     return {"total": total, "used": used, "available": available,
-            "percent": percent}
+            "percent": percent,
+            "swap_total": swap_total, "swap_used": swap_used,
+            "swap_percent": swap_percent}
 
 
 def disk_info(path="/"):
@@ -2457,7 +2465,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="{{LANG}}">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a0a0a">
 <title>{{T:title}} · {{HOSTNAME}}</title>
 <link rel="icon" href="data:,">
@@ -2843,7 +2851,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .filters { touch-action: pan-x; }  /* 自身横滚的容器除外 */
     #track { display: flex; align-items: flex-start; width: 600%;
              will-change: transform;
-             transition: transform .26s cubic-bezier(.22,.61,.36,1); }
+             transition: transform .26s cubic-bezier(.22,.61,.36,1),
+                         height .26s cubic-bezier(.22,.61,.36,1); }
     #track.stick { transition: none; }
     #track > .pg { flex: 0 0 16.6667%; min-width: 16.6667%; max-width: 16.6667%; }
     .skel { display: block; }
@@ -4099,6 +4108,9 @@ function regroupPages() {
   pages.appendChild(trackEl);
   // homeOrder 里可能残留未入组的元素(如 toolchips 为空串被后端去掉), 追加回第 1 页防丢
   pagesHomeOrder.forEach(el => { if (!el.isConnected) pgWrappers[0].appendChild(el); });
+  // 每页高度跟随自身内容; 轨道高=当前页(scrollHeight 含每页自己的 padding-bottom 预留)
+  pgWrappers.forEach(w => { w.style.height = "auto"; });
+  applyPagesX(false);
 }
 mqMobile.addEventListener("change", () => { regroupPages(); drawChart(); });
 
@@ -4113,6 +4125,9 @@ function applyPagesX(withTransition) {
   if (!tr) return;
   // 轨道宽 600%: 每页位移 = 轨道的 1/6
   tr.style.transform = `translate3d(${-page * PAGE_W}%,0,0)`;
+  // 每页各自高度: 轨道高度跟随当前页内容(flex 容器默认拉伸到最高页 = 高页拖矮页)
+  const cur = tr.children[page];
+  if (cur) tr.style.height = cur.scrollHeight + "px";
   if (!withTransition) requestAnimationFrame(() => tr.classList.remove("stick"));
 }
 function setPage(i, opts) {
@@ -4127,6 +4142,8 @@ function setPage(i, opts) {
   applyPagesX(true);
   document.querySelectorAll("#tabbar .tab").forEach(b => b.classList.toggle("active", +b.dataset.p === i));
   if (changed) activatePage(i);
+  // 页面内容异步变化后(骨架→数据/折叠展开)重测高度
+  requestAnimationFrame(() => applyPagesX(false));
 }
 function activatePage(i) {
   if (i === 1) { initLogPage(); renderLogTimeline(); }  // 日志页: agent 选择器 + 事件时间线
@@ -4425,7 +4442,9 @@ function chartSample(s) {
   if (!chart || !isMobile()) return;
   const arr = chartData();
   const now = Date.now();
-  arr.push({ t: now, load: (s.loadavg || [null])[0] ?? (s.loadavg || [])[2] ?? null, cpu: s.cpu_usage });
+  const m = s.mem || {};
+  arr.push({ t: now, load: (s.loadavg || [null])[0] ?? (s.loadavg || [])[2] ?? null, cpu: s.cpu_usage,
+             mem: m.percent ?? null, swap: m.swap_percent ?? null });
   while (arr.length > 24) arr.shift();
   chartSave(arr);
   drawChart();
@@ -4453,14 +4472,24 @@ function drawChart() {
   ctx.strokeStyle = "#6ea8dc"; ctx.lineWidth = 1.6; ctx.beginPath();
   data.forEach((d, i) => { const y = h - 6 - (d.cpu || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
   ctx.stroke();
+  // 内存 %: 0-100 映射(橙)
+  ctx.strokeStyle = "#e0a84c"; ctx.lineWidth = 1.6; ctx.beginPath();
+  data.forEach((d, i) => { if (d.mem == null) return; const y = h - 6 - (d.mem || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
+  ctx.stroke();
+  // Swap %: 0-100 映射(紫; 无 swap 或 0% 时贴底直线,仍显示以便观察趋势)
+  ctx.strokeStyle = "#b48ead"; ctx.lineWidth = 1.6; ctx.beginPath();
+  data.forEach((d, i) => { const y = h - 6 - (d.swap || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
+  ctx.stroke();
   // 负载: 按各自 max 缩放
   ctx.strokeStyle = "#6ec89a"; ctx.lineWidth = 1.8; ctx.beginPath();
   data.forEach((d, i) => { const y = h - 6 - (d.load || 0) / maxL * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
   ctx.stroke();
-  // 图例
+  // 图例(两行: 左上 CPU/mem/swap, 右上 load)
   ctx.font = "10px ui-monospace, monospace";
-  ctx.fillStyle = "#6ea8dc"; ctx.fillText("CPU %", 8, 12);
-  ctx.fillStyle = "#6ec89a"; ctx.fillText("load " + maxL.toFixed(1), 60, 12);
+  ctx.fillStyle = "#6ea8dc"; ctx.fillText("CPU " + Math.round(data[data.length-1].cpu || 0) + "%", 8, 12);
+  ctx.fillStyle = "#e0a84c"; ctx.fillText("mem " + Math.round(data[data.length-1].mem || 0) + "%", 8, 26);
+  ctx.fillStyle = "#b48ead"; ctx.fillText("swap " + Math.round(data[data.length-1].swap || 0) + "%", 8, 40);
+  ctx.fillStyle = "#6ec89a"; ctx.textAlign = "right"; ctx.fillText("load " + maxL.toFixed(1), w - 8, 12); ctx.textAlign = "left";
 }
 if (chart) {
   window.addEventListener("resize", drawChart);
