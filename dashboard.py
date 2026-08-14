@@ -544,15 +544,16 @@ def render_sysbar(s, lang=DEFAULT_LANG):
     disk = s.get("disk") or {}
     disk_txt = f'{fmt_bytes(disk.get("used"))} / {fmt_bytes(disk.get("total"))} ({disk.get("percent", 0)}%)'
     cards = [
-        (t(lang, "sys_load"), loadavg),
-        ("CPU", cpu),
-        (t(lang, "sys_mem"), mem_txt),
-        (t(lang, "sys_disk"), disk_txt),
-        (t(lang, "sys_up"), fmt_uptime(s.get("uptime"), lang)),
+        ("load", t(lang, "sys_load"), loadavg),
+        ("cpu", "CPU", cpu),
+        ("mem", t(lang, "sys_mem"), mem_txt),
+        ("disk", t(lang, "sys_disk"), disk_txt),
+        ("up", t(lang, "sys_up"), fmt_uptime(s.get("uptime"), lang)),
     ]
+    # data-k: 手机端双击手势定位(负载卡双击→Goal页, 磁盘卡双击→展开top进程)
     return '<div class="sysbar" id="sysbar">' + "".join(
-        f'<div class="stat"><div class="label">{lbl}</div>'
-        f'<div class="value">{val}</div></div>' for lbl, val in cards) + "</div>"
+        f'<div class="stat" data-k="{k}"><div class="label">{lbl}</div>'
+        f'<div class="value">{val}</div></div>' for k, lbl, val in cards) + "</div>"
 
 
 # ---------------- 国际化 ----------------
@@ -641,6 +642,11 @@ L10N = {
         "ev_pause": "⏸ 目标暂停", "ev_cleanup": "🧹 清理",
         "ev_other": "·", "ev_none": "暂无事件",
         "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分钟前", "g_ago_h": "{h} 小时前",
+        "tab_home": "概览", "tab_goal": "Goal", "tab_svc": "服务", "tab_model": "模型", "tab_log": "日志",
+        "act_open": "打开", "act_copy_addr": "复制地址", "g_detail": "详情",
+        "chart_title": "负载 / CPU 趋势", "chart_win": "窗口 {n} 点",
+        "chart_empty": "采样中：刷新几次就有曲线了（双指捏合可调时间窗）",
+        "log_pick": "选择 agent 查看日志",
     },
     "en": {
         "title": "Services", "github_repo": "GitHub repo",
@@ -724,6 +730,11 @@ L10N = {
         "ev_pause": "⏸ goal paused", "ev_cleanup": "🧹 cleanup",
         "ev_other": "·", "ev_none": "No events yet",
         "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago",
+        "tab_home": "Overview", "tab_goal": "Goal", "tab_svc": "Services", "tab_model": "Models", "tab_log": "Logs",
+        "act_open": "Open", "act_copy_addr": "Copy address", "g_detail": "details",
+        "chart_title": "Load / CPU trend", "chart_win": "window {n} pts",
+        "chart_empty": "Collecting samples: refresh a few times (pinch to adjust window)",
+        "log_pick": "Pick an agent for logs",
     },
     "ja": {
         "title": "サービス一覧", "github_repo": "GitHub リポジトリ",
@@ -807,6 +818,11 @@ L10N = {
         "ev_pause": "⏸ goal 一時停止", "ev_cleanup": "🧹 クリーンアップ",
         "ev_other": "·", "ev_none": "イベントなし",
         "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分前", "g_ago_h": "{h} 時間前",
+        "tab_home": "概要", "tab_goal": "Goal", "tab_svc": "サービス", "tab_model": "モデル", "tab_log": "ログ",
+        "act_open": "開く", "act_copy_addr": "アドレスをコピー", "g_detail": "詳細",
+        "chart_title": "負荷 / CPU 推移", "chart_win": "ウィンドウ {n} 点",
+        "chart_empty": "サンプル収集中：数回更新すると曲線になります（ピンチで調整）",
+        "log_pick": "エージェントを選択",
     },
 }
 
@@ -2114,35 +2130,46 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
     out = []
     for c in cards:
         icon, key = light.get(c["light"], ("⚠️", "g_lost"))
+        # 手机端: 状态灯+名称+最近活动 常显;上下文/API重试/进度 收进 .gextra(点标题展开)
+        extra, idle_row = [], ""
+        if c["ctx_raw"]:
+            cls = {"warn": "gtx warn", "stop": "gtx stop"}.get(c["ctx_level"], "gtx")
+            note = {"warn": t(lang, "g_ctx_high"), "stop": t(lang, "g_ctx_stop")}.get(c["ctx_level"], "")
+            extra.append(f'<div class="grow"><span>{t(lang, "g_ctx")}</span>'
+                         f'<span class="{cls}">{c["ctx_raw"]}{" · " + note if note else ""}</span></div>')
+        if c["retry"]:
+            extra.append(f'<div class="grow"><span>API</span>'
+                         f'<span class="gretry">{t(lang, "g_retrying", n=c["retry"])}</span></div>')
+        if c["idle_sec"] is not None:
+            ago = fmt_ago(c["idle_sec"], lang)
+            stall = f' · {t(lang, "g_stalled")}' if c["stalled"] else ""
+            idle_row = (f'<div class="grow"><span>{t(lang, "g_last")}</span>'
+                        f'<span class="{"gstalled" if c["stalled"] else "gidle"}">{ago}{stall}</span></div>')
+        if c["progress"]:
+            prog = "<br>".join(escape(x) for x in c["progress"])
+            extra.append(f'<div class="gprog">{prog}</div>')
+        more = (f'<span class="gmore" title="{t(lang, "g_detail")}">▸</span>') if extra else ""
         head = (f'<div class="ghead"><span class="glight">{icon}</span>'
                 f'<span class="gname">{escape(c["name"])}</span>'
-                f'<span class="gstate">{t(lang, key)}</span></div>')
+                f'<span class="gstate">{t(lang, key)}</span>{more}</div>')
         if c["label"] and c["label"] != c["name"]:
             head += f'<div class="gsub">{escape(c["label"][:60])}</div>'
         elif c["objective"]:
             head += f'<div class="gsub">{escape(c["objective"])}</div>'
-        rows = []
-        if c["ctx_raw"]:
-            cls = {"warn": "gtx warn", "stop": "gtx stop"}.get(c["ctx_level"], "gtx")
-            note = {"warn": t(lang, "g_ctx_high"), "stop": t(lang, "g_ctx_stop")}.get(c["ctx_level"], "")
-            rows.append(f'<div class="grow"><span>{t(lang, "g_ctx")}</span>'
-                        f'<span class="{cls}">{c["ctx_raw"]}{" · " + note if note else ""}</span></div>')
-        if c["retry"]:
-            rows.append(f'<div class="grow"><span>API</span>'
-                        f'<span class="gretry">{t(lang, "g_retrying", n=c["retry"])}</span></div>')
-        if c["idle_sec"] is not None:
-            ago = fmt_ago(c["idle_sec"], lang)
-            stall = f' · {t(lang, "g_stalled")}' if c["stalled"] else ""
-            rows.append(f'<div class="grow"><span>{t(lang, "g_last")}</span>'
-                        f'<span class="{"gstalled" if c["stalled"] else "gidle"}">{ago}{stall}</span></div>')
-        if c["progress"]:
-            prog = "<br>".join(escape(x) for x in c["progress"])
-            rows.append(f'<div class="gprog">{prog}</div>')
+        inner = head + idle_row
+        if extra:
+            inner += f'<div class="gextra">{"".join(extra)}</div>'
         foot = ""
         if c["resume_cmd"]:
             foot = (f'<div class="gfoot"><span class="gcopy" role="button" tabindex="0" '
                     f'data-cmd="{escape(c["resume_cmd"], quote=True)}">⧉ {t(lang, "g_copy")}</span></div>')
-        out.append(f'<div class="gcard" data-light="{c["light"]}">{head}{"".join(rows)}{foot}</div>')
+        inner += foot
+        # 手机端左滑露「复制 resume」: .swipe-bg 静止在卡片下,.swipe-fg 跟手平移
+        back = (f'<div class="swipe-bg"><span class="swipe-act" role="button" tabindex="0" '
+                f'data-copy="{escape(c["resume_cmd"], quote=True)}">⧉ {t(lang, "g_copy")}</span></div>'
+                if c["resume_cmd"] else "")
+        cls = "gcard swipe-item" if back else "gcard"
+        out.append(f'<div class="{cls}" data-light="{c["light"]}">{back}<div class="swipe-fg">{inner}</div></div>')
     body = "".join(out) if out else f'<div class="gempty">{t(lang, "g_none")}</div>'
     completed = parse_completed_goals()
     fold = ""
@@ -2294,7 +2321,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="{{LANG}}">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
 <title>{{T:title}} · {{HOSTNAME}}</title>
 <link rel="icon" href="data:,">
 <style>
@@ -2351,6 +2379,39 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .sw[aria-checked="true"] .sw-thumb { transform: translateX(18px); background: #fff; }
   .sw:focus-visible { outline: 2px solid #4a90d9; outline-offset: 2px; }
   main { padding: 16px 24px 40px; }
+
+  /* ---------------- 移动 App 化基础(桌面端多数隐藏) ----------------
+     字号走 rem(html=100%),尊重系统字体大小设置;
+     手势元素(滑动露按钮/页签栏/图表/骨架屏)仅手机布局出现。 */
+  [hidden] { display: none !important; }  /* 防 class 的 display:flex 盖过 hidden 属性 */
+  html { font-size: 100%; -webkit-text-size-adjust: 100%; }
+  #pages { display: contents; }          /* 桌面: 透明容器,子元素即 main 内容 */
+  #tabbar, #pager-tabs, #chart-wrap, #logpage, #agents-page,
+  .skel, .gmore { display: none; }
+  .gextra { display: block; }            /* 桌面: goal 卡次要信息全展示 */
+  .swipe-item { position: relative; overflow: hidden; }
+  .swipe-bg { position: absolute; inset: 0; display: flex; align-items: stretch;
+              justify-content: flex-end; background: #14261c; }
+  .swipe-act { display: inline-flex; align-items: center; justify-content: center;
+               min-width: 88px; padding: 0 14px; background: #2e7d4f; color: #fff;
+               font-size: 12.5px; white-space: nowrap; }
+  .swipe-fg { position: relative; background: #131313; will-change: transform;
+              transition: transform .18s ease; }
+  .swipe-fg.stick { transition: none; }  /* 跟手阶段禁过渡 */
+  .svc-open { display: inline-flex; align-items: center; justify-content: center;
+              width: 44px; height: 44px; border-radius: 50%; flex: none;
+              background: #1d2733; border: 1px solid #2c3a4d; color: #9db8d9;
+              font-size: 17px; text-decoration: none; }
+  .skel { display: none; }
+  .skel-line { height: 14px; border-radius: 6px; margin: 10px 0;
+               background: #1a1a1a; animation: skel-pulse 1.1s ease-in-out infinite; }
+  @keyframes skel-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+  .logbar select { width: 100%; background: #141414; color: #d6d6d6;
+                   border: 1px solid #2a2a2a; border-radius: 8px;
+                   padding: 10px 12px; font-size: 13px; min-height: 44px; }
+  #chart-wrap canvas { width: 100%; height: 150px; display: block; touch-action: none; }
+  #chart-empty { color: #666; font-size: 12px; padding: 18px 0; }
+  .gmore { display: none; color: #777; font-size: 11px; }
   .sysbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .stat { background: #141414; border: 1px solid #222; border-radius: 10px;
           padding: 10px 16px; min-width: 130px; }
@@ -2510,19 +2571,70 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .empty { color: #8a8a8a; text-align: center; padding: 48px 0; }
   @media (max-width: 900px) { .cmd, .cwd { min-width: 120px; } }
 
-  /* ---------------- 手机端 (<768px) ----------------
-     服务表/面板表 → 卡片化;chips 横滚;按钮触控加大。 */
+  /* ---------------- 手机端 (<768px): App 化布局 ----------------
+     五页横向滑动(概览/日志/Goal/服务/模型) + 底部页签栏 + safe-area;
+     服务表→卡片(左滑复制/圆形打开), goal 卡收起次要信息。
+     ≥769px 恢复桌面布局,所有规则只在此断点内生效。 */
   @media (max-width: 768px) {
-    header { padding: 10px 12px; gap: 8px; }
+    -webkit-tap-highlight-color: transparent;
+    /* safe-area: 刘海/手势条不遮挡 */
+    header { padding: 10px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left));
+             padding-top: calc(10px + env(safe-area-inset-top)); gap: 8px;
+             -webkit-backdrop-filter: blur(6px); }
     header h1 { font-size: 15px; }
     header h1 a { display: none; }
     header .meta { width: 100%; order: 3; font-size: 11.5px; line-height: 1.5; }
     header .spacer { display: none; }
     .auto { font-size: 12px; }
     .btn, .chip, .mbtn, .ctl-btn, .tcol, .aglog-refresh { padding: 9px 14px; font-size: 13px; min-height: 38px; }
-    main { padding: 12px 12px 32px; }
+    main { padding: 12px max(12px, env(safe-area-inset-right)) calc(76px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+
+    /* 顶栏页签(点击切页) + 页面指示器 */
+    #pager-tabs { display: flex; align-items: center; gap: 2px; width: 100%; order: 4;
+                  margin-top: 2px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+                  scrollbar-width: none; }
+    #pager-tabs::-webkit-scrollbar { display: none; }
+    .ptab { flex: none; display: inline-flex; align-items: center; padding: 8px 12px;
+            min-height: 38px; border-radius: 8px; color: #8a8a8a; font-size: 12.5px;
+            cursor: pointer; user-select: none; -webkit-user-select: none; }
+    .ptab.active { background: #262626; color: #f2f2f2; }
+    #pg-ind { margin-left: auto; display: inline-flex; gap: 4px; padding: 0 6px 0 12px; flex: none; }
+    #pg-ind i { width: 6px; height: 6px; border-radius: 50%; background: #333; }
+    #pg-ind i.on { background: #8ab4f8; }
+
+    /* 底部页签栏: 半透明毛玻璃, 拇指区, 不随页面滚动 */
+    #tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+              background: rgba(12,12,12,.82);
+              -webkit-backdrop-filter: blur(16px) saturate(1.4);
+              backdrop-filter: blur(16px) saturate(1.4);
+              border-top: 1px solid #232323;
+              padding: 4px max(8px, env(safe-area-inset-left)) calc(4px + env(safe-area-inset-bottom))
+                          max(8px, env(safe-area-inset-right)); }
+    #tabbar .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+                   padding: 7px 0 3px; min-height: 50px; color: #8a8a8a; font-size: 10.5px;
+                   cursor: pointer; user-select: none; -webkit-user-select: none;
+                   -webkit-tap-highlight-color: transparent; }
+    #tabbar .tab.active { color: #8ab4f8; }
+    #tabbar .tab svg { width: 22px; height: 22px; }
+
+
+    /* 两层结构: #pages(裁剪窗口) > #track(500% 轨道) > .pg(各 20% = 屏宽) */
+    #pages { display: block; width: 100%; overflow: hidden; }
+    body { overscroll-behavior-x: none; }  /* 关掉浏览器右滑返回/左滑前进接管 */
+    #pages, .swipe-fg { touch-action: pan-y; }  /* 横向留给 JS 手势 */
+    .filters, #pager-tabs { touch-action: pan-x; }  /* 自身横滚的容器除外 */
+    #track { display: flex; align-items: flex-start; width: 500%;
+             will-change: transform;
+             transition: transform .26s cubic-bezier(.22,.61,.36,1); }
+    #track.stick { transition: none; }
+    #track > .pg { flex: 0 0 20%; min-width: 20%; max-width: 20%; }
+    .skel { display: block; }
+    #chart-wrap, #logpage, #agents-page { display: block; }  /* 移动专用面板 */
+    #logpage[hidden], #agents-page[hidden] { display: none !important; }
+
     .sysbar { gap: 8px; margin-bottom: 10px; }
-    .stat { min-width: calc(50% - 6px); flex: 1 1 calc(50% - 6px); padding: 8px 12px; }
+    .stat { min-width: calc(50% - 6px); flex: 1 1 calc(50% - 6px); padding: 8px 12px;
+            touch-action: manipulation; } /* 双击手势目标: 消除 300ms 缩放 */
     .stat .value { font-size: 12.5px; }
 
     /* chips 横向滚动 */
@@ -2532,28 +2644,24 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .filters .spacer { display: none; }
     .chip { flex: none; padding: 8px 14px; font-size: 12.5px; }
 
-    /* 服务表 → 卡片 */
+    /* 服务列表 → 卡片(左滑露「复制地址」, 头行右侧 44px 圆形打开按钮) */
     #svc thead { display: none; }
     #svc tbody tr { display: block; background: #131313; border: 1px solid #222;
-                    border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
-    #svc tbody td { display: flex; justify-content: space-between; gap: 12px;
-                    align-items: baseline; border: none; padding: 3px 0;
-                    white-space: normal !important; }
-    #svc tbody td::before { content: attr(data-label); color: #777; font-size: 11px;
-                            flex: none; }
-    #svc tbody td .detail { margin-top: 0; }
-    #svc tbody td.name { display: block; margin-bottom: 4px; }
-    #svc tbody td.name::before { content: none; }
-    #svc tbody td .cmd, #svc tbody td .cwd { min-width: 0; }
-    #svc tbody td.ctl { justify-content: flex-end; align-items: center; }
-    #svc tbody td.ctl::before { content: none; }
-    .ctl-btn { min-height: 34px; padding: 8px 16px; font-size: 13px; }
+                    border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+    #svc tbody tr:has(> td.empty) { background: none; border: none; }
+    #svc tbody td { display: block; border: none; padding: 0; }
+    #svc tbody td.empty { text-align: center; padding: 32px 0; }
+    .td-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+               padding: 10px 12px 4px; }
+    .td-head .svc { flex: 1 1 auto; }
+    .td-rows { padding: 4px 12px 10px; }
+    .td-rows .kv { display: flex; justify-content: space-between; gap: 12px;
+                   align-items: baseline; padding: 3px 0; }
+    .td-rows .k { color: #777; font-size: 11px; flex: none; }
+    .td-rows .v { text-align: right; word-break: break-all; white-space: normal; min-width: 0; }
+    .ctl-btn { min-height: 44px; padding: 10px 16px; font-size: 13px; }
     .colswitch, .tcol { display: none; }
     .empty { padding: 32px 0; }
-    #svc tbody tr:has(td.empty) { background: none; border: none; padding: 0; }
-    #svc tbody td.empty, .watchdog-panel td.empty {
-      display: block !important; text-align: center; justify-content: center; }
-    #svc tbody td.empty::before, .watchdog-panel td.empty::before { content: none; }
 
     /* watchdog / agent / tmux 面板表 → 卡片 */
     .watchdog-panel { padding: 10px 12px; }
@@ -2569,9 +2677,13 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .watchdog-panel .tcmd { max-width: none; }
     .watchdog-panel .agent-detail td { display: block; padding: 8px 4px; }
     .watchdog-panel .agent-detail td::before { content: none; }
-    .aglog-row { flex-wrap: wrap; gap: 2px 8px; }
+    .aglog-row { flex-wrap: wrap; gap: 2px 8px; padding: 4px 0; }
     .aglog-ts { flex: none; }
-    .termlog { font-size: 10.5px; }
+    .termlog { font-size: 10.5px; -webkit-overflow-scrolling: touch; }
+
+    /* 日志页: 展开式(不嵌套滚动) */
+    #logpage .agentlog { max-height: none; overflow: visible; }
+    .logbar { margin-bottom: 10px; }
 
     /* 服务管理卡片 */
     .mgrid { grid-template-columns: 1fr; gap: 10px; }
@@ -2583,6 +2695,10 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     /* Goal 卡片/负载线/事件: 单列可读 */
     .gcards { grid-template-columns: 1fr; gap: 8px; }
     .gcard .grow { flex-wrap: wrap; }
+    .gextra { display: none; }               /* 手机: 次要信息默认收起 */
+    .gcard.open .gextra { display: block; }
+    .gmore { display: inline-flex; margin-left: auto; transition: transform .15s; }
+    .gcard.open .gmore { transform: rotate(90deg); }
     .gpanel { padding: 10px 12px; }
     .loadline .ld-top { flex: 1 1 100%; }
     .loadline .ld-row { font-size: 11.5px; }
@@ -2590,6 +2706,10 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .evt-txt { min-width: 0; flex: 1 1 100%; padding-left: 14px; }
     .gcopy { min-height: 38px; padding: 9px 16px; font-size: 13px; }
     .gdone-row { font-size: 11.5px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #track, .swipe-fg, .gmore { transition: none !important; }
+    .skel-line { animation: none; }
   }
 </style>
 </head>
@@ -2608,14 +2728,28 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <span class="auto">
     <span class="sw" id="auto" role="switch" aria-checked="false" tabindex="0"
           title="{{T:auto_refresh}}"><span class="sw-thumb"></span></span>
-    {{T:auto_refresh}} ({{AUTO}}s)
+    {{T:auto_refresh}} (<span id="auto-sec">{{AUTO}}s</span>)
   </span>
+  <nav id="pager-tabs" aria-label="{{T:title}}">
+    <span class="ptab active" data-p="0" role="button" tabindex="0">{{T:tab_home}}</span>
+    <span class="ptab" data-p="1" role="button" tabindex="0">{{T:tab_log}}</span>
+    <span class="ptab" data-p="2" role="button" tabindex="0">{{T:tab_goal}}</span>
+    <span class="ptab" data-p="3" role="button" tabindex="0">{{T:tab_svc}}</span>
+    <span class="ptab" data-p="4" role="button" tabindex="0">{{T:tab_model}}</span>
+    <span id="pg-ind" aria-hidden="true"></span>
+  </nav>
   <span class="btn" id="refresh" role="button" tabindex="0">{{T:refresh}}</span>
 </header>
 <div id="ptr-indicator" aria-hidden="true"><span class="ptr-arrow">↓</span><span class="ptr-label">{{T:ptr_pull}}</span></div>
 <main>
+<div id="pages">
 {{SYSBAR}}
 {{LOADLINE}}
+<div class="gpanel" id="chart-wrap">
+  <h2>{{T:chart_title}} <span class="ghint" id="chart-win"></span></h2>
+  <canvas id="chart" width="640" height="150"></canvas>
+  <div id="chart-empty">{{T:chart_empty}}</div>
+</div>
 {{TOOLCHIPS}}
 {{GOALS_PANEL}}
 {{EVENTS_PANEL}}
@@ -2644,7 +2778,26 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <!--TABLE-->
   </tbody>
 </table>
+<div class="gpanel" id="agents-page" hidden>
+  <h2>{{T:tab_model}} <span class="ghint">{{T:chip_omp}}</span></h2>
+</div>
+<div class="gpanel" id="logpage" hidden>
+  <h2>{{T:tab_log}}</h2>
+  <div class="logbar"><select id="logagent-sel"><option value="">{{T:log_pick}}</option></select></div>
+  <div id="logbody"></div>
+</div>
+</div>
 </main>
+<nav id="tabbar" aria-label="{{T:title}}">
+  <span class="tab" data-p="0" role="button" tabindex="0" aria-label="{{T:tab_home}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8.5 8 3l6 5.5V14H9.5v-4h-5v4H2z"/></svg>{{T:tab_home}}</span>
+  <span class="tab" data-p="2" role="button" tabindex="0" aria-label="{{T:tab_goal}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/></svg>{{T:tab_goal}}</span>
+  <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg>{{T:tab_svc}}</span>
+  <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_model}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M6 1.5v2M10 1.5v2M6 12.5v2M10 12.5v2M1.5 6h2M1.5 10h2M12.5 6h2M12.5 10h2"/></svg>{{T:tab_model}}</span>
+</nav>
 <script>
 const AUTO = {{AUTO}};
 const LANG = "{{LANG}}";
@@ -2665,7 +2818,7 @@ const FILTERS = {
   all:    () => true,
 };
 
-function row(e) {
+function row(e, mobile) {
   const badge = {docker:[t("badge_docker"),"badge-docker"], systemd:["systemd","badge-systemd"], direct:[t("badge_direct"),"badge-direct"]}[e.type] || [t("badge_direct"),"badge-direct"];
   let text = badge[0], detail = "";
   if (e.is_self) { text = t("badge_self"); badge[1] = "badge-self"; }
@@ -2679,12 +2832,29 @@ function row(e) {
   const loop = loopback ? ' <span class="local">' + t("loopback") + '</span>' : "";
   const cmd = e.cmdline || "—";
   const cwd = e.cwd || "—";
-  const esc = (s) => s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   // 可管理的手动进程服务: 行尾渲染 暂停/继续 按钮(状态由 fillCtl 填充)
   const man = MANAGE_PROC_BY_PORT[e.port];
   const ctl = man
-    ? `<td class='ctl' data-label='${t("th_ctl")}'><span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span></td>`
+    ? `<span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span>`
     : "";
+  if (mobile) {
+    // 手机卡片(合法表格结构): td.swipe-item 内 左滑露「复制地址」+ 头行 44px 圆形打开
+    const kv = (k, v) => `<div class='kv'><span class='k'>${k}</span><span class='v'>${v}</span></div>`;
+    const rows =
+      kv(t("th_port"), `<a href='${link}' target='_blank' rel='noopener'>${e.port}</a>`) +
+      kv(t("th_addr"), `${esc(ip)}${loop}`) +
+      kv("PID", e.pids.join(", ")) +
+      kv(t("th_cmd"), esc(cmd)) +
+      kv(t("th_cwd"), esc(cwd)) +
+      (man ? kv(t("th_ctl"), ctl) : "");
+    return `<tr><td class='swipe-item'><div class='swipe-bg'>` +
+      `<span class='swipe-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}'>⧉ ${t("act_copy_addr")}</span></div>` +
+      `<div class='swipe-fg'><div class='td-head'><span class='svc'>${esc(e.name)}</span>` +
+      `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
+      `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>↗</a></div>` +
+      `<div class='td-rows'>${rows}</div></div></td></tr>`;
+  }
   return `<tr>
     <td class='name'><span class='svc'>${esc(e.name)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
     <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
@@ -2692,7 +2862,7 @@ function row(e) {
     <td class='pid' data-label='PID'>${e.pids.join(", ")}</td>
     <td class='cmd' data-label='${t("th_cmd")}'>${esc(cmd)}</td>
     <td class='cwd' data-label='${t("th_cwd")}'>${esc(cwd)}</td>
-    ${ctl}
+    ${ctl ? `<td class='ctl' data-label='${t("th_ctl")}'>${ctl}</td>` : ""}
   </tr>`;
 }
 
@@ -2735,7 +2905,7 @@ function applyFilter() {
   $("svc").style.display = "";
   $("tasks").hidden = true;
   const tbody = $("svc").querySelector("tbody");
-  tbody.innerHTML = shown.length ? shown.map(row).join("") :
+  tbody.innerHTML = shown.length ? shown.map(e => row(e, isMobile())).join("") :
     '<tr><td class="empty" colspan="6">' + t("no_match") + '</td></tr>';
   $("count").textContent = shown.length;
   fillCtl(); // 服务表行尾 暂停/继续 按钮状态
@@ -2752,15 +2922,16 @@ function renderSys(s) {
   };
   const mem = s.mem || {}, disk = s.disk || {};
   const cards = [
-    [t("sys_load"), (s.loadavg || []).join(" / ") || "—"],
-    ["CPU", `${s.cpu_usage}% · ${s.cpu_count} ${t("unit_core")}`],
-    [t("sys_mem"), `${fmtBytes(mem.used)} / ${fmtBytes(mem.total)} (${mem.percent || 0}%)`],
-    [t("sys_disk"), `${fmtBytes(disk.used)} / ${fmtBytes(disk.total)} (${disk.percent || 0}%)`],
-    [t("sys_up"), fmtUp(s.uptime)],
+    ["load", t("sys_load"), (s.loadavg || []).join(" / ") || "—"],
+    ["cpu", "CPU", `${s.cpu_usage}% · ${s.cpu_count} ${t("unit_core")}`],
+    ["mem", t("sys_mem"), `${fmtBytes(mem.used)} / ${fmtBytes(mem.total)} (${mem.percent || 0}%)`],
+    ["disk", t("sys_disk"), `${fmtBytes(disk.used)} / ${fmtBytes(disk.total)} (${disk.percent || 0}%)`],
+    ["up", t("sys_up"), fmtUp(s.uptime)],
   ];
-  $("sysbar").innerHTML = cards.map(([l, v]) =>
-    `<div class='stat'><div class='label'>${l}</div><div class='value'>${v}</div></div>`).join("");
+  $("sysbar").innerHTML = cards.map(([k, l, v]) =>
+    `<div class='stat' data-k='${k}'><div class='label'>${l}</div><div class='value'>${v}</div></div>`).join("");
   renderLoadline(s);
+  chartSample(s); // 手机端趋势图采样(桌面 no-op)
 }
 
 // 负载水位线 + top 进程(/api/sys 刷新时同步更新;与后端 render_loadline 同构)
@@ -2802,13 +2973,17 @@ function fallbackCopy(txt, done) {
   ta.remove();
 }
 document.addEventListener("click", (e) => {
-  const b = e.target.closest(".gcopy");
+  const b = e.target.closest(".gcopy, .swipe-act");
   if (!b) return;
-  const cmd = b.dataset.cmd || "";
-  const done = () => { const old = b.textContent; b.textContent = "✓ " + t("g_copied"); setTimeout(() => b.textContent = old, 1600); };
+  const txt = b.dataset.cmd || b.dataset.copy || "";
+  const done = () => {
+    const old = b.textContent; b.textContent = "✓ " + t("g_copied");
+    haptic(12);
+    setTimeout(() => b.textContent = old, 1600);
+  };
   if (navigator.clipboard && window.isSecureContext)
-    navigator.clipboard.writeText(cmd).then(done).catch(() => fallbackCopy(cmd, done));
-  else fallbackCopy(cmd, done);
+    navigator.clipboard.writeText(txt).then(done).catch(() => fallbackCopy(txt, done));
+  else fallbackCopy(txt, done);
 });
 
 const TYPE_BADGE = {
@@ -2870,31 +3045,34 @@ function renderAgentPanel(agents) {
   el.querySelectorAll(".tlink").forEach(a => a.addEventListener("click", () => toggleAgentLog(a)));
 }
 
+async function fetchAgentLog(sid, cwd, tmx) {
+  const r = await fetch("/api/agentlog?sid=" + encodeURIComponent(sid) + "&cwd=" + encodeURIComponent(cwd) + "&tmux=" + encodeURIComponent(tmx) + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
+  return r.json();
+}
+function agentLogHtml(d) {
+  const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  let html = "<div class='agentlog'>";
+  if ((d.events || []).length) {
+    html += "<div class='aglog-title'>" + t("a_recent") + " <span class='aglog-refresh' role='button' tabindex='0'>" + t("refresh") + "</span></div><div class='aglog-list'>" +
+      d.events.map(e => "<div class='aglog-row'><span class='aglog-ts'>" + esc(e[0]) + "</span><span class='aglog-txt'>" + esc(e[1]) + "</span></div>").join("") + "</div>";
+  }
+  if (d.capture && d.capture.length) {
+    html += "<div class='aglog-title'>" + t("a_term") + " <span class='aglog-refresh' role='button' tabindex='0'>" + t("refresh") + "</span></div><pre class='termlog'>" +
+      d.capture.map(l => esc(l)).join("\\n") + "</pre>";
+  }
+  if (!(d.events || []).length && !d.capture) html += "<div class='aglog-empty'>" + t("a_nolog") + "</div>";
+  return html + "</div>";
+}
 async function loadAgentLog(a, det) {
-  const sid = a.dataset.sid || "";
-  const cwd = a.dataset.cwd || "";
-  const tmx = a.dataset.tmux || "";
   const cell = det.querySelector("td");
   cell.innerHTML = "<div class='agentlog'>" + t("a_loading") + "</div>";
   try {
-    const r = await fetch("/api/agentlog?sid=" + encodeURIComponent(sid) + "&cwd=" + encodeURIComponent(cwd) + "&tmux=" + encodeURIComponent(tmx) + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
-    const d = await r.json();
-    const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-    let html = "<div class='agentlog'>";
-    if ((d.events || []).length) {
-      html += "<div class='aglog-title'>" + t("a_recent") + " <span class='aglog-refresh' role='button' tabindex='0'>" + t("refresh") + "</span></div><div class='aglog-list'>" +
-        d.events.map(e => "<div class='aglog-row'><span class='aglog-ts'>" + esc(e[0]) + "</span><span class='aglog-txt'>" + esc(e[1]) + "</span></div>").join("") + "</div>";
-    }
-    if (d.capture && d.capture.length) {
-      html += "<div class='aglog-title'>" + t("a_term") + " <span class='aglog-refresh' role='button' tabindex='0'>" + t("refresh") + "</span></div><pre class='termlog'>" +
-        d.capture.map(l => esc(l)).join("\\n") + "</pre>";
-    }
-    if (!d.events.length && !d.capture) html += "<div class='aglog-empty'>" + t("a_nolog") + "</div>";
-    html += "</div>";
+    const d = await fetchAgentLog(a.dataset.sid || "", a.dataset.cwd || "", a.dataset.tmux || "");
     det.className = "agent-detail";
-    cell.innerHTML = html;
+    cell.innerHTML = agentLogHtml(d);
     det.querySelectorAll(".aglog-refresh").forEach(b => b.addEventListener("click", () => loadAgentLog(a, det)));
   } catch (err) {
+    const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
     det.className = "agent-detail";
     cell.innerHTML = "<div class='agentlog aglog-empty'>" + t("a_fail", { e: esc(err.message) }) + "</div>";
   }
@@ -3186,6 +3364,8 @@ async function load(alsoSys) {
       refreshing = false;
       indicator.classList.remove("loading");
       setPull(0);
+      haptic(10); // 刷新完成触觉反馈
+      console.log("[svc-dashboard] pull-to-refresh done, haptic(10)");
     }
   }, { passive: true });
 })();
@@ -3218,12 +3398,485 @@ document.addEventListener("keydown", (e) => {
   e.preventDefault();
   el.click();
 });
-setInterval(() => {
-  if (autoOn) {
+
+/* ================================================================
+   移动 App 层(仅触摸设备): 分页滑动 / 底栏 / 列表手势 / 双击 /
+   边缘返回 / 捏合图表 / 触觉反馈 / 轮询暂停。
+   桌面端不注册任何触摸事件,行为零变化。 */
+const TOUCH = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+const mqMobile = window.matchMedia("(max-width: 768px)");
+const isMobile = () => mqMobile.matches;
+const haptic = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
+// 触摸互斥: 一次触摸只属于一个手势(分页/滑动露按钮/边缘返回)
+const gesture = { claimed: null };
+// 移动端把各分区装进 5 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
+// 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
+const PAGE_GROUPS = [
+  ["#sysbar", "#loadline", "#chart-wrap", "#toolchips", "#events"],
+  ["#logpage"],
+  ["#goals"],
+  ["#filters", "#tasks", "#svc"],
+  ["#agents-page"],
+];
+let pagesHomeOrder = null, pgWrappers = null, trackEl = null;
+function regroupPages() {
+  if (!mqMobile.matches) {
+    if (pagesHomeOrder) { // 桌面: 按原顺序放回 #pages, 撤掉轨道
+      pagesHomeOrder.forEach(el => pages.appendChild(el));
+      if (trackEl) { trackEl.remove(); trackEl = null; }
+      pgWrappers = null;
+    }
+    return;
+  }
+  if (trackEl) return; // 已分组
+  pagesHomeOrder = [...pages.children];
+  trackEl = document.createElement("div");
+  trackEl.id = "track";
+  pgWrappers = PAGE_GROUPS.map((sels, i) => {
+    const w = document.createElement("div");
+    w.className = "pg";
+    w.dataset.p = i;
+    sels.forEach(s => { const el = document.querySelector(s); if (el) w.appendChild(el); });
+    trackEl.appendChild(w);
+    return w;
+  });
+  pages.appendChild(trackEl);
+  // homeOrder 里可能残留未入组的元素(如 toolchips 为空串被后端去掉), 追加回第 1 页防丢
+  pagesHomeOrder.forEach(el => { if (!el.isConnected) pgWrappers[0].appendChild(el); });
+}
+mqMobile.addEventListener("change", () => { regroupPages(); drawChart(); });
+
+// --- 分页(概览/日志/Goal/服务/模型) ---
+const pages = $("pages");
+const N_PAGES = 5;
+var page = 0;   // var: 挂到 window, 便于外部调试/测试读取
+function pageLabels() { return [t("tab_home"), t("tab_log"), t("tab_goal"), t("tab_svc"), t("tab_model")]; }
+function buildIndicator() {
+  $("pg-ind").innerHTML = Array.from({ length: N_PAGES }, (_, i) => `<i class="${i === page ? "on" : ""}"></i>`).join("");
+}
+function applyPagesX(withTransition) {
+  const tr = trackEl; // 移动端才有轨道
+  if (!tr) return;
+  tr.classList.toggle("stick", !withTransition);
+  // 轨道宽 500%: 每页位移 = 轨道的 20%
+  tr.style.transform = `translate3d(${-page * 20}%,0,0)`;
+  if (!withTransition) requestAnimationFrame(() => tr.classList.remove("stick"));
+}
+function setPage(i, opts) {
+  i = Math.max(0, Math.min(N_PAGES - 1, i));
+  const first = (opts && opts.first) === true;
+  if (!first) {
+    haptic(8);
+    console.log("[svc-dashboard] page -> " + i + " " + pageLabels()[i]);
+  }
+  const changed = i !== page || first;
+  page = i;
+  applyPagesX(true);
+  document.querySelectorAll(".ptab").forEach(b => b.classList.toggle("active", +b.dataset.p === i));
+  document.querySelectorAll("#tabbar .tab").forEach(b => b.classList.toggle("active", +b.dataset.p === i));
+  buildIndicator();
+  if (changed) activatePage(i);
+}
+function activatePage(i) {
+  if (i === 1) initLogPage();        // 日志页: 填充 agent 选择器
+  if (i === 4) initAgentsPage();     // 模型页: 拉取 OMP/Codex 卡片
+  if (i === 3 && isMobile()) {       // 服务页: 骨架 → 渲染
+    const tbody = $("svc").querySelector("tbody");
+    if (!tbody.children.length) tbody.innerHTML = mobileSkel(4);
+    applyFilter();
+  }
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".ptab, #tabbar .tab");
+  if (b) { setPage(+b.dataset.p); return; }
+});
+
+// --- 骨架屏 ---
+function mobileSkel(n) {
+  let h = "";
+  for (let i = 0; i < n; i++)
+    h += `<tr class='skel'><td><div class='skel-line' style='width:86%'></div><div class='skel-line' style='width:64%'></div><div class='skel-line' style='width:74%'></div></td></tr>`;
+  return h;
+}
+function mobileSkelDiv(n) {
+  let h = "";
+  for (let i = 0; i < n; i++)
+    h += `<div class='skel'><div class='skel-line' style='width:86%'></div><div class='skel-line' style='width:64%'></div></div>`;
+  return h;
+}
+
+// --- 通用复制(http 非安全上下文走 execCommand 降级) ---
+function copyText(txt, btn) {
+  const done = () => {
+    haptic(12);
+    if (btn) { const old = btn.textContent; btn.textContent = "✓ " + t("g_copied"); setTimeout(() => btn.textContent = old, 1600); }
+  };
+  if (navigator.clipboard && window.isSecureContext)
+    navigator.clipboard.writeText(txt).then(done).catch(() => fallbackCopy(txt, done));
+  else fallbackCopy(txt, done);
+}
+
+// --- 日志页: agent 选择 + 事件时间线(长按复制) ---
+let logAgents = null;
+async function initLogPage(force) {
+  if (!isMobile()) return;
+  const sel = $("logagent-sel"), body = $("logbody");
+  $("logpage").hidden = false;   // 移动端进入日志页即显示(桌面保持 hidden)
+  if (logAgents && !force) { if (!body.children.length) loadLogView(); return; }
+  const agents = await loadAgents();
+  logAgents = agents;
+  let opts = `<option value="">${t("log_pick")}</option>`;
+  agents.omp.forEach(x => { opts += `<option value='${escAttr(x.id)}' data-cwd='${escAttr(x.cwd)}' data-tmux='${escAttr(x.tmux)}'>OMP · ${escHtml((x.goal || x.cwd).slice(0, 48))}</option>`; });
+  agents.codex.forEach(x => { opts += `<option value='' data-cwd='${escAttr(x.cwd)}' data-tmux=''>Codex · ${escHtml(x.cwd.slice(-40))}</option>`; });
+  sel.innerHTML = opts;
+  if (!body.children.length) loadLogView();
+}
+async function loadLogView() {
+  const body = $("logbody");
+  const sel = $("logagent-sel");
+  const opt = sel.selectedOptions[0];
+  const sid = sel.value, cwd = opt ? opt.dataset.cwd || "" : "", tmx = opt ? opt.dataset.tmux || "" : "";
+  body.innerHTML = `<div class='agentlog'>${t("a_loading")}</div>`;
+  try {
+    const d = await fetchAgentLog(sid, cwd, tmx);
+    body.innerHTML = agentLogHtml(d);
+    // 长按复制日志全文
+    bindLongPress(body, (el) => {
+      const txt = el.innerText.trim();
+      copyText(txt, null);
+      haptic(15);
+      console.log("[svc-dashboard] long-press copy " + txt.length + " chars");
+      toastCopied(el);
+    });
+  } catch (err) {
+    body.innerHTML = `<div class='agentlog aglog-empty'>${t("a_fail", { e: escHtml(err.message) })}</div>`;
+  }
+}
+function toastCopied(anchor) {
+  const d = document.createElement("div");
+  d.textContent = "✓ " + t("g_copied");
+  d.style.cssText = "position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#1c2a20;color:#6ec89a;border:1px solid #2e7d4f;border-radius:999px;padding:8px 18px;font-size:12.5px;z-index:60;pointer-events:none;transition:opacity .3s";
+  document.body.appendChild(d);
+  setTimeout(() => { d.style.opacity = "0"; setTimeout(() => d.remove(), 350); }, 1400);
+}
+const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const escAttr = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// --- 模型页: OMP / Codex agent 卡片(状态灯+名称+最近活动+日志入口) ---
+let agentsInit = false;
+async function initAgentsPage() {
+  if (!isMobile()) return;
+  $("agents-page").hidden = false;  // 移动端进入模型页即显示(桌面保持 hidden)
+  if (agentsInit) return;
+  agentsInit = true;
+  const el = $("agents-page");
+  el.innerHTML = `<h2>${t("a_title")} <span class="ghint">${t("a_hint", { n: "" })}</span></h2>` + mobileSkelDiv(3);
+  const agents = await loadAgents();
+  const total = agents.omp.length + agents.codex.length;
+  const cards = [];
+  agents.omp.forEach(x => {
+    const [dot, txt] = x.health === "running" ? ["#6ec89a", t("a_running")]
+      : x.health === "blocked" ? ["#e0b060", t("a_blocked")]
+      : x.health === "completed" ? ["#8a8a8a", t("a_done")] : ["#777", t("a_idle")];
+    cards.push(`<div class="gcard" data-sid="${escAttr(x.id)}" data-cwd="${escAttr(x.cwd)}" data-tmux="${escAttr(x.tmux)}" role="button" tabindex="0">
+      <div class="ghead"><span class="mdot" style="background:${dot};width:9px;height:9px;border-radius:50%;display:inline-block"></span>
+      <span class="gname">OMP</span><span class="gstate">${txt}</span></div>
+      <div class="gsub">${escHtml((x.goal || x.cwd).slice(0, 60))}</div>
+      <div class="grow"><span>${t("a_active")}</span><span class="gidle">${t("a_ago", { s: x.idle_seconds })}</span></div>
+      <div class="grow"><span>${t("a_tool")}</span><span class="gtx">${escHtml(x.tool)}</span></div></div>`);
+  });
+  agents.codex.forEach(x => {
+    cards.push(`<div class="gcard" data-sid="" data-cwd="${escAttr(x.cwd)}" data-tmux="" role="button" tabindex="0">
+      <div class="ghead"><span style="background:#6ec89a;width:9px;height:9px;border-radius:50%;display:inline-block"></span>
+      <span class="gname">Codex</span><span class="gstate">${t("a_running")}</span></div>
+      <div class="gsub">${escHtml(x.cwd)}</div>
+      <div class="grow"><span>${t("a_active")}</span><span class="gidle">${t("a_ago", { s: x.idle_seconds })}</span></div></div>`);
+  });
+  el.innerHTML = `<h2>${t("a_title")} <span class="ghint">${t("a_hint", { n: total })}</span></h2>` +
+    `<div class="gcards">${cards.join("") || `<div class="gempty">${t("a_none")}</div>`}</div>`;
+  // 点模型卡 → 跳日志页并选中该 agent
+  el.querySelectorAll(".gcard").forEach(c =>
+    c.addEventListener("click", async () => {
+      await initLogPage();
+      const sel = $("logagent-sel");
+      const opt = [...sel.options].find(o => o.value === c.dataset.sid && o.dataset.cwd === c.dataset.cwd);
+      if (opt) { sel.value = opt.value; loadLogView(); }
+      setPage(1);
+    }));
+}
+
+// --- goal 卡片展开(点标题切换 .gextra) ---
+document.addEventListener("click", (e) => {
+    const g = e.target.closest(".gcard");
+    if (!g || !isMobile()) return;
+    if (e.target.closest(".gcopy, .swipe-act, .swipe-bg")) return;
+    if (g.querySelector(".gextra")) { g.classList.toggle("open"); haptic(6); }
+});
+
+// --- 长按(500ms)复制 ---
+function bindLongPress(root, onCopy) {
+  if (!TOUCH) return;
+  root.querySelectorAll(".aglog-row, .termlog").forEach(el => {
+    let timer = null, sx = 0, sy = 0, moved = false;
+    el.style.touchAction = "pan-x pan-y";
+    el.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY; moved = false;
+      timer = setTimeout(() => { if (!moved) { timer = null; onCopy(el); } }, 500);
+    }, { passive: true });
+    el.addEventListener("touchmove", (e) => {
+      if (timer && (Math.abs(e.touches[0].clientX - sx) > 8 || Math.abs(e.touches[0].clientY - sy) > 8)) {
+        clearTimeout(timer); timer = null; moved = true;
+      }
+    }, { passive: true });
+    el.addEventListener("touchend", () => { if (timer) { clearTimeout(timer); timer = null; } }, { passive: true });
+    el.addEventListener("touchcancel", () => { if (timer) { clearTimeout(timer); timer = null; } }, { passive: true });
+  });
+}
+
+// --- 双击: 概览页 负载卡→Goal页 / 磁盘卡→展开top进程 ---
+let lastTap = 0, lastTapEl = null;
+if (TOUCH) document.addEventListener("touchend", (e) => {
+  const stat = e.target.closest ? e.target.closest("#sysbar .stat") : null;
+  if (!stat) return;
+  const now = Date.now();
+  if (now - lastTap < 300 && stat === lastTapEl) {
+    lastTap = 0;
+    if (stat.dataset.k === "load") { setPage(2); haptic(10); }
+    else if (stat.dataset.k === "disk") {
+      haptic(10);
+      const tops = document.querySelector("#loadline .ld-tops");
+      if (tops) tops.hidden = !tops.hidden;
+      console.log("[svc-dashboard] double-tap disk -> toggle top procs");
+    }
+  } else { lastTap = now; lastTapEl = stat; }
+}, { passive: true });
+
+// --- 触摸手势总协调: 分页滑动 / 边缘右滑返回 / 列表左滑 ---
+if (TOUCH) (function setupGestures() {
+  let g = null; // {kind:"page"|"edge"|"row", id, x0, y0, t0, dx, lastX, base, row, fg, lockX}
+  const W = () => window.innerWidth;
+  document.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1 || g) return;
+    const t = e.touches[0];
+    if (!isMobile()) return;
+    // 边缘手势最优先: 起点 x<24px 且非首页(否则按普通分页滑动处理)
+    const edge = t.clientX < 24 && page > 0;
+    const target = !edge && t.target.closest ? t.target.closest(".swipe-item") : null;
+    const swipeItem = target;
+    // 横向自身滚动的容器不参与手势; a/ chip 不排除 —— 链接上的横滑仍是列表手势, 点击照常触发
+    const scroller = t.target.closest ? t.target.closest(".filters, .aglog, .termlog, #pager-tabs, select") : null;
+    if (swipeItem && !scroller) {
+      g = { kind: "row", id: t.identifier, x0: t.clientX, y0: t.clientY, t0: Date.now(),
+            fg: swipeItem.querySelector(".swipe-fg"), base: 0, lockX: null };
+      gesture.claimed = t.identifier;
+      return;
+    }
+    if (scroller || !pages) return;
+    // 边缘手势(上文已判定)返回概览, 否则普通分页滑动
+    g = { kind: edge ? "edge" : "page", id: t.identifier, x0: t.clientX, y0: t.clientY,
+          t0: Date.now(), lastX: t.clientX, lockX: null, dx: 0 };
+    gesture.claimed = t.identifier;
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (!g) return;
+    const t = [...e.touches].find(x => x.identifier === g.id);
+    if (!t) return;
+    const dx = t.clientX - g.x0, dy = t.clientY - g.y0;
+    if (g.lockX === null) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return; // 未定轴
+      g.lockX = Math.abs(dx) > Math.abs(dy);
+      if (g.kind === "row" || g.kind === "page" || g.kind === "edge") {
+        if (g.lockX) e.preventDefault(); // 横向手势: 阻断浏览器返回/前进导航
+      }
+    }
+    if (!g.lockX) return; // 纵向滚动交给浏览器
+    if (g.kind === "row") {
+      // 左滑露按钮: 只允许负方向(露出右侧按钮), 已露出时回推
+      const w = g.fg.parentElement.querySelector(".swipe-act");
+      const open = w ? w.offsetWidth : 96;
+      let x = Math.min(0, Math.max(-open - 24, g.base + dx));
+      g.fg.classList.add("stick");
+      g.fg.style.transform = `translate3d(${x}px,0,0)`;
+      g.dx = x;
+    } else {
+      // 分页/边缘: 跟手(阻尼 0.55), 越界回弹
+      let d = (page > 0 || dx > 0) && (page < N_PAGES - 1 || dx < 0) ? dx * 0.55
+              : dx > 0 ? (page < N_PAGES - 1 ? 0 : Math.min(64, dx * 0.18))
+                       : (page > 0 ? 0 : Math.max(-64, dx * 0.18));
+      if (g.kind === "edge" && d < -20) { g.kind = "page"; } // 反向滑: 降级为分页
+      const pct = d / W() * 100;
+      g.dx = pct;
+      if (!trackEl) return;
+      trackEl.classList.add("stick");
+      trackEl.style.transform = `translate3d(calc(${-page * 20}% + ${pct}vw),0,0)`;
+      g.lastX = t.clientX;
+    }
+  }, { passive: false });
+
+  document.addEventListener("touchend", (e) => {
+    if (!g) return;
+    const t = [...e.changedTouches].find(x => x.identifier === g.id);
+    const done = () => { gesture.claimed = null; g = null; };
+    if (!t) { done(); return; }
+    if (g.kind === "row") {
+      const open = (g.fg.parentElement.querySelector(".swipe-act") || {}).offsetWidth || 96;
+      const x = g.dx <= -open * 0.6 ? -open : 0;
+      g.fg.classList.remove("stick");
+      g.fg.style.transform = `translate3d(${x}px,0,0)`;
+      g.fg.dataset.open = x ? "1" : "";
+      if (x) haptic(6);
+      done(); return;
+    }
+    const dx = (g.lockX ? g.lastX - g.x0 : 0);
+    const dt = Date.now() - g.t0;
+    trackEl && trackEl.classList.remove("stick");
+    if (g.kind === "edge" && g.lockX && dx > 56) {
+      console.log("[svc-dashboard] edge-swipe back to overview");
+      setPage(0); done(); return;
+    }
+    // 分页吸附: 位移超过 1/4 屏 或 快速轻扫
+    const fast = Math.abs(dx) > 40 && dt < 260;
+    if (g.lockX && (Math.abs(dx) > W() / 4 || fast)) {
+      const dir = dx < 0 ? 1 : -1; // 左滑下一页, 右滑上一页
+      if ((dir > 0 && page < N_PAGES - 1) || (dir < 0 && page > 0)) { setPage(page + dir); done(); return; }
+    }
+    applyPagesX(true); // 未达阈值: 弹回当前页
+    done();
+  }, { passive: true });
+  document.addEventListener("touchcancel", () => {
+    if (!g) return;
+    trackEl && trackEl.classList.remove("stick");
+    applyPagesX(true);
+    g = null; gesture.claimed = null;
+  }, { passive: true });
+  // 点击其他区域收起已露出的滑动按钮
+  document.addEventListener("touchstart", (e) => {
+    document.querySelectorAll(".swipe-fg[data-open]").forEach(fg => {
+      if (!fg.parentElement.contains(e.target)) {
+        fg.style.transform = "translate3d(0,0,0)"; fg.removeAttribute("data-open");
+      }
+    });
+  }, { passive: true });
+})();
+
+// --- 负载/CPU 折线图(最近 24 采样存 localStorage, 捏合调时间窗) ---
+const chart = $("chart");
+function chartData() {
+  try { return JSON.parse(localStorage.getItem("svc-chart") || "[]"); }
+  catch (e) { return []; }
+}
+function chartSave(arr) { try { localStorage.setItem("svc-chart", JSON.stringify(arr)); } catch (e) {} }
+function chartSample(s) {
+  if (!chart || !isMobile()) return;
+  const arr = chartData();
+  const now = Date.now();
+  arr.push({ t: now, load: (s.loadavg || [null])[0] ?? (s.loadavg || [])[2] ?? null, cpu: s.cpu_usage });
+  while (arr.length > 24) arr.shift();
+  chartSave(arr);
+  drawChart();
+}
+let chartWin = 24;
+function drawChart() {
+  if (!chart || !isMobile()) return;
+  const ctx = chart.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const w = chart.clientWidth || 360, h = 150;
+  if (chart.width !== w * dpr) { chart.width = w * dpr; chart.height = h * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const all = chartData();
+  $("chart-empty").style.display = all.length < 2 ? "" : "none";
+  $("chart-win").textContent = all.length >= 2 ? t("chart_win", { n: chartWin }) : "";
+  if (all.length < 2) return;
+  const data = all.slice(-chartWin);
+  const maxL = Math.max(2, ...data.map(d => d.load || 0));
+  const X = i => 6 + i * ((w - 12) / (data.length - 1));
+  // 网格线
+  ctx.strokeStyle = "#1c1c1c"; ctx.lineWidth = 1;
+  [0.25, 0.5, 0.75].forEach(f => { ctx.beginPath(); ctx.moveTo(0, h * f); ctx.lineTo(w, h * f); ctx.stroke(); });
+  // CPU %: 0-100 映射
+  ctx.strokeStyle = "#6ea8dc"; ctx.lineWidth = 1.6; ctx.beginPath();
+  data.forEach((d, i) => { const y = h - 6 - (d.cpu || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
+  ctx.stroke();
+  // 负载: 按各自 max 缩放
+  ctx.strokeStyle = "#6ec89a"; ctx.lineWidth = 1.8; ctx.beginPath();
+  data.forEach((d, i) => { const y = h - 6 - (d.load || 0) / maxL * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
+  ctx.stroke();
+  // 图例
+  ctx.font = "10px ui-monospace, monospace";
+  ctx.fillStyle = "#6ea8dc"; ctx.fillText("CPU %", 8, 12);
+  ctx.fillStyle = "#6ec89a"; ctx.fillText("load " + maxL.toFixed(1), 60, 12);
+}
+if (chart) {
+  window.addEventListener("resize", drawChart);
+  mqMobile.addEventListener("change", drawChart);
+  drawChart();
+  // 捏合调整时间窗: 两指距离变化 → chartWin 4..24
+  let pinch = null;
+  chart.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2)
+      pinch = { d: Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                              e.touches[0].clientY - e.touches[1].clientY), win: chartWin };
+  }, { passive: true });
+  chart.addEventListener("touchmove", (e) => {
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                         e.touches[0].clientY - e.touches[1].clientY);
+    const win = Math.round(Math.max(4, Math.min(24, pinch.win * pinch.d / d)));
+    if (win !== chartWin) { chartWin = win; drawChart(); }
+  }, { passive: false });
+  chart.addEventListener("touchend", () => { if (pinch) { pinch = null; haptic(8); } }, { passive: true });
+}
+
+// --- 轮询暂停: 页面不可见时停一切(visibilitychange 埋点) ---
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    console.log("[svc-dashboard] visibilitychange -> hidden, polling paused");
+  } else {
+    console.log("[svc-dashboard] visibilitychange -> visible, polling resumed");
+    if (autoOn) load(false); // 回前台立即刷一次
+  }
+});
+
+// --- 手机端 30s 自动刷新(省电); 桌面保持 AUTO ---
+const MOBILE_REFRESH_SEC = 30;
+let autoSec = AUTO;
+function applyAutoSec() {
+  const sec = isMobile() ? MOBILE_REFRESH_SEC : AUTO;
+  if (sec !== autoSec) {
+    autoSec = sec;
+    $("auto-sec").textContent = sec + "s";
+    clearInterval(autoTimer);
+    autoTimer = setInterval(autoTick, autoSec * 1000);
+    console.log("[svc-dashboard] auto refresh interval -> " + autoSec + "s");
+  }
+}
+mqMobile.addEventListener("change", applyAutoSec);
+let autoTimer = setInterval(autoTick, autoSec * 1000);
+function autoTick() {
+  if (autoOn && !document.hidden) {
+    console.log("[svc-dashboard] auto refresh tick");
     if (filter === "manage") loadManage();
     else load(false);
   }
-}, AUTO * 1000);
+}
+applyAutoSec();
+
+// --- 日志页选择器变化 ---
+if ($("logagent-sel")) $("logagent-sel").addEventListener("change", loadLogView);
+
+// --- 启动 ---
+regroupPages();          // 手机: 分组进 5 页; 桌面: 保持原序
+if (isMobile()) {
+  setPage(0, { first: true });
+  applyAutoSec();
+} else {
+  $("logpage").hidden = true;
+  $("agents-page").hidden = true;
+}
 load(true);
 </script>
 </body>
