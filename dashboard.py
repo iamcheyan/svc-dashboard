@@ -691,7 +691,7 @@ L10N = {
         "wd_thu": "四", "wd_fri": "五", "wd_sat": "六",
         "a_running": "运行中", "a_blocked": "阻塞", "a_idle": "空闲", "a_done": "已完成",
         "a_status": "状态", "a_loc": "tmux / 目录", "a_active": "最近活动", "a_tool": "当前工具",
-        "a_ago": "{s}s 前", "a_openlog": "点击查看日志 · {g}",
+        "a_openlog": "点击查看日志 · {g}",
         "a_openterm": "点击查看实时画面 · pid {p}",
         "a_title": "agent 任务", "a_hint": "{n} 项 · 点击标题查看日志",
         "a_none": "没有检测到 agent", "a_th_agent": "Agent",
@@ -837,7 +837,7 @@ L10N = {
         "wd_thu": "Thu", "wd_fri": "Fri", "wd_sat": "Sat",
         "a_running": "Running", "a_blocked": "Blocked", "a_idle": "Idle", "a_done": "Completed",
         "a_status": "Status", "a_loc": "tmux / dir", "a_active": "Last activity",
-        "a_tool": "Current tool", "a_ago": "{s}s ago",
+        "a_tool": "Current tool",
         "a_openlog": "Click for log · {g}", "a_openterm": "Click for live view · pid {p}",
         "a_title": "Agent tasks", "a_hint": "{n} items · click title for log",
         "a_none": "No agents detected", "a_th_agent": "Agent",
@@ -885,7 +885,7 @@ L10N = {
         "ev_nudge": "watchdog nudge", "ev_recover": "recovered",
         "ev_pause": "goal paused", "ev_cleanup": "cleanup",
         "ev_other": "·", "ev_none": "No events yet",
-        "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago",
+        "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago", "g_ago_d": "{d}d ago",
         "tab_home": "Overview", "tab_goal": "Goal", "tab_svc": "Services", "tab_model": "Models", "tab_log": "Logs",
         "tab_tools": "Tools",
         "tl_grp_insp": "Checks", "tl_grp_ops": "Operations", "tl_grp_direct": "Quick access", "tl_grp_pref": "Preferences",
@@ -985,7 +985,7 @@ L10N = {
         "wd_thu": "木", "wd_fri": "金", "wd_sat": "土",
         "a_running": "実行中", "a_blocked": "ブロック", "a_idle": "待機", "a_done": "完了",
         "a_status": "状態", "a_loc": "tmux / ディレクトリ", "a_active": "最終活動",
-        "a_tool": "現在のツール", "a_ago": "{s}秒前",
+        "a_tool": "現在のツール",
         "a_openlog": "クリックでログ · {g}", "a_openterm": "クリックでライブ画面 · pid {p}",
         "a_title": "エージェント", "a_hint": "{n} 件 · タイトルをクリックでログ",
         "a_none": "エージェントが検出されません", "a_th_agent": "エージェント",
@@ -4471,16 +4471,16 @@ function renderAgentPanel(agents) {
   agents.omp.forEach(x => {
     rows += "<tr><td><span class='tbadge wd'>OMP</span><span class='tname tlink' data-sid='" + esc(x.id) +
       "' data-cwd='" + esc(x.cwd) + "' data-tmux='" + esc(x.tmux) + "' title='" + t("a_openlog", { g: esc(x.goal) }) + "'>" +
-      esc((x.goal || x.cwd).slice(0, 60)) + "</span></td><td data-label='" + t("a_status") + "'>" + (labels[x.health] || esc(x.status)) +
+      esc(stripMd(x.goal || x.cwd).slice(0, 60)) + "</span></td><td data-label='" + t("a_status") + "'>" + (labels[x.health] || esc(x.status)) +
       "</td><td class='tscope' data-label='" + t("a_loc") + "'>" + esc(x.tmux) + "<br>" + esc(x.cwd) + "</td><td class='tsch' data-label='" + t("a_active") + "'>" +
-      esc(x.last_activity) + "<br>" + t("a_ago", { s: x.idle_seconds }) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>" + esc(x.tool) + "</td></tr>";
+      esc(x.last_activity) + "<br>" + agoStr(x.idle_seconds) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>" + esc(x.tool) + "</td></tr>";
   });
   // Codex agents
   agents.codex.forEach(x => {
     rows += "<tr><td><span class='tbadge rd'>Codex</span><span class='tname tlink' data-sid='' data-cwd='" +
       esc(x.cwd) + "' data-tmux='' title='" + t("a_openterm", { p: esc(x.pid) }) + "'>" +
       esc(x.cwd) + "</span></td><td data-label='" + t("a_status") + "'>" + t("a_running") + "</td><td class='tscope' data-label='" + t("a_loc") + "'>—<br>" + esc(x.cwd) + "</td><td class='tsch' data-label='" + t("a_active") + "'>" +
-      esc(x.last_activity) + "<br>" + t("a_ago", { s: x.idle_seconds }) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>pid " + esc(x.pid) + "</td></tr>";
+      esc(x.last_activity) + "<br>" + agoStr(x.idle_seconds) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>pid " + esc(x.pid) + "</td></tr>";
   });
   const total = agents.omp.length + agents.codex.length;
   el.innerHTML = "<h2>" + t("a_title") + " <span style='color:var(--text-dead);font-weight:400'>" + t("a_hint", { n: total }) + "</span></h2><table><thead><tr><th>" + t("a_th_agent") + "</th><th>" + t("a_status") + "</th><th>" + t("a_loc") + "</th><th>" + t("a_active") + "</th><th>" + t("a_tool") + "</th></tr></thead><tbody>" +
@@ -4867,6 +4867,15 @@ function agoStr(sec) {
   return t("g_ago_d", { d: Math.floor(sec / 86400) });
 }
 function agoFromTs(ts) { return agoStr((Date.now() - ts * 1000) / 1000); }
+
+// P1-9: agent 卡/表摘要剥离 markdown 记号(标题# 强调*_` 引用> 链接只留文字)
+function stripMd(s) {
+  return String(s ?? "")
+    .replace(/\\[([^\\]]+)\\]\\([^)]*\\)/g, "$1")
+    .replace(/[#*_~`>]+/g, " ")
+    .replace(/\\s+/g, " ")
+    .trim();
+}
 
 // --- 事件类型元数据: 图标(双通道) + 语义组(ok/warn/fail/recover) ---
 const EV_META = {
@@ -5413,7 +5422,7 @@ async function initLogPage(force) {
   const agents = await loadAgents();
   logAgents = agents;
   let opts = `<option value="">${t("log_pick")}</option>`;
-  agents.omp.forEach(x => { opts += `<option value='${escAttr(x.id)}' data-cwd='${escAttr(x.cwd)}' data-tmux='${escAttr(x.tmux)}'>OMP · ${escHtml((x.goal || x.cwd).slice(0, 48))}</option>`; });
+  agents.omp.forEach(x => { opts += `<option value='${escAttr(x.id)}' data-cwd='${escAttr(x.cwd)}' data-tmux='${escAttr(x.tmux)}'>OMP · ${escHtml(stripMd(x.goal || x.cwd).slice(0, 48))}</option>`; });
   agents.codex.forEach(x => { opts += `<option value='' data-cwd='${escAttr(x.cwd)}' data-tmux=''>Codex · ${escHtml(x.cwd.slice(-40))}</option>`; });
   sel.innerHTML = opts;
   syncLogAgentPicker();
@@ -5469,8 +5478,8 @@ async function initAgentsPage() {
     cards.push(`<div class="gcard" data-sid="${escAttr(x.id)}" data-cwd="${escAttr(x.cwd)}" data-tmux="${escAttr(x.tmux)}" role="button" tabindex="0">
       <div class="ghead"><span class="mdot" style="background:${dot};width:9px;height:9px;border-radius:50%;display:inline-block"></span>
       <span class="gname">OMP</span><span class="gstate">${txt}</span></div>
-      <div class="gsub">${escHtml((x.goal || x.cwd).slice(0, 60))}</div>
-      <div class="grow"><span>${t("a_active")}</span><span class="gidle">${t("a_ago", { s: x.idle_seconds })}</span></div>
+      <div class="gsub">${escHtml(stripMd(x.goal || x.cwd).slice(0, 60))}</div>
+      <div class="grow"><span>${t("a_active")}</span><span class="gidle">${agoStr(x.idle_seconds)}</span></div>
       <div class="grow"><span>${t("a_tool")}</span><span class="gtx">${escHtml(x.tool)}</span></div></div>`);
   });
   agents.codex.forEach(x => {
@@ -5478,7 +5487,7 @@ async function initAgentsPage() {
       <div class="ghead"><span style="background:var(--c-green);width:9px;height:9px;border-radius:50%;display:inline-block"></span>
       <span class="gname">Codex</span><span class="gstate">${t("a_running")}</span></div>
       <div class="gsub">${escHtml(x.cwd)}</div>
-      <div class="grow"><span>${t("a_active")}</span><span class="gidle">${t("a_ago", { s: x.idle_seconds })}</span></div></div>`);
+      <div class="grow"><span>${t("a_active")}</span><span class="gidle">${agoStr(x.idle_seconds)}</span></div></div>`);
   });
   el.innerHTML = `<h2>${t("a_title")} <span class="ghint">${t("a_hint", { n: total })}</span></h2>` +
     `<div class="gcards">${cards.join("") || esHtml("cpu", t("a_none"))}</div>`;
