@@ -754,6 +754,7 @@ L10N = {
         "lf_wd": "watchdog", "lf_done": "完成", "lf_commit": "commit",
         "lf_3d": "3天", "lf_7d": "7天",
         "ev_loop": "循环 ×{n}", "ev_empty": "该时间范围内没有事件",
+        "es_title": "这里空空如也", "es_sub": "没有可显示的内容",
         "ev_commit": "提交",
         "tl_fs_title": "文件浏览", "tl_fs_filter": "过滤当前目录…", "tl_fs_hidden": "显示隐藏文件",
         "tl_fs_dl": "下载", "tl_fs_empty": "没有匹配的文件",
@@ -879,6 +880,7 @@ L10N = {
         "ev_other": "·", "ev_none": "No events yet",
         "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago",
         "tab_home": "Overview", "tab_goal": "Goal", "tab_svc": "Services", "tab_model": "Models", "tab_log": "Logs",
+        "tab_tools": "Tools",
         "act_open": "Open", "act_copy_addr": "Copy address", "g_detail": "details",
         "chart_title": "Load / CPU trend", "chart_win": "window {n} pts",
         "chart_empty": "Collecting samples: refresh a few times (pinch to adjust window)",
@@ -898,6 +900,7 @@ L10N = {
         "lf_wd": "watchdog", "lf_done": "done", "lf_commit": "commit",
         "lf_3d": "3d", "lf_7d": "7d",
         "ev_loop": "loop ×{n}", "ev_empty": "No events in this range",
+        "es_title": "Nothing here yet", "es_sub": "No content to display",
         "ev_commit": "commit",
         "evk_complete": "complete", "evk_restart": "relaunch (dead)",
         "evk_nudge": "nudge", "evk_recover": "recovered", "evk_pause": "paused",
@@ -1055,6 +1058,7 @@ L10N = {
         "fs_rel_now": "たった今", "fs_rel_s": "{n}秒前", "fs_rel_m": "{n}分前",
         "fs_rel_h": "{n}時間前", "fs_rel_d": "{n}日前", "fs_rel_y": "昨日",
         "ev_loop": "循環 ×{n}", "ev_empty": "この期間のイベントはありません",
+        "es_title": "何もありません", "es_sub": "表示できる内容がありません",
         "ev_commit": "コミット",
         "evk_complete": "完了", "evk_restart": "再始動(プロセス死亡)",
         "evk_nudge": "催促", "evk_recover": "復旧", "evk_pause": "一時停止",
@@ -2443,7 +2447,10 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
                 if c["resume_cmd"] else "")
         cls = "gcard swipe-item" if back else "gcard"
         out.append(f'<div class="{cls}" data-light="{c["light"]}">{back}<div class="swipe-fg">{inner}</div></div>')
-    body = "".join(out) if out else f'<div class="gempty">{t(lang, "g_none")}</div>'
+    body = "".join(out) if out else (
+        f'<div class="empty-state"><span class="es-ico">{icon("gauge", 44)}</span>'
+        f'<span class="es-title">{escape(t(lang, "g_none"))}</span>'
+        f'<span class="es-sub">{t(lang, "es_sub")}</span></div>')
     completed = parse_completed_goals()
     fold = ""
     if completed:
@@ -2618,12 +2625,16 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     --border: #222; --border-soft: #1f1f1f; --border-faint: #1a1a1a;
     --btn-bg: #262626; --btn-hover: #333; --btn-press: #3a3a3a; --btn-border: #333;
     --btn-soft-bg: #1d1d1d; --btn-soft-border: #2e2e2e; --btn-soft-hover-bd: #555;
-    --chip-bg: #161616; --chip-border: #2a2a2a;
+    --chip-bg: #1c1c1e; --chip-border: #2a2a2a;
     --chip-on-bg: #f2f2f2; --chip-on-tx: #111;
     --text-title: #f2f2f2; --text-hi: #eee; --text: #d6d6d6; --text-mid: #c9c9c9;
     --text-soft: #b0b0b0; --text-dim: #909090; --text-faint: #8a8a8a;
     --text-ghost: #777; --text-dead: #666;
     --header-bg: rgba(10,10,10,.9); --tabbar-bg: rgba(12,12,12,.82);
+    /* iOS Liquid Glass 材质: 悬浮胶囊/浮动按钮/玻璃圆钮共用 */
+    --glass-bg: rgba(28,28,30,.72); --glass-bd: rgba(255,255,255,.08);
+    --glass-shadow: 0 10px 30px rgba(0,0,0,.36);
+    --nav-pill: rgba(0,0,0,.42); --accent: #0a84ff;
     --scrim: rgba(0,0,0,.92); --skel: #1a1a1a; --focus: #4a90d9;
     --c-red: #e06c6c; --c-red-bg: #2a1a1a;
     --c-warn: #f0b662; --c-warn-bg: #2a2118; --c-warn-border: #5a4422;
@@ -2644,7 +2655,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
       color-scheme: light;
-      --bg: #f5f5f5; --bg-elev: #fff; --bg-panel: #fafafa; --bg-deep: #ececec;
+      --bg: #f2f2f7; --bg-elev: #fff; --bg-panel: #fafafa; --bg-deep: #ececec;
       --bg-input: #fff; --bg-hover: #e9e9e9; --bg-active: #e2e2e2;
       --border: #e0e0e0; --border-soft: #e4e4e4; --border-faint: #eaeaea;
       --btn-bg: #e4e4e4; --btn-hover: #d8d8d8; --btn-press: #d0d0d0; --btn-border: #c9c9c9;
@@ -2655,6 +2666,9 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       --text-soft: #464646; --text-dim: #575757; --text-faint: #666;
       --text-ghost: #757575; --text-dead: #8f8f8f;
       --header-bg: rgba(245,245,245,.92); --tabbar-bg: rgba(250,250,250,.86);
+      --glass-bg: rgba(242,242,247,.72); --glass-bd: rgba(0,0,0,.06);
+      --glass-shadow: 0 10px 30px rgba(0,0,0,.12);
+      --nav-pill: rgba(118,118,128,.24); --accent: #0066cc;
       --scrim: rgba(0,0,0,.55); --skel: #e2e2e2; --focus: #2b6cb0;
       --c-red: #b33939; --c-red-bg: #fbeaea;
       --c-warn: #8a5800; --c-warn-bg: #fdf3dd; --c-warn-border: #e3c88f;
@@ -2674,7 +2688,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   /* 浅色手动覆盖(设置里选「浅色」) */
   :root[data-theme="light"] {
     color-scheme: light;
-    --bg: #f5f5f5; --bg-elev: #fff; --bg-panel: #fafafa; --bg-deep: #ececec;
+    --bg: #f2f2f7; --bg-elev: #fff; --bg-panel: #fafafa; --bg-deep: #ececec;
     --bg-input: #fff; --bg-hover: #e9e9e9; --bg-active: #e2e2e2;
     --border: #e0e0e0; --border-soft: #e4e4e4; --border-faint: #eaeaea;
     --btn-bg: #e4e4e4; --btn-hover: #d8d8d8; --btn-press: #d0d0d0; --btn-border: #c9c9c9;
@@ -2685,6 +2699,9 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     --text-soft: #464646; --text-dim: #575757; --text-faint: #666;
     --text-ghost: #757575; --text-dead: #8f8f8f;
     --header-bg: rgba(245,245,245,.92); --tabbar-bg: rgba(250,250,250,.86);
+    --glass-bg: rgba(242,242,247,.72); --glass-bd: rgba(0,0,0,.06);
+    --glass-shadow: 0 10px 30px rgba(0,0,0,.12);
+    --nav-pill: rgba(118,118,128,.24); --accent: #0066cc;
     --scrim: rgba(0,0,0,.55); --skel: #e2e2e2; --focus: #2b6cb0;
     --c-red: #b33939; --c-red-bg: #fbeaea;
     --c-warn: #8a5800; --c-warn-bg: #fdf3dd; --c-warn-border: #e3c88f;
@@ -2708,12 +2725,15 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     --border: #222; --border-soft: #1f1f1f; --border-faint: #1a1a1a;
     --btn-bg: #262626; --btn-hover: #333; --btn-press: #3a3a3a; --btn-border: #333;
     --btn-soft-bg: #1d1d1d; --btn-soft-border: #2e2e2e; --btn-soft-hover-bd: #555;
-    --chip-bg: #161616; --chip-border: #2a2a2a;
+    --chip-bg: #1c1c1e; --chip-border: #2a2a2a;
     --chip-on-bg: #f2f2f2; --chip-on-tx: #111;
     --text-title: #f2f2f2; --text-hi: #eee; --text: #d6d6d6; --text-mid: #c9c9c9;
     --text-soft: #b0b0b0; --text-dim: #909090; --text-faint: #8a8a8a;
     --text-ghost: #777; --text-dead: #666;
     --header-bg: rgba(10,10,10,.9); --tabbar-bg: rgba(12,12,12,.82);
+    --glass-bg: rgba(28,28,30,.72); --glass-bd: rgba(255,255,255,.08);
+    --glass-shadow: 0 10px 30px rgba(0,0,0,.36);
+    --nav-pill: rgba(0,0,0,.42); --accent: #0a84ff;
     --scrim: rgba(0,0,0,.92); --skel: #1a1a1a; --focus: #4a90d9;
     --c-red: #e06c6c; --c-red-bg: #2a1a1a;
     --c-warn: #f0b662; --c-warn-bg: #2a2118; --c-warn-border: #5a4422;
@@ -2777,8 +2797,9 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     stroke-linecap: round; }
   #ptr-indicator.ready { color: var(--c-blue); border-color: var(--c-blue); }
   #ptr-indicator.ready .ptr-ring circle { stroke-width: 3; }
-  #ptr-indicator.loading { color: var(--c-green); border-color: var(--c-green); }
-  #ptr-indicator.loading .ptr-core { animation: ptr-spin .8s linear infinite; }
+  #ptr-indicator .ptr-ring circle { fill: none; stroke: var(--c-blue); stroke-width: 2.5;
+    stroke-linecap: round; stroke-dasharray: 103.7; stroke-dashoffset: 103.7;
+    transition: stroke-dashoffset .08s linear; }
   #ptr-indicator.loading .ptr-ring circle { stroke: var(--c-green); }
   @keyframes ptr-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
@@ -2828,9 +2849,9 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .skel-line { height: 14px; border-radius: 6px; margin: 10px 0;
                background: var(--skel); animation: skel-pulse 1.1s ease-in-out infinite; }
   @keyframes skel-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
-  .logbar select { width: 100%; background: var(--bg-input); color: var(--text);
-                   border: 1px solid var(--chip-border); border-radius: 8px;
-                   padding: 10px 12px; font-size: 13px; min-height: 44px; }
+  .logbar select { width: 100%; background: var(--chip-bg); color: var(--text);
+                   border: none; border-radius: 999px;
+                   padding: 10px 16px; font-size: 13px; min-height: 44px; }
   #chart-wrap canvas { width: 100%; height: 150px; display: block; touch-action: none; }
   #chart-empty { color: var(--text-dead); font-size: 12px; padding: 18px 0; }
   .gmore { display: none; color: var(--text-dim); font-size: 11px; }
@@ -2995,6 +3016,14 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .ctl-btn:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
   .ctl-btn[aria-disabled="true"] { opacity: .5; cursor: default; }
   .empty { color: var(--text-faint); text-align: center; padding: 48px 0; }
+  /* 空状态(iOS 风): 灰色大图标 + 粗体主标题 + 灰色副标题, 垂直居中大量留白 */
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center;
+                 gap: 10px; padding: 44px 24px; text-align: center; }
+  .empty-state .es-ico { color: var(--text-ghost); display: inline-flex; }
+  .empty-state .es-title { font-size: 22px; font-weight: 700; color: var(--text-hi); }
+  .empty-state .es-sub { font-size: 13px; color: var(--text-dim); }
+  /* 浮动刷新圆钮: 桌面端隐藏(移动媒体块内 display:flex 恢复) */
+  .fab-refresh { display: none; }
   @media (max-width: 900px) { .cmd, .cwd { min-width: 120px; } }
 
   /* ---------------- 手机端 (<768px): App 化布局 ----------------
@@ -3070,13 +3099,22 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 
   @media (max-width: 768px) {
     .meta { display: none !important; }  /* 移动端: 更新时间/端口数与主体状态卡重复,隐藏 */
-    -webkit-tap-highlight-color: transparent;
-    /* safe-area: 刘海/手势条不遮挡; 标题行+状态摘要合并紧凑化 */
-    header { padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
-             padding-top: calc(8px + env(safe-area-inset-top)); gap: 8px;
-             -webkit-backdrop-filter: blur(6px); }
-    header h1 { font-size: 15px; }
+    html { -webkit-tap-highlight-color: transparent; }
+    /* topbar 不固定(iOS Large Title 风): 随内容滚出视口, header 由 JS 移入 main;
+       背景透明无边框(不再悬浮), 左=服务器名大标题, 右=玻璃圆钮刷新 */
+    header { position: static; z-index: auto; background: none;
+             -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom: none;
+             padding: 12px max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
+             padding-top: calc(8px + env(safe-area-inset-top)); gap: 8px; }
+    header h1 { font-size: 30px; font-weight: 800; letter-spacing: -.4px; }
     header .spacer { display: none; }
+    header #refresh { width: 40px; height: 40px; min-height: 40px; border-radius: 50%;
+             background: var(--glass-bg); border: 1px solid var(--glass-bd);
+             -webkit-backdrop-filter: blur(20px) saturate(1.8);
+             backdrop-filter: blur(20px) saturate(1.8); }
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      header #refresh { background: var(--bg-elev); }
+    }
     .btn, .chip, .mbtn, .ctl-btn, .tcol, .aglog-refresh { padding: 9px 14px; font-size: 13px; min-height: 38px; }
     .icon-btn { min-height: 38px; }
     /* 内部滚动: main 自滚, 底部页签栏固定在文档流尾, 不再遮住最后一屏 */
@@ -3090,29 +3128,61 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
            -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
            padding: 10px max(12px, env(safe-area-inset-right)) 16px
                     max(12px, env(safe-area-inset-left)); }
-    /* 每页底部留出 页签栏+safe-area+余量: 滚到内容末尾时最后一条完整露出 */
-    #track > .pg { padding-bottom: calc(68px + 24px + env(safe-area-inset-bottom)); }
+    /* 每页底部留出 悬浮底栏(64px)+悬浮空隙(12px)+余量(24px)+safe-area: 末条完整露出 */
+    #track > .pg { padding-bottom: calc(64px + 12px + 24px + env(safe-area-inset-bottom)); }
 
-    /* 底部页签栏(唯一导航): 常规文档流尾部 + 毛玻璃, 不遮内容 */
-    #tabbar { display: flex; flex: none; z-index: 40;
-              background: var(--tabbar-bg);
-              -webkit-backdrop-filter: blur(16px) saturate(1.4);
-              backdrop-filter: blur(16px) saturate(1.4);
-              border-top: 1px solid var(--border);
-              padding: 4px max(8px, env(safe-area-inset-left)) calc(4px + env(safe-area-inset-bottom))
-                          max(8px, env(safe-area-inset-right)); }
+    /* 底部悬浮胶囊栏(iOS Liquid Glass): fixed 脱离文档流, 左右 20px 边距,
+       圆角 28px + 玻璃材质 + 细边框 + 柔和阴影; 选中=内嵌深色胶囊+强调蓝 */
+    #tabbar { display: flex; position: fixed; left: 20px; right: 20px;
+              bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 40;
+              border-radius: 28px; padding: 6px;
+              background: var(--glass-bg);
+              -webkit-backdrop-filter: blur(20px) saturate(1.8);
+              backdrop-filter: blur(20px) saturate(1.8);
+              border: 1px solid var(--glass-bd);
+              box-shadow: var(--glass-shadow); }
     #tabbar .tab { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
-                   padding: 7px 0 3px; min-height: 50px; color: var(--text-faint); font-size: 10.5px;
+                   padding: 6px 0 4px; min-height: 52px; border-radius: 22px;
+                   color: var(--text-faint); font-size: 10.5px;
                    cursor: pointer; user-select: none; -webkit-user-select: none;
-                   -webkit-tap-highlight-color: transparent; }
-    #tabbar .tab.active { color: var(--c-blue); }
+                   -webkit-tap-highlight-color: transparent;
+                   transition: background .18s ease, color .18s ease; }
+    #tabbar .tab.active { background: var(--nav-pill); color: var(--accent); }
     #tabbar .tab svg { width: 22px; height: 22px; }
     /* 概要页签未处理告警徽章: 红点+数字 */
     .tbadge-dot { position: absolute; top: 2px; left: calc(50% + 12px); min-width: 17px; height: 17px;
                   padding: 0 4px; border-radius: 999px; background: #c04848; color: #fff;
                   font-size: 10.5px; font-weight: 700; display: flex; align-items: center;
-                  justify-content: center; border: 1.5px solid var(--tabbar-bg); }
+                  justify-content: center; border: 1.5px solid var(--glass-bg); }
 
+    /* 浮动玻璃刷新圆钮: topbar 滚出视口后出现在底栏右上方 20px(IntersectionObserver 控制) */
+    .fab-refresh { position: fixed; right: 20px; bottom: calc(96px + env(safe-area-inset-bottom));
+                   z-index: 45; width: 48px; height: 48px; border-radius: 50%;
+                   display: flex; align-items: center; justify-content: center;
+                   background: var(--glass-bg); border: 1px solid var(--glass-bd);
+                   -webkit-backdrop-filter: blur(20px) saturate(1.8);
+                   backdrop-filter: blur(20px) saturate(1.8);
+                   box-shadow: var(--glass-shadow); color: var(--text-hi);
+                   cursor: pointer; user-select: none; -webkit-user-select: none;
+                   transition: transform .18s ease, opacity .18s ease; }
+    .fab-refresh:active { transform: scale(.92); }
+    .fab-refresh.locked { color: var(--c-warn); }
+    .fab-refresh .ic-badge { position: absolute; top: -4px; right: -4px; width: 16px; height: 16px;
+                             border-radius: 50%; background: var(--c-warn); color: var(--bg);
+                             display: none; align-items: center; justify-content: center; }
+    .fab-refresh.locked .ic-badge { display: inline-flex; }
+
+    /* 圆角体系统一: 小按钮 14-16px / 卡片 14-16px / chips 胶囊 */
+    .btn { border-radius: 16px; }
+    .ctl-btn, .al-btn, .aglog-refresh { border-radius: 14px; }
+    .mbtn { border-radius: 14px; }
+    .statuscard, .gpanel { border-radius: 16px; }
+    .mcell, .stat, .watchdog-panel { border-radius: 14px; }
+    #svc tbody tr { border-radius: 16px; }
+    .chip { border-radius: 999px; border-color: transparent; background: var(--chip-bg);
+            min-height: 44px; padding: 10px 16px; }
+    /* 表格 thead 锚点: topbar 不再固定 → 改为滚动容器(main)内 sticky top:0 */
+    main table thead th { position: sticky; top: 0; z-index: 5; background: var(--bg); }
     /* 两层结构: #pages(裁剪窗口) > #track(600% 轨道) > .pg(各 1/6 = 屏宽) */
     #pages { display: block; width: 100%; overflow: hidden; }
     body { overscroll-behavior-x: none; }  /* 关掉浏览器右滑返回/左滑前进接管 */
@@ -3151,7 +3221,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
                scrollbar-width: none; margin: 0 -12px 10px; padding: 0 12px 4px; }
     .filters::-webkit-scrollbar { display: none; }
     .filters .spacer { display: none; }
-    .chip { flex: none; padding: 8px 14px; font-size: 12.5px; }
+    .chip { flex: none; font-size: 12.5px; }
 
     /* 服务列表 → 卡片(左滑露「复制地址」, 头行右侧 44px 圆形打开按钮) */
     #svc thead { display: none; }
@@ -3219,6 +3289,12 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   @media (prefers-reduced-motion: reduce) {
     #track, .swipe-fg, .gmore { transition: none !important; }
     .skel-line { animation: none; }
+    .fab-refresh, #tabbar .tab { transition: none !important; }
+    .fab-refresh:active { transform: none; }
+  }
+  /* 玻璃材质降级: 低端设备不支持 backdrop-filter → 不透明实底 */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    #tabbar, .fab-refresh { background: var(--bg-elev); }
   }
   /* ---------------- ツール页 ---------------- */
   .toolspage .tl-sec + .tl-sec { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
@@ -3239,8 +3315,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
             font-size: 11.5px; white-space: nowrap; }
   .tl-val b { color: var(--text-hi); font-weight: 600; }
   .tl-head-big { font-size: 15px; font-weight: 600; }
-  .tl-head-big > span:first-child { display: inline-flex; align-items: center; }
-  .tl-copyrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tl-fsctl input[type="search"] { flex: 1 1 120px; background: var(--chip-bg); color: var(--text);
+      border: none; border-radius: 999px; padding: 10px 16px; font-size: 13px; min-height: 44px; }
   .tl-copyrow .btn { font-size: 12px; padding: 6px 12px; }
   .themechips { margin-bottom: 0; }
   /* ---- 文件浏览: 入口卡(工具页) + 独立全屏视图 + 文本预览 ---- */
@@ -3441,11 +3517,16 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .tl-netrow { display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 12.5px; }
   .tl-netrow .tl-val { margin-left: 0; }
   .tl-netrow .sep { flex: 1 1 auto; border-bottom: 1px dotted var(--btn-hover); }
-  .copy-toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom));
+  .copy-toast { position: fixed; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom));
       transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px;
-      background: var(--c-green-bg); color: var(--c-green); border: 1px solid var(--c-green-btn);
-      border-radius: 999px; padding: 8px 18px; font-size: 12.5px; z-index: 60;
+      background: var(--glass-bg); color: var(--c-green); border: 1px solid var(--glass-bd);
+      -webkit-backdrop-filter: blur(20px) saturate(1.8); backdrop-filter: blur(20px) saturate(1.8);
+      box-shadow: var(--glass-shadow);
+      border-radius: 999px; padding: 9px 18px; font-size: 12.5px; z-index: 60;
       pointer-events: none; transition: opacity .3s; }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .copy-toast { background: var(--bg-elev); color: var(--c-green); }
+  }
 </style>
 <header>
   <!-- topbar 重设计: 左=服务器名(HOSTNAME), 右=刷新按钮(点击刷新/长按锁定自动刷新)。
@@ -3459,6 +3540,10 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
         title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:17}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
 </header>
 <div id="ptr-indicator" aria-hidden="true"><svg class="ptr-ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="16.5"/></svg><span class="ptr-core">{{ICO:refresh:18}}</span></div>
+<!-- 浮动玻璃刷新圆钮(移动端): topbar 滚出视口后由 IntersectionObserver 显示;
+     点击=刷新/长按=锁定自动刷新, 与 topbar 刷新钮同一状态 -->
+<span class="fab-refresh" id="fab-refresh" role="button" tabindex="0" hidden
+      title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:20}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
 <main>
 <div id="pages">
 <div class="statuscard" id="statuscard" role="button" tabindex="0">
@@ -3689,6 +3774,12 @@ const ICONS = {{ICONS_JSON}};
 function icon(name, size = 16, cls = "ic") {
   const p = ICONS[name] || ICONS.dot;
   return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+}
+// 空状态(iOS 风): 灰色大图标 + 粗体主标题 + 灰色副标题
+function esHtml(ico, title) {
+  return `<div class="empty-state"><span class="es-ico">${icon(ico, 44)}</span>` +
+         `<span class="es-title">${escHtml(title)}</span>` +
+         `<span class="es-sub">${t("es_sub")}</span></div>`;
 }
 let autoOn = false;          // 自动刷新总开关(刷新按钮长按锁定时强制 false)
 let autoLocked = false;      // 长按锁定: true = 30s 自动刷新完全停止
@@ -4182,9 +4273,8 @@ async function doManage(btn) {
 }
 
 async function load(alsoSys) {
-  const btn = $("refresh");
-  btn.classList.add("spinning");
-  btn.setAttribute("aria-disabled", "true");
+  const btns = [$("refresh"), $("fab-refresh")].filter(Boolean);
+  btns.forEach(b => { b.classList.add("spinning"); b.setAttribute("aria-disabled", "true"); });
   ompCache = null; tasksCache = null; tmuxCache = null; // 手动刷新清面板缓存,拿到最新 agent/tmux/任务状态
   try {
     const r = await fetch("/api", { cache: "no-store" });
@@ -4206,8 +4296,7 @@ async function load(alsoSys) {
       console.error("sys refresh failed", err);
     }
   }
-  btn.classList.remove("spinning");
-  btn.setAttribute("aria-disabled", "false");
+  btns.forEach(b => { b.classList.remove("spinning"); b.setAttribute("aria-disabled", "false"); });
 }
 
 /* ================================================================
@@ -4278,7 +4367,7 @@ function goalAlerts(goals) {
 function renderAlerts(alerts) {
   const el = $("alert-body");
   if (!el) return;
-  if (!alerts.length) { el.innerHTML = `<div class="gempty">${t("al_none")}</div>`; return; }
+  if (!alerts.length) { el.innerHTML = esHtml("bell", t("al_none")); return; }
   el.innerHTML = alerts.map(a => `
     <div class="alert-item" data-key="${escAttr(a.key)}">
       <span class="al-ico ${a.icon[1]}">${icon(a.icon[0], 15)}</span>
@@ -4401,7 +4490,7 @@ async function renderLogTimeline() {
   body.innerHTML = `<div class="gempty">${t("a_loading")}</div>`;
   const d = await fetchGoalsData();
   const evs = filterEvents(d && d.events);
-  if (!evs.length) { body.innerHTML = `<div class="gempty">${t("ev_empty")}</div>`; return; }
+  if (!evs.length) { body.innerHTML = esHtml("clock", t("ev_empty")); return; }
   // 同 goal 同类事件连续 >=3 条 → 折叠「循环 ×N」(019feb87 类刷屏降噪)
   const groups = [];
   evs.forEach(e => {
@@ -4452,18 +4541,18 @@ document.querySelectorAll("#log-filters .chip").forEach(c => c.addEventListener(
   const touchCapable = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
   if (!touchCapable) return;
   const indicator = $("ptr-indicator");
-  const arrow = indicator.querySelector(".ptr-arrow");
-  const label = indicator.querySelector(".ptr-label");
+  const ring = indicator.querySelector(".ptr-ring circle");
+  const CIRC = 2 * Math.PI * 16.5;   // 圆环周长(r=16.5)
   const threshold = 70;
   let startY = 0, pull = 0, rawDistance = 0, tracking = false, refreshing = false;
   const setPull = (distance) => {
     rawDistance = Math.max(0, distance);
     pull = Math.min(110, rawDistance * 0.55);
     indicator.style.transform = `translateY(${pull}px)`;
-    arrow.style.transform = `rotate(${Math.min(180, rawDistance / threshold * 180)}deg)`;
-    const ready = rawDistance >= threshold;
-    indicator.classList.toggle("ready", ready);
-    label.textContent = t(ready ? "ptr_release" : "ptr_pull");
+    const prog = Math.min(1, rawDistance / threshold);
+    if (ring) ring.style.strokeDashoffset = String(CIRC * (1 - prog));
+    indicator.classList.toggle("on", rawDistance > 4);
+    indicator.classList.toggle("ready", rawDistance >= threshold);
   };
   // 内部滚动布局: 判断「页面已滚下」要看 main 滚动容器, 不再是 window
   const mainScroller = document.querySelector("main");
@@ -4488,7 +4577,7 @@ document.querySelectorAll("#log-filters .chip").forEach(c => c.addEventListener(
     indicator.classList.remove("ready");
     indicator.classList.add("loading");
     indicator.style.transform = "translateY(48px)";
-    label.textContent = t("ptr_loading");
+    // 圆环满格进入 loading 旋转态(ptr-core 旋转动画由 .loading CSS 驱动)
     console.log("[svc-dashboard] pull-to-refresh: load(true)");
     try { await load(true); }
     finally {
@@ -4509,28 +4598,50 @@ document.querySelectorAll(".tcol").forEach(b =>
     document.querySelectorAll(".tcol").forEach(x =>
       x.classList.toggle("active", x === b));
   }));
-$("refresh").addEventListener("click", () => {
-  if (refreshHoldDone) return;   // 长按已处理, 吞掉后续 click
-  haptic(8);
-  load(true);
-});
-// 长按(500ms)锁定/解锁自动刷新: 锁定时按钮变琥珀描边+锁形角标, 点击仍可手动刷新
+// 刷新控件(topbar 圆钮 + 移动端浮动圆钮共用): 点击=立即刷新, 长按(500ms)=锁定/解锁自动刷新
+// 锁定态=琥珀描边+锁形角标, 两个按钮视觉同步。
 let refreshHoldTimer = null, refreshHoldDone = false;
-["pointerdown", "touchstart"].forEach(ev => $("refresh").addEventListener(ev, () => {
-  refreshHoldDone = false;
-  clearTimeout(refreshHoldTimer);
-  refreshHoldTimer = setTimeout(() => {
-    refreshHoldDone = true;
-    autoLocked = !autoLocked;
-    $("refresh").classList.toggle("locked", autoLocked);
-    $("refresh").setAttribute("aria-pressed", autoLocked);
-    haptic(15);
-    themeToast(t(autoLocked ? "locked_toast" : "unlocked_toast"));
-    console.log("[svc-dashboard] auto refresh " + (autoLocked ? "locked" : "unlocked"));
-  }, 500);
-}, { passive: true }));
-["pointerup", "pointercancel", "touchend", "touchcancel", "pointerleave"].forEach(ev =>
-  $("refresh").addEventListener(ev, () => clearTimeout(refreshHoldTimer), { passive: true }));
+function refreshBtns() { return [$("refresh"), $("fab-refresh")].filter(Boolean); }
+function setAutoLocked(v) {
+  autoLocked = v;
+  refreshBtns().forEach(b => { b.classList.toggle("locked", v); b.setAttribute("aria-pressed", v); });
+}
+function bindRefreshCtl(btn) {
+  btn.addEventListener("click", () => {
+    if (refreshHoldDone) return;   // 长按已处理, 吞掉后续 click
+    haptic(8);
+    console.log("[svc-dashboard] manual refresh via " + btn.id);
+    load(true);
+  });
+  ["pointerdown", "touchstart"].forEach(ev => btn.addEventListener(ev, () => {
+    refreshHoldDone = false;
+    clearTimeout(refreshHoldTimer);
+    refreshHoldTimer = setTimeout(() => {
+      refreshHoldDone = true;
+      setAutoLocked(!autoLocked);
+      haptic(15);
+      themeToast(t(autoLocked ? "locked_toast" : "unlocked_toast"));
+      console.log("[svc-dashboard] auto refresh " + (autoLocked ? "locked" : "unlocked") + " via " + btn.id);
+    }, 500);
+  }, { passive: true }));
+  ["pointerup", "pointercancel", "touchend", "touchcancel", "pointerleave"].forEach(ev =>
+    btn.addEventListener(ev, () => clearTimeout(refreshHoldTimer), { passive: true }));
+}
+refreshBtns().forEach(bindRefreshCtl);
+// 浮动刷新圆钮显隐: topbar(header, 已移入 main)滚出视口 → 显示; 回到顶部 → 隐藏。
+// IntersectionObserver 观察 header, root=main 滚动容器; 桌面端 isMobile()=false 恒隐藏。
+(function setupFab() {
+  const fab = $("fab-refresh"), hdr = document.querySelector("header");
+  if (!fab || !hdr || !("IntersectionObserver" in window)) return;
+  const io = new IntersectionObserver((entries) => {
+    for (const en of entries) {
+      const show = !en.isIntersecting && isMobile();
+      fab.hidden = !show;
+      console.log("[svc-dashboard] fab " + (show ? "visible (topbar scrolled out)" : "hidden"));
+    }
+  }, { root: document.querySelector("main"), threshold: 0 });
+  io.observe(hdr);
+})();
 // 全局键盘委托: 所有 span[role=button] 控件支持 Enter/Space 触发
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") return;
@@ -4560,8 +4671,21 @@ const PAGE_GROUPS = [
   ["#agents-page"],
   ["#toolspage"],
 ];
-let pagesHomeOrder = null, pgWrappers = null, trackEl = null;
+let pagesHomeOrder = null, pgWrappers = null, trackEl = null, headerHome = null;
+function placeHeader(mobile) {
+  // 移动端: header 移入 main 顶部 → 随内容滚出视口(不固定); 桌面: 放回 body 原位(sticky)。
+  // 移动方向只在断点切换时执行一次, 载入时即按当前视口就位。
+  const hdr = document.querySelector("header"), main = document.querySelector("main");
+  if (!hdr || !main) return;
+  if (mobile && hdr.parentElement !== main) {
+    if (!headerHome) headerHome = { parent: hdr.parentElement, next: hdr.nextElementSibling };
+    main.insertBefore(hdr, main.firstChild);
+  } else if (!mobile && headerHome && hdr.parentElement !== headerHome.parent) {
+    headerHome.parent.insertBefore(hdr, headerHome.next);
+  }
+}
 function regroupPages() {
+  placeHeader(mqMobile.matches);
   if (!mqMobile.matches) {
     if (pagesHomeOrder) { // 桌面: 按原顺序放回 #pages, 撤掉轨道
       pagesHomeOrder.forEach(el => pages.appendChild(el));
@@ -4740,7 +4864,7 @@ async function initAgentsPage() {
       <div class="grow"><span>${t("a_active")}</span><span class="gidle">${t("a_ago", { s: x.idle_seconds })}</span></div></div>`);
   });
   el.innerHTML = `<h2>${t("a_title")} <span class="ghint">${t("a_hint", { n: total })}</span></h2>` +
-    `<div class="gcards">${cards.join("") || `<div class="gempty">${t("a_none")}</div>`}</div>`;
+    `<div class="gcards">${cards.join("") || esHtml("cpu", t("a_none"))}</div>`;
   // 点模型卡 → 跳日志页并选中该 agent
   el.querySelectorAll(".gcard").forEach(c =>
     c.addEventListener("click", async () => {
