@@ -3433,7 +3433,18 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
              text-overflow: ellipsis; white-space: nowrap; }
   .rc-ago { color: var(--text-dim); font-size: 12px; flex: none; }
   /* 日志时间线: 第一行 图标+类型+相对时间, 第二行一句话摘要, 详情默认折叠 */
-  .lv { border-bottom: 1px solid var(--border-faint); padding: 9px 2px; }
+  .lv { border-bottom: 1px solid var(--border-faint); padding: 9px 2px 9px 9px;
+        border-left: 3px solid transparent; }
+  .lv-ok { border-left-color: var(--c-green); }   /* P1-3: 事件行左缘状态色条 */
+  .lv-warn { border-left-color: var(--c-warn); }
+  .lv-fail { border-left-color: var(--c-red); }
+  .lv-recover { border-left-color: var(--c-blue); }
+  /* P1-3: 日志状态筛选 chips 色点 成功=绿 告警=黄 失败=红 恢复=蓝 */
+  .cdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+  .cdot-ok { background: var(--c-green); }
+  .cdot-warn { background: var(--c-warn); }
+  .cdot-fail { background: var(--c-red); }
+  .cdot-recover { background: var(--c-blue); }
   .lv:last-child { border-bottom: none; }
   .lv-line1 { display: flex; align-items: baseline; gap: 8px; font-size: 14px; color: var(--text-hi); min-width: 0; }
   .lv-ico { flex: none; display: inline-flex; align-items: center; }
@@ -4005,10 +4016,10 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <div class="logbar"><div class="ui-select" id="logagent-picker"><span class="ui-select-value" id="logagent-value">{{T:log_pick}}</span><span class="ui-select-chevron">{{ICO:down:14}}</span><div class="ui-select-menu" id="logagent-menu" hidden></div></div><select id="logagent-sel" class="select-model" aria-hidden="true" tabindex="-1"><option value="">{{T:log_pick}}</option></select></div>
   <div class="filters" id="log-filters">
     <span class="chip active" data-lf="all" role="button" tabindex="0">{{T:lf_all}}</span>
-    <span class="chip" data-lf="ok" role="button" tabindex="0">{{T:lf_success}}</span>
-    <span class="chip" data-lf="warn" role="button" tabindex="0">{{T:lf_warn}}</span>
-    <span class="chip" data-lf="fail" role="button" tabindex="0">{{T:lf_fail}}</span>
-    <span class="chip" data-lf="recover" role="button" tabindex="0">{{T:lf_recover}}</span>
+    <span class="chip" data-lf="ok" role="button" tabindex="0"><i class="cdot cdot-ok" aria-hidden="true"></i>{{T:lf_success}}</span>
+    <span class="chip" data-lf="warn" role="button" tabindex="0"><i class="cdot cdot-warn" aria-hidden="true"></i>{{T:lf_warn}}</span>
+    <span class="chip" data-lf="fail" role="button" tabindex="0"><i class="cdot cdot-fail" aria-hidden="true"></i>{{T:lf_fail}}</span>
+    <span class="chip" data-lf="recover" role="button" tabindex="0"><i class="cdot cdot-recover" aria-hidden="true"></i>{{T:lf_recover}}</span>
     <span class="chip active" data-ls="all" role="button" tabindex="0">{{T:lf_wd}}</span>
     <span class="chip" data-ls="done" role="button" tabindex="0">{{T:lf_done}}</span>
     <span class="chip" data-ls="commit" role="button" tabindex="0">{{T:lf_commit}}</span>
@@ -5065,7 +5076,7 @@ async function renderLogTimeline() {
   groups.forEach(g => {
     const head = g.items[0];
     if (g.items.length >= 3) {
-      html += `<div class="lv">${lvHead(head, `<span class="lv-loop">${t("ev_loop", { n: g.items.length })}</span>`)}` +
+      html += `<div class="lv lv-${(EV_META[head.kind] || EV_META.other).grp}">${lvHead(head, `<span class="lv-loop">${t("ev_loop", { n: g.items.length })}</span>`)}` +
         `<div class="lv-line2">${escHtml(evSummary(head))}</div>` +
         `<span class="lv-fold" role="button" tabindex="0">${t("g_detail")}</span>` +
         `<div class="lv-meta">${g.items.map(x => escHtml(x.time + " · " + x.gid + " · " + x.text)).join("<br>")}</div>` +
@@ -5073,7 +5084,7 @@ async function renderLogTimeline() {
           lvHead(x) + `<div class="lv-line2">${escHtml(evSummary(x))}</div>`).join("")}` +
         `${g.items.length > 12 ? `<div class="lv-more">… ${g.items.length - 12}</div>` : ""}</div></div>`;
     } else {
-      html += g.items.map(e => `<div class="lv">${lvHead(e)}` +
+      html += g.items.map(e => `<div class="lv lv-${(EV_META[e.kind] || EV_META.other).grp}">${lvHead(e)}` +
         `<div class="lv-line2">${escHtml(evSummary(e))}</div>` +
         `<span class="lv-fold" role="button" tabindex="0">${t("g_detail")}</span>` +
         `<div class="lv-meta">${escHtml(e.time)} · ${escHtml(e.gid)} · ${escHtml(e.src)}<br>${escHtml(e.text)}</div></div>`).join("");
