@@ -5107,6 +5107,11 @@ function copyText(txt, btn) {
 
 // --- 日志页: agent 选择 + 事件时间线(长按复制) ---
 let logAgents = null;
+// escHtml/escAttr 必须声明在 syncLogAgentPicker 与下方 IIFE 之前:
+// initLogAgentPicker 在模块求值期立即执行, const 放后面会触发 TDZ
+// ReferenceError 并杀死整个主脚本(catbar/hash 路由/load 全部不执行)。
+const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const escAttr = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function syncLogAgentPicker() {
   const sel = $("logagent-sel"), menu = $("logagent-menu"), value = $("logagent-value"), picker = $("logagent-picker");
   if (!sel || !menu || !value || !picker) return;
@@ -5114,13 +5119,13 @@ function syncLogAgentPicker() {
   value.textContent = sel.options[sel.selectedIndex]?.textContent || t("log_pick");
   menu.querySelectorAll(".ui-option").forEach(o => o.addEventListener("click", () => { sel.selectedIndex = +o.dataset.index; menu.hidden = true; syncLogAgentPicker(); sel.dispatchEvent(new Event("change")); }));
 }
-(function initLogAgentPicker() {
+function initLogAgentPicker() {
   const picker = $("logagent-picker"), menu = $("logagent-menu");
   if (!picker || !menu) return;
   picker.addEventListener("click", e => { if (!e.target.closest(".ui-option")) menu.hidden = !menu.hidden; });
   document.addEventListener("click", e => { if (!picker.contains(e.target)) menu.hidden = true; });
   syncLogAgentPicker();
-})();
+}
 
 async function initLogPage(force) {
   if (!isMobile()) return;
@@ -5165,8 +5170,7 @@ function toastCopied(anchor) {
   document.body.appendChild(d);
   setTimeout(() => { d.style.opacity = "0"; setTimeout(() => d.remove(), 350); }, 1400);
 }
-const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const escAttr = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// (escHtml/escAttr 已上移到 syncLogAgentPicker 之前, 此处勿重复声明)
 
 // --- 模型页: OMP / Codex agent 卡片(状态灯+名称+最近活动+日志入口) ---
 let agentsInit = false;
@@ -6301,6 +6305,7 @@ if (isMobile()) {
   if (!savedCat) { try { savedCat = localStorage.getItem("svc-cat"); } catch (e) {} }
   setCat(CATS.some(c => c[0] === savedCat) ? savedCat : "all", false);  // URL 优先，随后本地恢复
 }
+initLogAgentPicker();   // 延后到这里: escHtml 等 const 已初始化(避免 TDZ 崩整页)
 load(true);
 hydrateFragments();
 </script>
