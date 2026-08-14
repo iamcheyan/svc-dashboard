@@ -3671,6 +3671,13 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .ui-action.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   .ui-action:hover { filter:brightness(1.08); }
   .ui-notice { position:fixed; z-index:1100; left:50%; bottom:32px; transform:translateX(-50%); max-width:min(520px, calc(100vw - 32px)); padding:12px 16px; border:1px solid var(--glass-bd); border-radius:15px; background:var(--glass-bg); color:var(--text-main); box-shadow:0 12px 36px rgba(0,0,0,.28); backdrop-filter:blur(18px); }
+  .ui-select { position:relative; display:flex; align-items:center; justify-content:space-between; min-height:40px; min-width:min(100%, 360px); padding:9px 12px 9px 13px; border:1px solid var(--glass-bd); border-radius:13px; background:var(--glass-bg); color:var(--text-main); cursor:pointer; }
+  .ui-select-chevron { color:var(--text-dim); display:flex; }
+  .ui-select-menu { position:absolute; z-index:900; left:0; right:0; top:calc(100% + 7px); max-height:260px; overflow:auto; padding:5px; border:1px solid var(--glass-bd); border-radius:15px; background:var(--bg-elev); box-shadow:0 14px 40px rgba(0,0,0,.28); }
+  .ui-select-menu[hidden] { display:none; }
+  .ui-option { padding:10px 11px; border-radius:10px; color:var(--text-main); cursor:pointer; }
+  .ui-option:hover, .ui-option.active { background:var(--btn-soft-hover); color:var(--text-title); }
+  .select-model { position:absolute !important; width:1px !important; height:1px !important; opacity:0 !important; pointer-events:none !important; }
   input[type="checkbox"] { appearance:none; -webkit-appearance:none; width:18px; height:18px; margin:0 8px 0 0; vertical-align:-4px; border:1px solid var(--btn-soft-bd); border-radius:5px; background:var(--btn-soft-bg); cursor:pointer; }
   input[type="checkbox"]:checked { border-color:var(--accent); background:var(--accent); }
   input[type="checkbox"]:checked::after { content:""; display:block; width:5px; height:9px; margin:2px 0 0 5px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
@@ -3793,7 +3800,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 </div>
 <div class="gpanel" id="logpage" hidden>
   <h2>{{T:tab_log}}</h2>
-  <div class="logbar"><select id="logagent-sel"><option value="">{{T:log_pick}}</option></select></div>
+  <div class="logbar"><div class="ui-select" id="logagent-picker"><span class="ui-select-value" id="logagent-value">{{T:log_pick}}</span><span class="ui-select-chevron">{{ICO:down:14}}</span><div class="ui-select-menu" id="logagent-menu" hidden></div></div><select id="logagent-sel" class="select-model" aria-hidden="true" tabindex="-1"><option value="">{{T:log_pick}}</option></select></div>
   <div class="filters" id="log-filters">
     <span class="chip active" data-lf="all" role="button" tabindex="0">{{T:lf_all}}</span>
     <span class="chip" data-lf="ok" role="button" tabindex="0">{{T:lf_success}}</span>
@@ -5065,6 +5072,21 @@ function copyText(txt, btn) {
 
 // --- 日志页: agent 选择 + 事件时间线(长按复制) ---
 let logAgents = null;
+function syncLogAgentPicker() {
+  const sel = $("logagent-sel"), menu = $("logagent-menu"), value = $("logagent-value"), picker = $("logagent-picker");
+  if (!sel || !menu || !value || !picker) return;
+  menu.innerHTML = [...sel.options].map((o, i) => `<div class="ui-option${i === sel.selectedIndex ? " active" : ""}" data-index="${i}" role="option" tabindex="0">${escHtml(o.textContent)}</div>`).join("");
+  value.textContent = sel.options[sel.selectedIndex]?.textContent || t("log_pick");
+  menu.querySelectorAll(".ui-option").forEach(o => o.addEventListener("click", () => { sel.selectedIndex = +o.dataset.index; menu.hidden = true; syncLogAgentPicker(); sel.dispatchEvent(new Event("change")); }));
+}
+(function initLogAgentPicker() {
+  const picker = $("logagent-picker"), menu = $("logagent-menu");
+  if (!picker || !menu) return;
+  picker.addEventListener("click", e => { if (!e.target.closest(".ui-option")) menu.hidden = !menu.hidden; });
+  document.addEventListener("click", e => { if (!picker.contains(e.target)) menu.hidden = true; });
+  syncLogAgentPicker();
+})();
+
 async function initLogPage(force) {
   if (!isMobile()) return;
   const sel = $("logagent-sel"), body = $("logbody");
@@ -5076,6 +5098,7 @@ async function initLogPage(force) {
   agents.omp.forEach(x => { opts += `<option value='${escAttr(x.id)}' data-cwd='${escAttr(x.cwd)}' data-tmux='${escAttr(x.tmux)}'>OMP · ${escHtml((x.goal || x.cwd).slice(0, 48))}</option>`; });
   agents.codex.forEach(x => { opts += `<option value='' data-cwd='${escAttr(x.cwd)}' data-tmux=''>Codex · ${escHtml(x.cwd.slice(-40))}</option>`; });
   sel.innerHTML = opts;
+  syncLogAgentPicker();
   if (!body.children.length) loadLogView();
 }
 async function loadLogView() {
