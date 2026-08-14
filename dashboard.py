@@ -175,11 +175,9 @@ def _run_sudo_ss():
 
 
 def priv_scan():
-    """同步扫一次 sudo ss,缓存结果供本次 gather() 的多次 priv_lookup 复用。
-
-    只在 gather() 调用时执行(即用户访问页面触发),无后台线程、无自动刷新。
-    本机 ss 极慢(24min),_run_sudo_ss 内部 8s 超时 + 杀进程组,不会阻塞页面。
-    """
+    """同步扫一次特权 fallback；root dashboard 直接读 /proc，不调用 sudo ss。"""
+    if os.geteuid() == 0:
+        return {}
     with _priv["lock"]:
         if _priv["map"] is None:
             _priv["map"] = _run_sudo_ss()
@@ -560,6 +558,7 @@ ICONS = {
               '<path d="M6.6 12.8a1.5 1.5 0 0 0 2.8 0"/>',
     "trash":  '<path d="M2.8 4.2h10.4M6.4 4.2V2.6h3.2v1.6M4.2 4.2l.6 9.2h6.4l.6-9.2M6.7 6.8v4M9.3 6.8v4"/>',
     "box":    '<path d="M8 1.8 13.6 4.6v6.8L8 14.2 2.4 11.4V4.6Z"/><path d="M2.4 4.6 8 7.4l5.6-2.8M8 7.4v6.8"/>',
+    "branch": '<circle cx="4.5" cy="3.6" r="1.7"/><circle cx="4.5" cy="12.4" r="1.7"/><circle cx="11.5" cy="5.2" r="1.7"/><path d="M4.5 5.3v5.4M11.5 6.9c0 2.6-5.3 1.8-6.5 4"/>',
     "folder": '<path d="M1.8 4.3c0-.6.5-1.1 1.1-1.1h3l1.5 1.7h5.7c.6 0 1.1.5 1.1 1.1v6c0 .6-.5 1.1-1.1 1.1H2.9c-.6 0-1.1-.5-1.1-1.1Z"/>',
     "file":   '<path d="M4 1.8h5.2L12.4 5v9.2H4Z"/><path d="M9 1.8V5h3.4"/>',
     "heart":  '<path d="M8 13.6S1.8 10.2 1.8 6C1.8 4 3.3 2.6 5.1 2.6c1.2 0 2.3.7 2.9 1.7.6-1 1.7-1.7 2.9-1.7 1.8 0 3.3 1.4 3.3 3.4 0 4.2-6.2 7.6-6.2 7.6Z"/>',
@@ -622,7 +621,7 @@ KIND_META = {
     "nudge": ("bell", "t-warn", "evk_nudge"),
     "pause": ("pause", "t-warn", "evk_pause"),
     "cleanup": ("trash", "t-green", "evk_cleanup"),
-    "commit": ("box", "t-green", "evk_commit"),
+    "commit": ("branch", "t-green", "evk_commit"),
 }
 
 def render_sysbar(s, lang=DEFAULT_LANG):
@@ -724,10 +723,9 @@ L10N = {
         "g_copy": "复制 resume 命令", "g_copied": "已复制",
         "g_none": "当前没有在跑的 goal",
         "g_done_fold": "已完成 goal（{n}）",
-        "ld_title": "建议并发", "ld_ok": "还可开 {n} 个 goal",
-        "ld_full": "满载，别再开了", "ld_over": "过载，先别开",
-        "ld_load": "load15 {l} / {c}核",
-        "ld_cpu": "CPU top5", "ld_mem": "内存 top5",
+        "rp_title": "仓库", "rp_hint": "agent / goal 改动过的仓库",
+        "rp_refresh": "刷新统计", "rp_empty": "没有 agent 改动过的仓库",
+        "rp_commits": "{n} 提交", "rp_dirty": "{n} 未提交", "rp_files": "{n} 文件",
         "ev_title": "最近事件", "ev_hint": "watchdog 动作 + goal 完成台账",
         "ev_complete": "完成", "ev_restart": "watchdog 重启",
         "ev_nudge": "watchdog 催行", "ev_recover": "已恢复",
@@ -772,7 +770,7 @@ L10N = {
         "fs_rel_now": "刚刚", "fs_rel_s": "{n} 秒前", "fs_rel_m": "{n} 分钟前",
         "fs_rel_h": "{n} 小时前", "fs_rel_d": "{n} 天前", "fs_rel_y": "昨天",
         "g_ago_d": "{d} 天前",
-        "tab_tools": "ツール",
+        "tab_tools": "工具", "cat_all": "全部", "cat_more": "查看更多",
         "tl_health_title": "健康检查", "tl_health_run": "跑一次检查", "tl_health_loading": "检查中…",
         "tl_h_load": "负载", "tl_h_cpu": "CPU", "tl_h_mem": "内存", "tl_h_swap": "Swap",
         "tl_h_disk": "磁盘 /", "tl_h_temp": "温度", "tl_h_trend": "磁盘趋势",
@@ -869,10 +867,9 @@ L10N = {
         "g_copy": "Copy resume cmd", "g_copied": "copied",
         "g_none": "No running goals",
         "g_done_fold": "Completed goals ({n})",
-        "ld_title": "Concurrency", "ld_ok": "room for {n} more goal(s)",
-        "ld_full": "at capacity, no more goals", "ld_over": "overloaded, hold off",
-        "ld_load": "load15 {l} / {c} cores",
-        "ld_cpu": "CPU top5", "ld_mem": "Memory top5",
+        "rp_title": "Repos", "rp_hint": "touched by agents / goals",
+        "rp_refresh": "refresh stats", "rp_empty": "No agent-touched repos",
+        "rp_commits": "{n} commits", "rp_dirty": "{n} uncommitted", "rp_files": "{n} files",
         "ev_title": "Recent events", "ev_hint": "watchdog actions + completions",
         "ev_complete": "complete", "ev_restart": "watchdog restart",
         "ev_nudge": "watchdog nudge", "ev_recover": "recovered",
@@ -880,7 +877,7 @@ L10N = {
         "ev_other": "·", "ev_none": "No events yet",
         "g_ago_s": "{s}s ago", "g_ago_m": "{m}m ago", "g_ago_h": "{h}h ago",
         "tab_home": "Overview", "tab_goal": "Goal", "tab_svc": "Services", "tab_model": "Models", "tab_log": "Logs",
-        "tab_tools": "Tools",
+        "tab_tools": "Tools", "cat_all": "All", "cat_more": "View more",
         "act_open": "Open", "act_copy_addr": "Copy address", "g_detail": "details",
         "chart_title": "Load / CPU trend", "chart_win": "window {n} pts",
         "chart_empty": "Collecting samples: refresh a few times (pinch to adjust window)",
@@ -1013,13 +1010,11 @@ L10N = {
         "g_done": "完了", "g_lost": "セッション消失",
         "g_ctx": "コンテキスト", "g_ctx_high": "高め", "g_ctx_stop": "停止推奨",
         "g_last": "最終活動", "g_stalled": "STALLED の可能性",
-        "ld_ok": "あと {n} 個まで起動可能",
         "g_none": "実行中の goal はありません",
         "g_done_fold": "完了済み goal（{n}）",
-        "ld_title": "推奨同時実行",
-        "ld_full": "満杯、これ以上は不可", "ld_over": "過負荷、控えて",
-        "ld_load": "load15 {l} / {c}コア",
-        "ld_cpu": "CPU top5", "ld_mem": "メモリ top5",
+        "rp_title": "リポジトリ", "rp_hint": "agent・goal が変更したリポジトリ",
+        "rp_refresh": "統計を更新", "rp_empty": "該当リポジトリはありません",
+        "rp_commits": "{n} コミット", "rp_dirty": "未コミット {n}", "rp_files": "{n} ファイル",
         "ev_title": "最近のイベント", "ev_hint": "watchdog 操作 + 完了台帳",
         "ev_complete": "完了", "ev_restart": "watchdog 再起動",
         "ev_nudge": "watchdog 促し", "ev_recover": "復旧",
@@ -1064,7 +1059,7 @@ L10N = {
         "evk_nudge": "催促", "evk_recover": "復旧", "evk_pause": "一時停止",
         "evk_cleanup": "クリーンアップ", "evk_commit": "コミット", "evk_other": "その他",
         "g_ago_d": "{d} 日前",
-        "tab_tools": "ツール",
+        "tab_tools": "ツール", "cat_all": "すべて", "cat_more": "もっと見る",
         "tl_health_title": "ヘルスチェック", "tl_health_run": "チェック実行", "tl_health_loading": "チェック中…",
         "tl_h_load": "負荷", "tl_h_cpu": "CPU", "tl_h_mem": "メモリ", "tl_h_swap": "Swap",
         "tl_h_disk": "ディスク /", "tl_h_temp": "温度", "tl_h_trend": "ディスク推移",
@@ -2083,9 +2078,9 @@ def parse_watchdog_events(limit=20):
     return out
 
 
-def merge_events(wd_events, completed, limit=24):
-    """watchdog 事件 + 完成台账合并为一条时间线(时间倒序)。
-    每条带 src 标记(watchdog / done),前端日志页按来源筛选。"""
+def merge_events(wd_events, completed, commits=None, limit=24):
+    """watchdog 事件 + 完成台账 + 仓库提交合并为一条时间线(时间倒序)。
+    每条带 src 标记(watchdog / done / commit),前端日志页按来源筛选。"""
     merged = [{"ts": e["ts"], "time": e["time"], "gid": e["gid"], "name": e["name"],
                "kind": e["kind"], "text": e["text"], "src": "watchdog"}
               for e in wd_events]
@@ -2093,8 +2088,162 @@ def merge_events(wd_events, completed, limit=24):
         merged.append({"ts": c["ts"], "time": c["time"], "gid": c["gid"],
                        "name": c["label"] or c["gid"][:8], "kind": "complete",
                        "text": c["transcript"], "src": "done"})
+    merged.extend(commits or [])
     merged.sort(key=lambda x: -x["ts"])
     return merged[:limit]
+
+
+# ---------------- 仓库层: agent/goal 改动过的 git 仓库 ----------------
+# 仓库集合来自现成数据源(watchdog GOALS workdir / 完成台账 workdir /
+# 在跑 omp/codex 的 cwd),逐级向上找 .git 定位仓库根,不做全盘扫描。
+# 提交事件(git log)60s 缓存;完整统计(du 大小/文件占比)600s 缓存,
+# /api/repos?refresh=1 按需强制重算。
+
+_repo_set_cache = {"t": 0.0, "repos": None}
+_repo_ev_cache = {"t": 0.0, "data": None}
+_repo_stats_cache = {"t": 0.0, "data": None}
+
+
+def _git(repo, args, timeout=6):
+    """只读跑 git;服务以 root 跑、仓库属主是 tetsuya,用 safe.directory=*
+    跳过 dubious-ownership;--no-optional-locks 防止 status 刷新别人的索引。"""
+    cmd = ["git", "-c", "safe.directory=*", "-c", "core.quotepath=off",
+           "--no-optional-locks", "-C", repo] + args
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.stdout if r.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _git_root(path):
+    """从 path 逐级向上找 .git 目录;找不到返回 None。纯 os 调用,不 spawn。"""
+    p = os.path.realpath(path)
+    while True:
+        if os.path.isdir(os.path.join(p, ".git")):
+            return p
+        parent = os.path.dirname(p)
+        if parent == p:
+            return None
+        p = parent
+
+
+def agent_repos():
+    """agent/goal 任务改动过的 git 仓库根列表(去重,按 .git mtime 倒序)。"""
+    now = time.time()
+    if _repo_set_cache["repos"] is not None and now - _repo_set_cache["t"] < 60:
+        return _repo_set_cache["repos"]
+    dirs = []
+    for g in watchdog_goals().values():
+        if g.get("workdir"):
+            dirs.append(g["workdir"])
+    for c in parse_completed_goals(limit=100):
+        if c.get("workdir"):
+            dirs.append(c["workdir"])
+    for a in scan_omp() + scan_codex():
+        if a.get("cwd"):
+            dirs.append(a["cwd"])
+    roots = {}
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        r = _git_root(d)
+        if not r:
+            continue
+        try:
+            roots[r] = os.path.getmtime(os.path.join(r, ".git"))
+        except OSError:
+            roots[r] = 0.0
+    repos = [p for p, _ in sorted(roots.items(), key=lambda kv: -kv[1])]
+    _repo_set_cache.update({"t": now, "repos": repos})
+    return repos
+
+
+def parse_repo_commits(per_repo=12, total=60):
+    """各 agent 仓库最近提交 -> commit 事件(60s 缓存)。
+    事件 shape 与 merge_events 其余来源同构: kind/src 均为 "commit"。"""
+    now = time.time()
+    if _repo_ev_cache["data"] is not None and now - _repo_ev_cache["t"] < 60:
+        return _repo_ev_cache["data"]
+    out = []
+    for repo in agent_repos():
+        name = os.path.basename(repo.rstrip("/"))
+        text = _git(repo, ["log", "-n", str(per_repo),
+                           "--format=%h%x1f%ct%x1f%s%x1f%an"])
+        for line in text.splitlines():
+            parts = line.split("\x1f")
+            if len(parts) != 4:
+                continue
+            h, ct, subj, author = parts
+            try:
+                ts = float(ct)
+            except ValueError:
+                continue
+            out.append({"ts": ts,
+                        "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)),
+                        "gid": h, "name": name, "kind": "commit",
+                        "text": f"{subj} — {author}", "src": "commit"})
+    out.sort(key=lambda x: -x["ts"])
+    out = out[:total]
+    _repo_ev_cache.update({"t": now, "data": out})
+    return out
+
+
+def _repo_one_stats(repo):
+    """单仓库统计: 分支/提交数/最近提交/大小(du)/未提交数/文件后缀占比。"""
+    st = {"name": os.path.basename(repo.rstrip("/")), "path": repo,
+          "branch": _git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]).strip() or "—"}
+    cnt = _git(repo, ["rev-list", "--count", "HEAD"]).strip()
+    st["commits"] = int(cnt) if cnt.isdigit() else None
+    parts = _git(repo, ["log", "-1", "--format=%h%x1f%ct%x1f%s%x1f%an"]).strip().split("\x1f")
+    if len(parts) == 4 and parts[1].isdigit():
+        ts = int(parts[1])
+        st["last"] = {"hash": parts[0], "ts": ts,
+                      "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)),
+                      "subject": parts[2], "author": parts[3]}
+    else:
+        st["last"] = None
+    # 工作区大小: du 是最贵的一项,超时则 size=None 前端显示 —
+    try:
+        r = subprocess.run(["du", "-sb", repo], capture_output=True, text=True, timeout=20)
+        st["size"] = int(r.stdout.split()[0]) if r.returncode == 0 else None
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        st["size"] = None
+    st["dirty"] = len([x for x in _git(repo, ["status", "--porcelain"]).splitlines() if x.strip()])
+    # 文件占比: git ls-files 只读索引,按后缀计数(后缀 ≤6 字符)
+    exts, n_files = {}, 0
+    for f in _git(repo, ["ls-files"]).splitlines():
+        if not f:
+            continue
+        n_files += 1
+        i = f.rfind(".")
+        ext = f[i:].lower() if 0 < i and len(f) - i <= 6 else "—"
+        exts[ext] = exts.get(ext, 0) + 1
+    st["files"] = n_files
+    top = sorted(exts.items(), key=lambda kv: -kv[1])[:5]
+    st["exts"] = [[k, v, round(v * 100.0 / n_files, 1)] for k, v in top] if n_files else []
+    return st
+
+
+def repo_stats(refresh=False):
+    """/api/repos 数据: 各仓库完整统计。600s 缓存;仓库集合变化或
+    ?refresh=1 时重算。"""
+    repos = agent_repos()
+    now = time.time()
+    if (not refresh and _repo_stats_cache["data"] is not None
+            and now - _repo_stats_cache["t"] < 600
+            and {r["path"] for r in _repo_stats_cache["data"]["repos"]} == set(repos)):
+        return _repo_stats_cache["data"]
+    out = []
+    for repo in repos:
+        try:
+            out.append(_repo_one_stats(repo))
+        except Exception:
+            continue
+    out.sort(key=lambda x: -((x.get("last") or {}).get("ts") or 0))
+    data = {"updated": time.time(), "repos": out}
+    _repo_stats_cache.update({"t": time.time(), "data": data})
+    return data
 
 
 def _tmux_run(args, timeout=2):
@@ -2463,32 +2612,6 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
             f'<div class="gcards">{body}</div>{fold}</div>')
 
 
-def render_loadline(s, lang=DEFAULT_LANG):
-    """负载水位线: 还可开几个 goal + CPU/内存 top5 进程。"""
-    gl = s.get("goalload") or {}
-    zone, n = gl.get("zone", "none"), gl.get("n", 0)
-    msg = {"ok": t(lang, "ld_ok", n=n), "full": t(lang, "ld_full"),
-           "over": t(lang, "ld_over")}.get(zone, "—")
-    ico_name, color = {"ok": ("dot", "var(--c-green)"), "full": ("pause", "var(--c-warn)"),
-                       "over": ("err", "var(--c-red)")}.get(zone, ("dot", "var(--c-gray)"))
-    load15 = gl.get("load15")
-    sub = t(lang, "ld_load", l=(f"{load15:.1f}" if load15 is not None else "—"),
-            c=gl.get("cores", "?"))
-
-    def top_rows(items, fmt):
-        if not items:
-            return f'<div class="ld-row" style="color:var(--text-dead)">—</div>'
-        return "".join(f'<div class="ld-row"><span class="ld-val">{fmt(v)}</span>'
-                       f'<span class="ld-name">{escape(k)}</span></div>' for v, k in items)
-
-    cpu_rows = top_rows(gl.get("cpu_top") or [], lambda v: f"{v:.0f}%")
-    mem_rows = top_rows(gl.get("mem_top") or [], lambda v: f"{v / 1024:.1f}G" if v >= 1024 else f"{v:.0f}M")
-    return (f'<div class="gpanel loadline" id="loadline">'
-            f'<div class="ld-head"><span class="ld-ico" style="color:{color}">{icon(ico_name, 14)}</span>'
-            f'<b>{t(lang, "ld_title")}</b>：{msg}'
-            f'<span class="ld-sub">（{sub}）</span></div>'
-            f'<div class="ld-tops"><div class="ld-top"><div class="ld-t">{t(lang, "ld_cpu")}</div>{cpu_rows}</div>'
-            f'<div class="ld-top"><div class="ld-t">{t(lang, "ld_mem")}</div>{mem_rows}</div></div></div>')
 
 
 def render_toolchips(entries, host_header, lang=DEFAULT_LANG):
@@ -2587,11 +2710,11 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
             .replace("{{HOSTNAME}}", escape(hostname))
             .replace("{{AUTO}}", str(AUTO_REFRESH_SEC))
             .replace("{{SYSBAR}}", render_sysbar(sysdata, lang))
-            .replace("{{LOADLINE}}", render_loadline(sysdata, lang))
             .replace("{{TOOLCHIPS}}", render_toolchips(entries, host_header, lang))
             .replace("{{GOALS_PANEL}}", render_goal_cards(scan_goals(), lang))
             .replace("{{EVENTS_PANEL}}", render_events(merge_events(
-                parse_watchdog_events(), parse_completed_goals()), lang))
+                parse_watchdog_events(), parse_completed_goals(),
+                parse_repo_commits()), lang))
             .replace("{{UPDATED}}", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(updated_ts)))
             .replace("{{COUNT}}", str(len(entries)))
             .replace("<!--TABLE-->", table))
@@ -2811,7 +2934,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     outline: 2px solid var(--focus); outline-offset: 2px; }
   /* ---------------- 内联 SVG 图标对齐体系(emoji 全量替换) ---------------- */
   .ic { display: inline-block; vertical-align: -0.15em; line-height: 1; }
-  .lb-ico, .glight, .al-ico, .rc-ico, .lv-ico, .ld-ico, .evt-ico, .sc-ico {
+  .lb-ico, .glight, .al-ico, .rc-ico, .lv-ico, .evt-ico, .sc-ico {
     display: inline-flex; align-items: center; flex: none; }
   .lb-ico { color: var(--text-dim); margin-right: 5px; }
   .t-green { color: var(--c-green); } .t-warn { color: var(--c-warn); }
@@ -2959,18 +3082,30 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .gdone-row:last-child { border-bottom: none; }
   .gdone-name { color: var(--text-mid); font-weight: 600; word-break: break-all; }
 
-  .loadline .ld-head { font-size: 13.5px; color: var(--text); display: flex;
-                       align-items: baseline; gap: 6px; flex-wrap: wrap; }
-  .loadline .ld-ico { font-size: 14px; display: inline-flex; align-items: center; }
-  .loadline b { color: var(--text-hi); font-weight: 600; }
-  .loadline .ld-sub { color: var(--text-dim); font-size: 12px; font-family: ui-monospace, monospace; }
-  .loadline .ld-tops { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 8px; }
-  .loadline .ld-top { flex: 1 1 260px; min-width: 0; }
-  .loadline .ld-t { color: var(--text-dim); font-size: 11px; margin-bottom: 3px; }
-  .loadline .ld-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.6;
-                      font-family: ui-monospace, monospace; }
-  .loadline .ld-val { color: var(--text-mid); min-width: 52px; text-align: right; flex: none; }
-  .loadline .ld-name { color: var(--text-dim); word-break: break-all; }
+  /* 仓库面板: agent/goal 改动过的仓库(名称/分支/统计/最近提交/文件占比) */
+  .rp-refresh { margin-left: auto; color: var(--text-dim); cursor: pointer;
+                display: inline-flex; padding: 4px; border-radius: 8px; flex: none; }
+  .rp-refresh:hover { color: var(--accent); background: var(--bg-hover); }
+  .rp-refresh.spin svg { animation: rp-spin .9s linear infinite; }
+  @keyframes rp-spin { to { transform: rotate(360deg); } }
+  .rp-row { padding: 10px 0; border-bottom: 1px solid var(--border-faint); }
+  .rp-row:last-child { border-bottom: none; }
+  .rp-l1 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13.5px; }
+  .rp-name { color: var(--text-hi); font-weight: 600; word-break: break-all; }
+  .rp-branch { color: var(--accent); font-family: ui-monospace, monospace; font-size: 11.5px; }
+  .rp-meta { color: var(--text-dim); font-size: 11.5px; font-family: ui-monospace, monospace; }
+  .rp-dirty { color: var(--c-warn); }
+  .rp-last { margin-top: 4px; font-size: 12px; color: var(--text-mid); overflow: hidden;
+             text-overflow: ellipsis; white-space: nowrap; }
+  .rp-last .rp-hash { color: var(--accent); font-family: ui-monospace, monospace; }
+  .rp-last .rp-ago { color: var(--text-faint); }
+  .rp-ext { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .rp-bar { display: flex; flex: 1 1 140px; min-width: 60px; height: 5px; border-radius: 3px;
+            overflow: hidden; background: var(--border-soft); }
+  .rp-bar span { height: 100%; }
+  .rp-exts { flex: 2 1 120px; font-size: 11px; color: var(--text-faint);
+             font-family: ui-monospace, monospace; white-space: nowrap;
+             overflow: hidden; text-overflow: ellipsis; }
 
   .evt-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.7;
              font-family: ui-monospace, monospace; flex-wrap: wrap; align-items: baseline; }
@@ -3079,8 +3214,10 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
             font-size: 14px; color: var(--text-mid); }
   .rc-row:last-child { border-bottom: none; }
   .rc-ico { flex: none; }
-  .rc-kind { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rc-kind { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
   .rc-kind .rc-name { color: var(--text-hi); font-weight: 600; }
+  .rc-sub { font-size: 12px; color: var(--text-dim); overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; }
   .rc-ago::before { content: "·"; color: var(--text-dead); margin-right: 8px; }
   .rc-name { color: var(--text-dim); font-size: 12px; flex: none; max-width: 38%; overflow: hidden;
              text-overflow: ellipsis; white-space: nowrap; }
@@ -3257,8 +3394,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     .gmore { display: inline-flex; margin-left: auto; transition: transform .15s; }
     .gcard.open .gmore { transform: rotate(90deg); }
     .gpanel { padding: 10px 12px; }
-    .loadline .ld-top { flex: 1 1 100%; }
-    .loadline .ld-row { font-size: 11.5px; }
+    .rp-l1 { font-size: 13px; }
+    .rp-exts { font-size: 10.5px; }
     .evt-row { gap: 6px; }
     .evt-txt { min-width: 0; flex: 1 1 100%; padding-left: 14px; }
     .gcopy { min-height: 38px; padding: 9px 16px; font-size: 13px; }
@@ -3501,6 +3638,25 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .copy-toast { background: var(--bg-elev); color: var(--c-green); }
   }
+  /* 桌面端分类条(右上角): 移动端隐藏(有底部页签); 选中态复用 --nav-pill+--accent */
+  #catbar { display: none; gap: 6px; align-items: center; }
+  #catbar .cat { appearance: none; border: 1px solid var(--chip-border); background: var(--chip-bg);
+      color: var(--text-mid); border-radius: 999px; padding: 7px 15px; font-size: 12.5px;
+      cursor: pointer; transition: background .18s ease, color .18s ease; }
+  #catbar .cat:hover { color: var(--text-hi); }
+  #catbar .cat.active { background: var(--nav-pill); border-color: transparent; color: var(--accent); font-weight: 600; }
+  .cat-off { display: none !important; }   /* 分类过滤: 仅桌面 JS 加, 断点切回移动时移除 */
+  @media (min-width: 769px) { #catbar { display: flex; } }
+  /* "全部"模式预览折叠: 分区限高渐隐 + 右下"查看更多"跳对应分类 */
+  .cat-preview { position: relative; overflow: hidden; }
+  .cat-preview::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 72px;
+      background: linear-gradient(rgba(0,0,0,0), var(--bg)); pointer-events: none; }
+  .cat-more { position: absolute; right: 14px; bottom: 10px; z-index: 2;
+      display: inline-flex; align-items: center; gap: 4px;
+      appearance: none; border: 1px solid var(--chip-border); background: var(--bg-elev);
+      color: var(--accent); border-radius: 999px; padding: 7px 16px; font-size: 12.5px;
+      cursor: pointer; font-weight: 600; }
+  .cat-more:hover { background: var(--bg-hover); }
 </style>
 <header>
   <!-- topbar 重设计: 左=服务器名(HOSTNAME), 右=刷新按钮(点击刷新/长按锁定自动刷新)。
@@ -3510,6 +3666,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <span id="updated">{{UPDATED}}</span> <span id="count">{{COUNT}}</span>
   </span>
   <span class="spacer"></span>
+  <!-- 桌面端分类条(右上角): 全部/概览/Goal/服务/工具, 过滤主体分区; 移动端隐藏(有底部页签) -->
+  <nav id="catbar" aria-label="category"></nav>
   <span class="btn icon-btn" id="refresh" role="button" tabindex="0"
         title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:17}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
 </header>
@@ -3542,7 +3700,11 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <div id="recent-body"></div>
 </div>
 {{SYSBAR}}
-{{LOADLINE}}
+<div class="gpanel" id="repos">
+  <h2>{{T:rp_title}} <span class="ghint">{{T:rp_hint}}</span>
+    <span class="rp-refresh" id="rp-refresh" role="button" tabindex="0" title="{{T:rp_refresh}}" aria-label="{{T:rp_refresh}}">{{ICO:refresh:14}}</span></h2>
+  <div id="repos-body"><div class="gempty">{{T:a_loading}}</div></div>
+</div>
 <div class="gpanel" id="chart-wrap">
   <h2>{{T:chart_title}} <span class="ghint" id="chart-win"></span></h2>
   <canvas id="chart" width="640" height="150"></canvas>
@@ -3884,27 +4046,55 @@ function renderSys(s) {
   ];
   $("sysbar").innerHTML = cards.map(([k, l, v]) =>
     `<div class='stat' data-k='${k}'><div class='label'><span class='lb-ico'>${icon(SYS_ICONS[k] || "dot", 13)}</span>${l}</div><div class='value'>${v}</div></div>`).join("");
-  renderLoadline(s);
   chartSample(s); // 手机端趋势图采样(桌面 no-op)
 }
 
-// 负载水位线 + top 进程(/api/sys 刷新时同步更新;与后端 render_loadline 同构)
-function renderLoadline(s) {
-  const el = $("loadline");
-  if (!el || !s.goalload) return;
-  const gl = s.goalload, esc = (x) => String(x ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const zone = gl.zone || "none";
-  const msg = zone === "ok" ? t("ld_ok", { n: gl.n }) : zone === "full" ? t("ld_full") : zone === "over" ? t("ld_over") : "—";
-  const [ico, color] = zone === "ok" ? ["dot", "var(--c-green)"] : zone === "full" ? ["pause", "var(--c-warn)"] : zone === "over" ? ["err", "var(--c-red)"] : ["dot", "var(--c-gray)"];
-  const sub = t("ld_load", { l: gl.load15 != null ? gl.load15.toFixed(1) : "—", c: gl.cores ?? "?" });
-  const rows = (items, fmt) => (items || []).length
-    ? items.map(([v, k]) => `<div class='ld-row'><span class='ld-val'>${fmt(v)}</span><span class='ld-name'>${esc(k)}</span></div>`).join("")
-    : `<div class='ld-row' style='color:var(--text-dead)'>—</div>`;
-  el.innerHTML = `<div class='ld-head'><span class='ld-ico' style='color:${color}'>${icon(ico, 14)}</span><b>${t("ld_title")}</b>：${msg}` +
-    `<span class='ld-sub'>（${sub}）</span></div><div class='ld-tops'>` +
-    `<div class='ld-top'><div class='ld-t'>${t("ld_cpu")}</div>${rows(gl.cpu_top, v => v.toFixed(0) + "%")}</div>` +
-    `<div class='ld-top'><div class='ld-t'>${t("ld_mem")}</div>${rows(gl.mem_top, v => v >= 1024 ? (v / 1024).toFixed(1) + "G" : v.toFixed(0) + "M")}</div></div>`;
+// --- 仓库面板: agent/goal 改动过的仓库(/api/repos; 客户端 60s 缓存) ---
+let reposCache = { t: 0, data: null };
+async function loadRepos(force) {
+  const now = Date.now();
+  if (!force && reposCache.data && now - reposCache.t < 60000) return;
+  try {
+    const r = await fetch(force ? "/api/repos?refresh=1" : "/api/repos", { cache: "no-store" });
+    reposCache.data = await r.json();
+    reposCache.t = now;
+    renderRepos(reposCache.data);
+  } catch (err) {
+    console.error("repos load failed", err);
+  }
 }
+function renderRepos(d) {
+  const el = $("repos-body");
+  if (!el) return;
+  const list = (d && d.repos) || [];
+  if (!list.length) { el.innerHTML = `<div class="gempty">${t("rp_empty")}</div>`; return; }
+  const fmtB = (n) => {
+    if (n == null) return "—";
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i ? n.toFixed(1) : n) + " " + u[i];
+  };
+  const PAL = ["var(--c-blue)", "var(--c-green)", "var(--c-warn)", "var(--c-red)", "var(--text-faint)"];
+  el.innerHTML = list.map(r => {
+    const meta = [t("rp_commits", { n: r.commits ?? "—" }), fmtB(r.size), t("rp_files", { n: r.files ?? "—" })];
+    if (r.dirty) meta.push(`<span class="rp-dirty">${t("rp_dirty", { n: r.dirty })}</span>`);
+    const bar = (r.exts || []).map((x, i) => `<span style="width:${x[2]}%;background:${PAL[i % PAL.length]}"></span>`).join("");
+    const legend = (r.exts || []).map(x => `${escHtml(x[0])} ${x[2]}%`).join(" · ");
+    return `<div class="rp-row">
+      <div class="rp-l1"><span class="rp-name">${escHtml(r.name)}</span><span class="rp-branch">${escHtml(r.branch)}</span>
+        <span class="rp-meta">${meta.join(" · ")}</span></div>
+      ${r.last ? `<div class="rp-last"><span class="rp-hash">${escHtml(r.last.hash)}</span> ${escHtml(r.last.subject)} <span class="rp-ago">· ${escHtml(agoFromTs(r.last.ts))}</span></div>` : ""}
+      ${(r.exts || []).length ? `<div class="rp-ext"><div class="rp-bar">${bar}</div><div class="rp-exts">${legend}</div></div>` : ""}
+    </div>`;
+  }).join("");
+}
+const rpRefreshBtn = $("rp-refresh");
+if (rpRefreshBtn) rpRefreshBtn.addEventListener("click", () => {
+  haptic(8);
+  rpRefreshBtn.classList.add("spin");
+  loadRepos(true).finally(() => rpRefreshBtn.classList.remove("spin"));
+});
 
 // 快捷工具入口 chips: 端口存活才显示,点击直达(随 /api 刷新)
 const TOOL_LINKS = [["dbeditor", 8810], ["dbviewer", 8800], ["wilviewer", 8765], ["mapviewer", 8899]];
@@ -4260,6 +4450,7 @@ async function load(alsoSys) {
     renderToolchips();
     applyFilter();
     renderOverview(data);          // 概要摘要(状态卡/指标/需要处理/最近活动)
+    loadRepos();                    // 仓库面板(客户端 60s 缓存; 面板内按钮强制重算)
   } catch (err) {
     console.error("refresh failed", err);
   }
@@ -4312,7 +4503,7 @@ const EV_META = {
   nudge:    { ico: "bell", grp: "warn", key: "evk_nudge" },
   pause:    { ico: "⏸", grp: "warn", key: "evk_pause" },
   cleanup:  { ico: "trash", grp: "ok", key: "evk_cleanup" },
-  commit:   { ico: "box", grp: "ok", key: "evk_commit" },
+  commit:   { ico: "branch", grp: "ok", key: "evk_commit" },
   other:    { ico: "·", grp: "ok", key: "evk_other" },
 };
 
@@ -4386,12 +4577,13 @@ async function renderOverview(apiData) {
   $("m-alert").textContent = nAlert;
   $("m-alert").classList.toggle("alert", nAlert > 0);
   renderAlerts(alerts);
-  // 最近活动: 3-5 条摘要(一行一条), 点击进日志页
-  const recent = events.slice(0, 5);
+  // 最近活动: 只显示 agent 仓库的提交(由新到旧), 点击进日志页
+  const recent = events.filter(e => e.kind === "commit").slice(0, 5);
   $("recent-body").innerHTML = recent.length ? recent.map(e => {
     const m = EV_META[e.kind] || EV_META.other;
     return `<div class="rc-row" role="button" tabindex="0"><span class="rc-ico">${icon(m.ico, 14)}</span>` +
-      `<span class="rc-kind">${escHtml(t(m.key))} · <b class="rc-name">${escHtml(e.name)}</b></span>` +
+      `<span class="rc-kind">${escHtml(t(m.key))} · <b class="rc-name">${escHtml(e.name)}</b>` +
+      `<span class="rc-sub">${escHtml(e.text)}</span></span>` +
       `<span class="rc-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
   }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
   updateBadge(nAlert);
@@ -4639,7 +4831,7 @@ const gesture = { claimed: null };
 // 移动端把各分区装进 6 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#statuscard", ".mgrid4", "#alerts", "#recent", "#sysbar", "#loadline", "#chart-wrap", "#toolchips"],
+  ["#statuscard", ".mgrid4", "#alerts", "#recent", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   ["#logpage"],
   ["#goals"],
   ["#filters", "#tasks", "#svc"],
@@ -4688,9 +4880,15 @@ function regroupPages() {
   pgWrappers.forEach(w => { w.style.height = "auto"; });
   applyPagesX(false);
 }
-mqMobile.addEventListener("change", () => { regroupPages(); drawChart(); });
-
-// --- 分页(概览/日志/Goal/服务/模型/ツール) ---
+mqMobile.addEventListener("change", () => {
+  regroupPages(); drawChart();
+  // 桌面分类过滤与移动分页互斥: 切到移动清 .cat-off/.cat-preview(display 盖 .pg 分页)
+  if (mqMobile.matches) {
+    document.querySelectorAll(".cat-off").forEach(el => el.classList.remove("cat-off"));
+    clearCatPreview();
+  } else setCat(curCat, false);   // 切回桌面: 恢复选中分类的过滤
+});
+// --- 分页(概览/日志/Goal/模型/ツール) ---
 const pages = $("pages");
 const N_PAGES = 6;
 const PAGE_W = 100 / N_PAGES;   // 轨道宽 600%, 每页位移 = 轨道的 1/6
@@ -4889,12 +5087,6 @@ if (TOUCH) document.addEventListener("touchend", (e) => {
   if (now - lastTap < 300 && stat === lastTapEl) {
     lastTap = 0;
     if (stat.dataset.k === "load") { setPage(2); haptic(10); }
-    else if (stat.dataset.k === "disk") {
-      haptic(10);
-      const tops = document.querySelector("#loadline .ld-tops");
-      if (tops) tops.hidden = !tops.hidden;
-      console.log("[svc-dashboard] double-tap disk -> toggle top procs");
-    }
   } else { lastTap = now; lastTapEl = stat; }
 }, { passive: true });
 
@@ -5829,6 +6021,89 @@ function initToolsPage() {
   }
 }
 
+// --- 桌面端分类条(右上角 #catbar): 过滤 #pages 各分区; 移动端隐藏(底部页签), 断点切换时清过滤 ---
+const CATS = [   // [id, i18n key]; 顺序 = 展示顺序
+  ["all", "cat_all"], ["home", "tab_home"], ["goal", "tab_goal"],
+  ["svc", "tab_svc"], ["tools", "tab_tools"],
+];
+const CAT_SELS = {   // 桌面可见分区 → 分类(与移动端 PAGE_GROUPS 对齐; 日志/模型页为移动专用不设)
+  home: ["#sysbar", "#repos", "#toolchips", "#events"],
+  goal: ["#goals"],
+  svc: ["#filters", "#tasks", "#svc"],
+  tools: ["#toolspage"],
+};
+var curCat = "all";
+const CAT_PREVIEW = {   // "全部"模式预览折叠: [选择器, 限高px]; 短分区(sysbar等)不限, 长分区收成一段
+  home: [["#events", 260]],
+  goal: [["#goals", 340]],
+  svc: [["#svc", 420]],
+  tools: [["#toolspage", 480]],
+};
+function clearCatPreview() {
+  document.querySelectorAll(".cat-preview-wrap").forEach(w => {   // 表格包装 div: 先还原子节点再删
+    while (w.firstChild) w.before(w.firstChild);
+    w.remove();
+  });
+  document.querySelectorAll(".cat-preview").forEach(el => { el.classList.remove("cat-preview"); el.style.maxHeight = ""; });
+  document.querySelectorAll(".cat-more").forEach(el => el.remove());
+}
+function setCat(c, save) {
+  curCat = c;
+  document.querySelectorAll("#catbar .cat").forEach(b => b.classList.toggle("active", b.dataset.cat === c));
+  clearCatPreview();
+  const keep = new Set((CAT_SELS[c] || []).map(s => document.querySelector(s)).filter(Boolean));
+  document.querySelectorAll("#pages > *").forEach(el => el.classList.toggle("cat-off", c !== "all" && !keep.has(el)));
+  if (c === "all") {   // 每类显示一部分: 限高渐隐 + 右下"查看更多"跳对应分类
+    for (const [cat, items] of Object.entries(CAT_PREVIEW)) {
+      for (const [sel, h] of items) {
+        let el = document.querySelector(sel);
+        if (!el) continue;
+        const btn = document.createElement("button");
+        btn.type = "button"; btn.className = "cat-more"; btn.dataset.cat = cat;
+        btn.textContent = t("cat_more") + " →";
+        btn.addEventListener("click", () => setCat(cat));
+        if (el.tagName === "TABLE") {   // table 不吃 max-height: 动态包一层 div 限高
+          const wrap = document.createElement("div");
+          wrap.className = "cat-preview cat-preview-wrap";
+          wrap.style.maxHeight = h + "px";
+          el.before(wrap); wrap.append(el, btn);
+        } else {
+          el.classList.add("cat-preview");
+          el.style.maxHeight = h + "px";
+          el.appendChild(btn);
+        }
+      }
+    }
+  }
+  if (save !== false) {
+    try { localStorage.setItem("svc-cat", c); } catch (e) {}
+    try {                                   // URL hash 同步: #cat=goal 可直达分类
+      const u = new URL(location.href);
+      if (c === "all") u.hash = ""; else u.hash = "cat=" + c;
+      history.replaceState(null, "", u);
+    } catch (e) {}
+  }
+}
+function catFromHash() {
+  const m = location.hash.match(/^#cat=([a-z]+)/);
+  return m && CATS.some(c => c[0] === m[1]) ? m[1] : null;
+}
+window.addEventListener("hashchange", () => {   // 手改 hash/后退也跟随
+  const c = catFromHash();
+  if (c && c !== curCat) setCat(c, false);
+});
+(function buildCatbar() {
+  const bar = $("catbar");
+  if (!bar) return;
+  bar.innerHTML = CATS.map(([id, key]) => `<button class="cat" type="button" data-cat="${id}">${t(key)}</button>`).join("");
+  bar.addEventListener("click", (e) => {
+    const b = e.target.closest(".cat");
+    if (!b || b.dataset.cat === curCat) return;
+    setCat(b.dataset.cat);
+    scrollTo(0, 0);
+  });
+})();
+
 // --- 启动 ---
 regroupPages();          // 手机: 分组进 6 页; 桌面: 保持原序
 if (isMobile()) {
@@ -5838,6 +6113,9 @@ if (isMobile()) {
   $("logpage").hidden = true;
   $("agents-page").hidden = true;
   initToolsPage();   // 桌面无页签: 工具面板直接展开在页面流里(内部会解除 hidden)
+  let savedCat = catFromHash();
+  if (!savedCat) { try { savedCat = localStorage.getItem("svc-cat"); } catch (e) {} }
+  setCat(CATS.some(c => c[0] === savedCat) ? savedCat : "all", false);  // URL 优先，随后本地恢复
 }
 load(true);
 </script>
@@ -6607,7 +6885,12 @@ class Handler(BaseHTTPRequestHandler):
                                   "completed": parse_completed_goals(limit=lim),
                                   "events": merge_events(
                                       parse_watchdog_events(limit=min(lim, 80)),
-                                      parse_completed_goals(limit=lim), limit=lim)})
+                                      parse_completed_goals(limit=lim),
+                                      parse_repo_commits(), limit=lim)})
+        elif path == "/api/repos":
+            qs = parse_qs(urlparse(self.path).query)
+            refresh = (qs.get("refresh") or ["0"])[0] in ("1", "true")
+            self._send_json(200, repo_stats(refresh=refresh))
         elif path == "/api/tasks":
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             self._send_json(200, {"tasks": scan_tasks(lang)})
@@ -6852,11 +7135,16 @@ def selftest():
     s = sys_info()
     gl = s["goalload"]
     print(f"load: {gl['load15']} ({gl['zone']}, n={gl['n']}) cpu_top={gl['cpu_top'][:3]}")
-    evts = merge_events(parse_watchdog_events(), parse_completed_goals())
+    repos = agent_repos()
+    print(f"agent repos: {len(repos)} -> {[os.path.basename(r) for r in repos]}")
+    for r in repo_stats()["repos"][:3]:
+        print(f"  {r['name']}: commits={r['commits']} size={r['size']} "
+              f"files={r['files']} dirty={r['dirty']} exts={r['exts'][:3]}")
+    evts = merge_events(parse_watchdog_events(), parse_completed_goals(), parse_repo_commits())
     kinds = {e["kind"] for e in evts}
     print(f"events: {len(evts)} kinds={sorted(kinds)}")
     html = render_html("localhost:8899", gather(), time.time(), "zh", sysdata=s)
-    checks = ["Goal 进度", "建议并发", "已完成 goal", "最近事件", "tchip"]
+    checks = ["Goal 进度", "仓库", "已完成 goal", "最近事件", "tchip"]
     for c in checks:
         mark = "ok" if c in html else "FAIL"
         print(f"  {mark} html contains {c!r}")
