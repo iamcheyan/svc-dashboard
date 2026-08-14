@@ -58,6 +58,15 @@
    HTML，但 JS 里引用它的代码没判空 → 一个 null 引用让**整页 JS 崩溃、页面完全错乱**
    （0b87bee 修复）。规则：**删/改任何 DOM 结构前，先 grep 它在 JS 里的所有引用**；
    JS 侧取元素一律判空（`el && ...` / `?.`）。
+1b. **const 声明顺序 = 求值期地雷（f8df6ef 实战）**：IIFE 在模块求值期立即执行时，
+   用到的 `const` 必须声明在它**之前**——`initLogAgentPicker()` 求值期调
+   `syncLogAgentPicker` → 用 `escHtml`，但声明在 50 行后 → TDZ ReferenceError
+   **杀死整个主脚本**：catbar 不构建、`#cat=` URL 路由失效、`load()`/
+   `hydrateFragments()` 全不跑（服务表 0 行、Goal 卡永久"加载中"）。次生假象：
+   `autoSec before initialization` 刷屏（死亡前注册的定时器残留）。排查法：
+   CDP `Runtime.exceptionThrown` 抓**第一个**异常，别被次生症状带偏。工具：
+   `python3 ~/.hermes/scripts/cdp_eval.py watch 8`（Chrome 需
+   `--remote-debugging-port=9222`，Xvfb :101 + openbox 起）。
 2. **改前端必须无头浏览器双视口复验**：桌面 1440x900 + 移动 390x844
    （`Emulation.setDeviceMetricsOverride`）逐页导航截图 + **console pageerror 收集为空**
    才算过——curl 200 ≠ 界面对（2026-08-14 移动端验收实战三次重复）。
