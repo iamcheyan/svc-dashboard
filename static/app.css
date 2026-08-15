@@ -262,6 +262,11 @@
   .tbadge.rd { background: var(--tbadge-rd-bg); color: var(--tbadge-rd-tx); border: 1px solid var(--tbadge-rd-bd); }
   .tbadge.sc { background: var(--tbadge-sc-bg); color: var(--tbadge-sc-tx); border: 1px solid var(--tbadge-sc-bd); }
   .filters { display: flex; gap: 8px; margin-bottom: var(--gap-panel); flex-wrap: wrap; align-items: center; }
+  /* 日志页: logbar → chips → 列表 垂直节奏(此前 chips 紧贴选择器) */
+  #logpage .logbar { margin-bottom: 14px; }
+  #logpage .filters { margin-top: 2px; }
+  #logpage #logbody { margin-top: 4px; }
+  .aglog-list { gap: 0; }   /* 行距改由行内 padding 控制, 分隔线代替空隙 */
   .filters .spacer { flex: 1; }
   .watchdog-panel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px;
                     padding: 12px 14px; margin-bottom: var(--gap-panel); }
@@ -288,7 +293,8 @@
   .aglog-refresh:hover { background: var(--accent-blue-hover); }
   .aglog-list { display: flex; flex-direction: column; gap: 2px; }
   .aglog-row { display: flex; gap: 10px; font-family: ui-monospace, monospace; font-size: 11.5px;
-               line-height: 1.55; }
+               line-height: 1.5; padding: 7px 2px; border-bottom: 1px solid var(--border-faint); }
+  .aglog-row:last-child { border-bottom: none; }
   .aglog-ts { color: var(--ts-dim); white-space: nowrap; flex: none; }
   .aglog-txt { color: var(--text-mid); word-break: break-all; }
   .termlog { background: var(--term-bg); border: 1px solid var(--term-bd); border-radius: 6px; padding: 8px 10px;
@@ -337,7 +343,7 @@
   .g-detail-kv { display: grid; grid-template-columns: 76px 1fr; gap: 5px 9px; }
   .g-detail-kv .k { color: var(--text-ghost); }
   .g-detail-kv .v { color: var(--text-main); word-break: break-word; font-family: ui-monospace, monospace; }
-  .g-detail-log { white-space: pre-wrap; word-break: break-word; background: var(--term-bg); border: 1px solid var(--term-bd);
+  .g-detail-log { white-space: pre-wrap; word-break: break-word; background: var(--term-bg); color: var(--term-tx); border: 1px solid var(--term-bd);
                  border-radius: 7px; padding: 8px; max-height: 220px; overflow: auto; font: 11px/1.45 ui-monospace, monospace; }
   .g-detail-events { display: grid; gap: 4px; }
   .g-detail-event { padding: 5px 7px; border-left: 2px solid var(--border); color: var(--text-main); }
@@ -434,13 +440,17 @@
   .rp-dirty { color: var(--c-warn); }
   .rp-last { margin-top: 4px; font-size: 12px; color: var(--text-mid); overflow: hidden;
              text-overflow: ellipsis; white-space: nowrap; }
-  /* Agent 操作轨迹条: 近14天逐日色块(替换原文件类型条) */
+  /* Agent 操作轨迹条: 近14天逐日色块(替换原文件类型条)。
+     颜色规则必须 ≥ 容器元素选择器(.rp-traj i = 0,1,1)的优先级,
+     用双类(0,2,0)覆盖灰底 —— 单类 .tr-commit(0,1,0) 会被灰底压住(踩过)。 */
   .rp-traj { display: flex; gap: 3px; margin-top: 7px; }
   .rp-traj i { flex: 1 1 0; min-width: 0; height: 9px; border-radius: 2.5px;
                background: var(--border-faint); opacity: .55; }
-  .tr-commit { background: var(--c-blue); } .tr-warn { background: var(--c-warn); }
-  .tr-good { background: var(--c-green); } .tr-done { background: var(--c-green-btn); }
-  .tr-agent { background: var(--c-violet); }
+  .rp-traj .tr-commit, .traj-strip .tr-commit, .traj-legend .tr-commit { background: var(--c-blue); }
+  .rp-traj .tr-warn, .traj-strip .tr-warn, .traj-legend .tr-warn { background: var(--c-warn); }
+  .rp-traj .tr-good, .traj-strip .tr-good, .traj-legend .tr-good { background: var(--c-green); }
+  .rp-traj .tr-done, .traj-strip .tr-done, .traj-legend .tr-done { background: var(--c-green-btn); }
+  .rp-traj .tr-agent, .traj-strip .tr-agent, .traj-legend .tr-agent { background: var(--c-violet); }
   .rp-traj .tr-commit, .rp-traj .tr-warn, .rp-traj .tr-good, .rp-traj .tr-done, .rp-traj .tr-agent { opacity: 1; }
   /* 轨迹详情浮层(复用 .fs-sheet 全屏壳; 桌面居中卡片) */
   .traj-sheet { display: flex; flex-direction: column; }
@@ -449,7 +459,7 @@
   .traj-strip i { flex: 1 1 0; min-width: 0; height: 26px; border-radius: 5px;
                   background: var(--border-faint); opacity: .5; }
   .traj-strip .tr-commit, .traj-strip .tr-warn,
-  .traj-strip .tr-good, .traj-strip .tr-done { opacity: 1; }
+  .traj-strip .tr-good, .traj-strip .tr-done, .traj-strip .tr-agent { opacity: 1; }
   .traj-days { display: flex; gap: 4px; margin-top: 4px; }
   .traj-days b { flex: 1 1 0; text-align: center; font-size: 9.5px; font-weight: 400;
                  color: var(--text-ghost); white-space: nowrap; overflow: hidden; }
@@ -487,6 +497,10 @@
   .evt-name { color: var(--c-warn); flex: none; }
   .evt-txt { color: var(--text-soft); word-break: break-all; min-width: 200px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  /* 服务页桌面容器: 与其他页一致的圆角面板(移动端行卡片自带容器, 面板只留边框透明) */
+  .svc-panel { margin-bottom: var(--gap-panel); }
+  .svc-panel table { background: transparent; }
+  .svc-panel thead th { position: static; background: transparent; }
   thead th { text-align: left; color: var(--text-faint); font-weight: 500; font-size: 12px;
              padding: 8px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0;
              z-index: 5; background: var(--bg); }
@@ -713,6 +727,8 @@
 
     /* 圆角体系已在基础样式统一: 移动端仅补触控尺寸与服务卡片行 */
     #svc tbody tr { border-radius: 16px; }
+    /* 移动端行自带卡片 → 外层面板透明化, 避免双层卡片 */
+    .svc-panel { background: transparent; border: none; padding: 0; box-shadow: none; }
     .chip { min-height: 44px; padding: 10px 16px; }
     .copy-toast { bottom: calc(110px + env(safe-area-inset-bottom)); }
     /* 两层结构: #pages(裁剪窗口) > #track(600% 轨道) > .pg(各 1/6 = 屏宽) */
