@@ -55,6 +55,8 @@ static/               前端：index.html(壳+占位) app.css app.js
 | `/api/agentlog?sid=&cwd=&tmux=` | GET | agent 会话日志时间线 + 终端画面 |
 | `/api/manage?unit=` | GET | 受管单元状态 |
 | `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（免密 sudo） |
+| `GET /api/svcctl` | GET | 通用暂停台账 + 历史（`~/.omp/svc-dashboard/{paused.json,actions.log}`） |
+| `POST /api/svcctl` | POST | `{"port":N,"action":"pause"\|"resume"}`——任意监听服务冻结/解冻（docker→`docker pause`；其余→SIGSTOP/SIGCONT）；守卫拒绝自身/22/受保护进程；`/api` 条目新增 `res{cpu,mem_mb,up_sec}`/`manageable`/`svcctl_paused` |
 | `/api/fs/list?path=` | GET | 目录列表（白名单+防穿越+敏感隐藏） |
 | `/api/fs/file?path=&mode=view\|download` | GET | 文件预览/下载 |
 | `/api/health` | GET | 健康快检（系统/磁盘趋势/温度/进程/端口/看门狗） |

@@ -67,6 +67,8 @@ static/
 | `/api/fragment?p=goals\|events\|toolchips` | GET | 渲染好的 HTML 片段（首屏异步填充） |
 | `/api/manage?unit=` | GET | 受管单元状态 |
 | `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（免密 sudo） |
+| `GET /api/svcctl` | GET | 服务暂停台账 + 暂停/恢复历史 |
+| `POST /api/svcctl` | POST | `{"port":N,"action":"pause"\|"resume"}` 任意服务冻结/解冻（容器→docker pause，其余→SIGSTOP；台账持久化，守卫拒绝 dashboard 自身/SSH/受保护进程） |
 | `/api/fs/list?path=` | GET | 目录列表（白名单根 + 防穿越 + 敏感文件隐藏） |
 | `/api/fs/file?path=&mode=view\|download` | GET | 文件预览（文本/图片）/ 下载 |
 | `/api/health` | GET | 一次性健康快检（系统/磁盘趋势/温度/进程/端口/看门狗） |

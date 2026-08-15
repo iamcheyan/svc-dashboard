@@ -98,6 +98,39 @@ def selftest():
                 self.assertTrue(entries[0]["resume_cmd"].startswith(
                     "/home/tetsuya/.bun/bin/omp"))
 
+        def test_svcctl(self):
+            import os, signal, subprocess, tempfile, time
+            from svcdash import svcctl
+            # 台账指向临时文件, 不碰真实状态
+            tmp = tempfile.mkdtemp(prefix="svcdash-selftest-")
+            svcctl.STATE_FILE = os.path.join(tmp, "paused.json")
+            svcctl.HISTORY_FILE = os.path.join(tmp, "actions.log")
+            svcctl.STATE_DIR = tmp
+            # 守卫: sshd 端口 / 自身端口 / docker 之外无 pid → 拒绝
+            self.assertFalse(svcctl.can_pause({"port": 22, "pids": [1]}))
+            self.assertFalse(svcctl.can_pause({"port": 80, "is_self": True}))
+            self.assertFalse(svcctl.can_pause({"port": 61234, "pids": []}))  # 无人监听
+            # 真实冻结/解冻往返: 起一个 sleep 子进程当"服务"
+            p = subprocess.Popen(["sleep", "300"])
+            time.sleep(0.2)
+            for sig in (signal.SIGSTOP,):
+                os.kill(p.pid, sig)
+            # 直接走 resume 核心(绕过端口扫描): 台账写 pid, 验证 SIGCONT 恢复
+            svcctl.save_state([{"port": 65534, "pids": [p.pid], "name": "selftest",
+                                "kind": "sig", "ts": time.time()}])
+            self.assertEqual(len(svcctl.load_state()), 1)
+            r = svcctl.resume(65534)
+            self.assertTrue(r["ok"], r)
+            self.assertEqual(svcctl.load_state(), [])
+            # 进程确实解冻并能被杀掉(T 状态的进程 SIGTERM 挂起, 需先 CONT)
+            os.kill(p.pid, signal.SIGTERM)
+            p.wait(timeout=5)
+            # 历史: pause/resume 各一条
+            svcctl._log("pause", {"port": 1, "name": "x", "pids": [2]})
+            svcctl._log("resume", {"port": 1, "name": "x", "pids": [2]})
+            self.assertEqual(len(svcctl.history()), 3)  # resume(65534) + 手写2条
+            self.assertTrue(svcctl.history()[0].endswith("resume :1 x pids=[2]"))
+
     suite = unittest.TestLoader().loadTestsFromTestCase(T)
     unittest.TextTestRunner(verbosity=2).run(suite)
     print("\n--- live dry-run ---")

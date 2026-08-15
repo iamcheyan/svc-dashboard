@@ -38,8 +38,9 @@ const FILTERS = {
 function row(e, mobile) {
   const badge = {docker:[t("badge_docker"),"badge-docker"], systemd:["systemd","badge-systemd"], direct:[t("badge_direct"),"badge-direct"]}[e.type] || [t("badge_direct"),"badge-direct"];
   let text = badge[0], detail = "";
+  const svPaused = e.paused || e.svcctl_paused;
   if (e.is_self) { text = t("badge_self"); badge[1] = "badge-self"; }
-  else if (e.paused) { text = t("badge_paused"); badge[1] = "badge-paused"; }
+  else if (svPaused) { text = t("badge_paused"); badge[1] = "badge-paused"; }
   else if (e.docker_proxy) { text = t("badge_proxy"); }
   else if (e.type === "docker" && e.container_id) detail = `<span class='detail' title='${t("detail_cid")}'>${e.container_id}</span>`;
   else if (e.type === "systemd" && e.unit) detail = `<span class='detail' title='${t("detail_unit")}'>${e.unit}</span>`;
@@ -54,12 +55,16 @@ function row(e, mobile) {
   const man = MANAGE_PROC_BY_PORT[e.port];
   // P0-6: 行首运行状态点(红=paused/异常 绿=正常 灰=受管单元状态未知); 受管单元由 fillSvcDots 异步上色
   const svcUnit = man || (e.type === "systemd" && MANAGE_SVC_BY_UNIT[e.unit]) || null;
-  const svcDot = `<span class="svc-dot ${e.paused ? "bad" : svcUnit ? "off" : "on"}"${svcUnit ? ` data-unit="${esc(svcUnit)}"` : ""}></span>`;
+  const svcDot = `<span class="svc-dot ${svPaused ? "bad" : svcUnit ? "off" : "on"}"${svcUnit ? ` data-unit="${esc(svcUnit)}"` : ""}></span>`;
   const ctl = man
     ? `<span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span>`
     : "";
-  // 详情按钮(ghost 文字链): 点击弹层看完整命令/目录(行内单行省略)
+  // 通用暂停/恢复(svcctl) + 资源行: 详情弹层 payload 带上 res
+  const svctl = svBtn(e);
+  const svBtnNamed = svctl ? svctl.replace("data-svcp=", `data-svcn='${esc(e.name.replace(/ \(docker\)| \(paused\)$/g, ""))}' data-svcp=`) : "";
+  const res = fmtRes(e);
   const detailBtn = (payload) => `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(payload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
+  const dpayload = { name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids, res: e.res || null, unit: e.unit || null, cid: e.container_id || null };
   if (mobile) {
     // 手机卡片(合法表格结构): 头行右侧显式 44px 圆形 复制/打开 按钮(无滑扫手势)
     const kv = (k, v) => `<div class='kv'><span class='k'>${k}</span><span class='v'>${v}</span></div>`;
@@ -67,9 +72,10 @@ function row(e, mobile) {
       kv(t("th_port"), `<a href='${link}' target='_blank' rel='noopener'>${e.port}</a>`) +
       kv(t("th_addr"), `${esc(ip)}${loop}`) +
       kv("PID", e.pids.join(", ")) +
+      (res ? kv(t("th_res"), res) : "") +
       kv(t("th_cmd"), `<span class='mclamp' role='button' tabindex='0' aria-expanded='false'>${esc(cmd)}</span>`) +
       kv(t("th_cwd"), esc(cwd)) +
-      (man ? kv(t("th_ctl"), ctl) : "");
+      (man || svBtnNamed ? kv(t("th_ctl"), ctl + svBtnNamed) : "");
     return `<tr><td>` +
       `<div class='td-head'>${svcDot}<span class='svc'>${esc(e.name)}</span>` +
       `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
@@ -81,11 +87,11 @@ function row(e, mobile) {
     <td class='name'>${svcDot}<span class='svc'>${esc(e.name)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
     <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
     <td class='addr' data-label='${t("th_addr")}'>${esc(ip)}${loop}</td>
-    <td class='pid' data-label='PID'>${e.pids.join(", ")}</td>
+    <td class='pid' data-label='PID'>${e.pids.join(", ")}${res ? `<div class='pid-res'>${res}</div>` : ""}${svBtnNamed ? `<div class='pid-svctl'>${svBtnNamed}</div>` : ""}</td>
     <td class='cmd' data-label='${t("th_cmd")}'>
-      <div class='cmd-cell'><span class='cmd-text'>${esc(cmd)}</span>${detailBtn({name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids})}${ctl ? `<span class='cmd-ctl'>${ctl}</span>` : ""}</div></td>
+      <div class='cmd-cell'><span class='cmd-text'>${esc(cmd)}</span>${detailBtn(dpayload)}${ctl ? `<span class='cmd-ctl'>${ctl}</span>` : ""}</div></td>
     <td class='cwd' data-label='${t("th_cwd")}'>
-      <div class='cmd-cell'><span class='cmd-text'>${esc(cwd)}</span>${detailBtn({name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids})}</div></td>
+      <div class='cmd-cell'><span class='cmd-text'>${esc(cwd)}</span>${detailBtn(dpayload)}</div></td>
   </tr>`;
 }
 
@@ -515,6 +521,47 @@ async function doCtl(btn) {
     btn.title = e.message;
   }
 }
+
+// --- 通用服务暂停/恢复 (svcctl): SIGSTOP 冻结(端口保持)/SIGCONT 解冻 ---
+function fmtUp(sec) {
+  if (!sec || sec < 60) return "—";
+  const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+  return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function fmtRes(e) {
+  const r = e.res;
+  if (!r) return "";
+  return `<span class='svc-res' title='${t("svc_res_title")}'>${r.cpu.toFixed(1)}% · ${r.mem_mb >= 1024 ? (r.mem_mb / 1024).toFixed(1) + "G" : Math.round(r.mem_mb) + "M"} · ${fmtUp(r.up_sec)}</span>`;
+}
+function svBtn(e) {
+  if (!e.manageable || e.is_self) return "";
+  const paused = !!e.svcctl_paused;
+  return `<span class='svctl-btn' data-svcp='${e.port}' data-svca='${paused ? "resume" : "pause"}' role='button' tabindex='0'>${icon(paused ? "play" : "pause", 12)} ${paused ? t("ctl_resume") : t("ctl_pause")}</span>`;
+}
+async function doSvcCtl(btn) {
+  const port = +btn.dataset.svcp, action = btn.dataset.svca;
+  const name = btn.dataset.svcn || (":" + port);
+  if (action === "pause" && !await uiConfirm(t("sc_confirm_pause", { name, port }))) return;
+  btn.setAttribute("aria-disabled", "true");
+  btn.textContent = t("m_doing");
+  try {
+    const r = await fetch("/api/svcctl", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ port, action }),
+    });
+    const d = await r.json();
+    btn.innerHTML = icon(d.ok ? "ok" : "err", 13) + " " + escHtml(d.msg || "");
+    btn.title = d.msg || "";
+    setTimeout(() => load(true), 800);
+  } catch (e) {
+    btn.innerHTML = icon("err", 13);
+    btn.title = e.message;
+  }
+}
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest(".svctl-btn");
+  if (b && b.getAttribute("aria-disabled") !== "true") doSvcCtl(b);
+});
 
 function manageCard(u, st, result) {
   const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1436,10 +1483,18 @@ document.addEventListener("click", async (e) => {
   if (!modal || !msg || !title || !cancel) return;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   title.innerHTML = icon("doc", 17) + " <span>" + esc(d.name || "") + "</span>";
+  const r = d.res || {};
+  const resRows = (r.cpu === undefined ? "" :
+      `<span class="k">${t("sys_cpu")}</span><span class="v">${r.cpu.toFixed(1)}%</span>`
+      + `<span class="k">${t("sys_mem")}</span><span class="v">${r.mem_mb >= 1024 ? (r.mem_mb / 1024).toFixed(1) + " GB" : Math.round(r.mem_mb) + " MB"}</span>`
+      + `<span class="k">${t("res_up")}</span><span class="v">${fmtUp(r.up_sec)}</span>`)
+    + (d.unit ? `<span class="k">unit</span><span class="v">${esc(d.unit)}</span>` : "")
+    + (d.cid ? `<span class="k">${t("detail_cid")}</span><span class="v">${esc(d.cid)}</span>` : "");
   msg.innerHTML = `<div class="svc-detail-kv">`
     + `<span class="k">${t("th_port")}</span><span class="v">${esc(d.port || "—")}</span>`
     + `<span class="k">${t("th_addr")}</span><span class="v">${esc(d.ip || "—")}</span>`
     + `<span class="k">PID</span><span class="v">${esc((d.pids || []).join(", ") || "—")}</span>`
+    + resRows
     + `<span class="k">${t("th_cmd")}</span><span class="v">${esc(d.cmd || "—")}</span>`
     + `<span class="k">${t("th_cwd")}</span><span class="v">${esc(d.cwd || "—")}</span></div>`;
   cancel.textContent = t("m_close");

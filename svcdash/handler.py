@@ -6,7 +6,7 @@ from html import escape
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
-from svcdash import procscan, sysinfo, tasks, manage, agents, goals, repos, tools, render
+from svcdash import procscan, sysinfo, tasks, manage, agents, goals, repos, tools, render, svcctl
 from svcdash.i18n import t, detect_lang, DEFAULT_LANG
 from svcdash.config import SERVER_VER
 
@@ -217,6 +217,8 @@ class Handler(BaseHTTPRequestHandler):
                                        for u in manage.MANAGE_UNITS]})
             else:
                 self._send_json(200, manage.manage_status(uid, lang))
+        elif path == "/api/svcctl":
+            self._send_json(200, svcctl.status())
         elif path.startswith("/api/agentlog"):
             qs = parse_qs(urlparse(self.path).query)
             sid = (qs.get("sid") or [""])[0]
@@ -293,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/manage", "/api/cleanup", "/api/uservice"):
+        if path not in ("/api/manage", "/api/cleanup", "/api/uservice", "/api/svcctl"):
             self.send_error(404)
             return
         try:
@@ -333,6 +335,14 @@ class Handler(BaseHTTPRequestHandler):
             self.log_message("uservice %s %s", unit, action)
             try:
                 self._send_json(200, tools.user_service_action(unit, action))
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/svcctl":
+            port = body.get("port")
+            action = str(body.get("action") or "")
+            self.log_message("svcctl %s %s", action, port)
+            try:
+                self._send_json(200, svcctl.svcctl_action(port, action, lang))
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
 

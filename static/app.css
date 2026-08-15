@@ -152,7 +152,7 @@
   /* ---------------- 自绘控件体系 ----------------
      不使用任何系统原生控件: 所有按钮/开关均为自绘元素。
      span[role=button] 语义: 可点击;键盘 Enter/Space 由全局委托触发 click。 */
-  .btn, .chip, .tcol, .ctl-btn, .mbtn, .aglog-refresh {
+  .btn, .chip, .tcol, .ctl-btn, .svctl-btn, .mbtn, .aglog-refresh {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     user-select: none; -webkit-user-select: none; touch-action: manipulation;
     cursor: pointer; transition: background .12s, border-color .12s, color .12s, transform .05s; }
@@ -197,7 +197,7 @@
   }
   .btn[aria-disabled="true"], .btn.disabled { opacity: .5; cursor: default; pointer-events: none; }
   .btn:focus-visible, .chip:focus-visible, .tcol:focus-visible,
-  .ctl-btn:focus-visible, .mbtn:focus-visible, .aglog-refresh:focus-visible {
+  .ctl-btn:focus-visible, .svctl-btn:focus-visible, .mbtn:focus-visible, .aglog-refresh:focus-visible {
     outline: 2px solid var(--focus); outline-offset: 2px; }
   /* ---------------- 内联 SVG 图标对齐体系(emoji 全量替换) ---------------- */
   .ic { display: inline-block; vertical-align: -0.15em; line-height: 1; }
@@ -480,10 +480,15 @@
   .detail { display: block; color: var(--text-ghost); font-size: 11px; font-family: ui-monospace, monospace; margin-top: 2px; }
   .local { color: var(--text-dim); font-size: 11px; }
   .ctl { white-space: nowrap; }
-  .ctl-btn { background: var(--btn-bg); border: 1px solid var(--btn-border); color: var(--text-hi);
+  .ctl-btn, .svctl-btn { background: var(--btn-bg); border: 1px solid var(--btn-border); color: var(--text-hi);
             border-radius: 16px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
-  .ctl-btn:hover { background: var(--btn-hover); }
-  .ctl-btn[aria-disabled="true"] { opacity: .5; cursor: default; }
+  .ctl-btn:hover, .svctl-btn:hover { background: var(--btn-hover); }
+  .ctl-btn[aria-disabled="true"], .svctl-btn[aria-disabled="true"] { opacity: .5; cursor: default; }
+  /* 每服务资源行: PID 列下方 CPU·MEM·时长 小字(等宽淡色, 与 .detail 同族) */
+  .svc-res { color: var(--text-faint); font-size: 11px; font-family: ui-monospace, monospace; }
+  .pid-res { margin-top: 3px; }
+  .pid-svctl { margin-top: 5px; }
+  .pid-svctl .svctl-btn { padding: 3px 10px; font-size: 11.5px; border-radius: 14px; }
   .empty { color: var(--text-faint); text-align: center; padding: 48px 0; }
   /* 空状态(iOS 风): 灰色大图标 + 粗体主标题 + 灰色副标题, 垂直居中大量留白 */
   .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -720,7 +725,7 @@
     .td-rows .v .mclamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
                           overflow: hidden; word-break: break-all; cursor: pointer; }
     .td-rows .v .mclamp.open { -webkit-line-clamp: unset; display: block; }
-    .ctl-btn { min-height: 44px; padding: 10px 16px; font-size: 13px; }
+    .ctl-btn, .svctl-btn { min-height: 44px; padding: 10px 16px; font-size: 13px; }
     .colswitch, .tcol { display: none; }
     .empty { padding: 32px 0; }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """启动入口: 参数解析 + ThreadingHTTPServer。"""
-import json, sys
+import json, os, sys
 from http.server import ThreadingHTTPServer
 
 from svcdash.handler import Handler
@@ -18,6 +18,7 @@ def main():
         except (ValueError, IndexError):
             print("用法: dashboard.py [--port N] [--scan] [--selftest]")
             return 2
+    os.environ["SVC_PORT"] = str(port)   # svcctl 守卫用: 识别自身端口, 拒绝暂停自己
     if "--scan" in args:
         print(json.dumps({"services": procscan.gather()}, ensure_ascii=False, indent=2))
         return 0

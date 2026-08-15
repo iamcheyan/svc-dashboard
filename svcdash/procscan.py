@@ -243,8 +243,6 @@ def proc_info(pid):
     info.update(classify(read(f"/proc/{pid}/cgroup")))
     return info
 _docker_ps_cache = {"t": 0.0, "map": {}}
-
-
 def docker_port_map():
     """docker ps 的端口映射: 宿主机端口 -> (容器名, 容器短ID)。
 
@@ -279,6 +277,65 @@ def docker_port_map():
                 mapping.setdefault(int(m.group(1)), (name, cid[:12]))
     _docker_ps_cache.update({"t": now, "map": mapping})
     return mapping
+
+# ---------------- 每服务资源占用(CPU%/内存/运行时长) ----------------
+# CPU 用相邻两次 gather() 的 /proc/<pid>/stat 差分(同 top_procs 思路):
+# 首次调用返回 0%(无前值), 前端 10s 轮询下始终有真实值。内存走 statm(单次读)。
+_CLK_TCK = os.sysconf("SC_CLK_TCK") or 100
+_PAGE = os.sysconf("SC_PAGE_SIZE") or 4096
+_BOOT_TIME = 0.0
+try:
+    with open("/proc/stat", encoding="utf-8") as _f:
+        for _line in _f:
+            if _line.startswith("btime "):
+                _BOOT_TIME = float(_line.split()[1])
+                break
+except OSError:
+    pass
+_res_prev = {"t": 0.0, "pids": {}}   # pid -> (utime+stime jiffies, starttime ticks)
+
+
+def _read_proc_stat(pid):
+    """(/proc/<pid>/stat) -> (cpu_jiffies, start_ticks) 或 None。
+    字段14/15=utime/stime, 22=starttime; comm 可能含空格/括号, 取最后一个 ')' 后切。"""
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8", errors="replace") as f:
+            raw = f.read()
+        tail = raw[raw.rfind(")") + 2:].split()
+        return (int(tail[11]) + int(tail[12]), int(tail[19]))
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def _read_proc_rss(pid):
+    try:
+        with open(f"/proc/{pid}/statm", encoding="utf-8") as f:
+            return int(f.read().split()[1]) * _PAGE
+    except (OSError, IndexError, ValueError):
+        return 0
+
+
+def service_resources(pids):
+    """聚合一组 pid 的 {cpu, mem_mb, up_sec}, 并滚动全局前值快照(差分算 CPU)。"""
+    now = time.time()
+    elapsed = now - _res_prev["t"] if _res_prev["t"] else 0.0
+    cur = {}                          # pid -> (jiffies, start_ticks)
+    for pid in pids:
+        st = _read_proc_stat(pid)
+        if st:
+            cur[pid] = st
+    if elapsed > 0.5:
+        deltas = [max(0, cur[p][0] - _res_prev["pids"][p][0])
+                  for p in cur if p in _res_prev["pids"]]
+        cpu_pct = sum(deltas) / _CLK_TCK / elapsed * 100.0
+    else:
+        cpu_pct = 0.0                 # 采样间隔太近(同一次页面双请求)不计
+    _res_prev.update({"t": now, "pids": cur})
+    mem = sum(_read_proc_rss(p) for p in cur)
+    start = min((v[1] for v in cur.values()), default=None)
+    up_sec = int(now - (_BOOT_TIME + start / _CLK_TCK)) if start else 0
+    return {"cpu": round(cpu_pct, 1), "mem_mb": round(mem / 1048576.0, 1),
+            "up_sec": max(0, up_sec)}
 def gather():
     """扫描一次,返回服务列表(按端口排序,同端口合并)。
 
@@ -372,5 +429,18 @@ def gather():
             "scope": "user", "docker_proxy": False, "is_self": False,
             "paused": True,
         })
+
+    # 资源占用 + 通用暂停(svcctl)状态: 台账里有记录的端口标 svcctl_paused;
+    # 可操作性(守卫: 自身/22/受保护进程)由 svcctl.can_pause 判定, 前端据此渲染按钮。
+    from svcdash import svcctl
+    paused_ports = {r.get("port") for r in svcctl.load_state()}
+    self_port = int(os.environ.get("SVC_PORT", "80"))
+    for e in entries:
+        if e.get("pids"):
+            e["res"] = service_resources(e["pids"])
+        if e["port"] in paused_ports:
+            e["svcctl_paused"] = True
+        e["manageable"] = e.get("svcctl_paused") or svcctl.can_pause(e, self_port=self_port)
+
     entries.sort(key=lambda e: e["port"])
     return entries
