@@ -1,7 +1,8 @@
 import glob, json, os, re, subprocess, time
 from svcdash.i18n import t, DEFAULT_LANG
 from svcdash.agents import (_tmux_run, _omp_tmux_panes, _tmux_capture,
-                            _tmux_by_cwd, scan_tmux, _omp_tail, OMP_SESSION_ROOT)
+                            _tmux_by_cwd, scan_tmux, _omp_tail,
+                            OMP_SESSION_ROOT, _event_text)
 # ---------------- Goal 进度卡片 / 负载水位 / 事件时间线 ----------------
 # 只读采集: goal_watchdog.sh 的 GOALS 数组 + goal-completed 台账 +
 # watchdog 日志 + tmux pane 实时画面 + session jsonl 活跃度。

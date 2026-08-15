@@ -26,7 +26,11 @@ static/               前端：index.html(壳+占位) app.css app.js
 六页：概要/日志/Goal/服务/模型/ツール（i18n 三语 zh/en/ja，按 Accept-Language 自动切换，
 `?lang=` 可强制）。
 
-- **概要**：状态大字卡 → 指标 2×2 → 需要处理（轻告警中心）→ 最近活动。
+- **概要**：状态大字卡 → 指标 2×2 → Web 服务磁贴（真身份+资源占用 CPU/内存/时长，
+  ≥30%橙/≥80%红高亮 + 迷你暂停/恢复钮，点击直达服务）→ Goal 摘要 → 仓库卡
+  （近 14 天 **Agent 操作轨迹条**：提交蓝/干预琥珀/恢复浅绿/完成深绿/OMP 工具活动紫，
+  点击进全屏轨迹详情页——设计原理见 README「Agent 操作轨迹」节，灵感 codex-trajectory）
+  → 系统指标 → 最近活动。
 - **日志**：agent 选择器 + 事件时间线（默认 24h，同 goal 循环事件折叠）。
 - **Goal**：omp goal 进度卡片（状态灯/上下文体积警示/Retrying 检测）+ 负载水位。
 - **服务**：监听端口表 + 分类 chips（用户服务默认）+ 手动进程服务启停按钮。
@@ -53,6 +57,7 @@ static/               前端：index.html(壳+占位) app.css app.js
 | `/api/omp` | GET | agent 聚合（OMP 会话 + Codex 进程） |
 | `/api/tmux` | GET | tmux 窗格列表 |
 | `/api/agentlog?sid=&cwd=&tmux=` | GET | agent 会话日志时间线 + 终端画面 |
+| `/api/trajectory?repo=NAME` | GET | 单仓库 Agent 操作轨迹（14 天逐日色块 + 200 条事件流；`repos.py:_traj_data`，含 OMP 会话工具调用/压缩事件） |
 | `/api/manage?unit=` | GET | 受管单元状态 |
 | `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（免密 sudo） |
 | `GET /api/svcctl` | GET | 通用暂停台账 + 历史（`~/.omp/svc-dashboard/{paused.json,actions.log}`） |

@@ -124,14 +124,112 @@ def _repo_one_stats(repo):
 
 
 # ---------------- Agent 操作轨迹(时间条 + 事件流) ----------------
-# 每仓库: git 提交(commit) + watchdog 事件(nudge/pause/restart=warn,
-# recover=good) + goal 完成(done)。逐日分桶,主色优先级 done>commit>warn>good。
+# 每仓库三类数据源(codex-trajectory 思想: 把原始日志投影成事件账本+时间轴):
+# 1. git 提交(commit); 2. watchdog 事件(nudge/pause/restart=warn, recover=good)
+#    + goal 完成(done); 3. OMP 会话 JSONL(tool_execution_start 每次工具调用 /
+#    compaction 上下文压缩 = agent 紫)。
+# 逐日分桶,主色优先级 done>commit>warn>good>agent(agent 填充否则灰色的工作日)。
 # cleanup/other 不进色条,只在详情事件流里出现。
 _TRAJ_KIND_CLS = {"commit": "commit", "complete": "done", "recover": "good",
-                  "restart": "warn", "nudge": "warn", "pause": "warn"}
+                  "restart": "warn", "nudge": "warn", "pause": "warn",
+                  "tool": "agent", "compact": "agent"}
 _TRAJ_DAYS = 14
 _traj_cache = {"t": 0.0, "data": {}}          # repo -> {"strip", "events"}
 _traj_wd_cache = {"t": 0.0, "by_root": None}  # 60s: watchdog/完成事件按仓库根分桶(共享快照)
+
+
+# OMP 会话日志适配: ~/.omp/agent/sessions/*/*.jsonl 共 ~478MB, 按
+# (path, mtime, size) 文件级增量缓存 —— 只重读在写的活跃会话; 行级先做
+# 子串预筛再 json.loads(80%+ 行是 message/toolResult, 无需解析)。
+_omp_files_cache = {}   # path -> (mtime, size, cwd, label, day_counts, events)
+_OMP_MARKERS = ('"tool_execution_start"', '"type":"compaction"', '"type": "compaction"', '"type":"session"', '"type": "session"')
+
+
+def _omp_parse_iso(ts):
+    """ISO8601 Z 时间戳 -> epoch 秒;失败返回 None。"""
+    from datetime import datetime, timezone
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+    except (AttributeError, ValueError):
+        return None
+
+
+def _omp_parse_file(path):
+    """流式解析单个会话文件 -> (cwd, label, day_counts, events)。
+    day_counts: {(y,m,d): {"agent": n}}; events: (ts, kind, tool, intent) 尾部400条。"""
+    cwd, label = "", ""
+    counts, evs = {}, []
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if not any(m in line for m in _OMP_MARKERS):
+                    continue
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                ty = d.get("type")
+                if ty == "session":
+                    cwd = d.get("cwd") or ""
+                elif ty == "compaction":
+                    ts = _omp_parse_iso(d.get("timestamp") or "")
+                    if ts:
+                        evs.append((ts, "compact", "", "context compaction"))
+                elif ty == "custom" and d.get("customType") == "tool_execution_start":
+                    data = d.get("data") or {}
+                    ts = _omp_parse_iso(data.get("startedAt") or d.get("timestamp") or "")
+                    if ts:
+                        evs.append((ts, "tool", str(data.get("toolName") or "?"),
+                                    str(data.get("intent") or "")[:80]))
+                elif ty == "title":
+                    label = (d.get("title") or "").strip()
+    except OSError:
+        pass
+    for ts, kind, _t, _i in evs:
+        lt = time.localtime(ts)
+        k = (lt.tm_year, lt.tm_mon, lt.tm_mday)
+        counts[k] = counts.get(k, 0) + 1
+    return cwd, label, counts, evs[-400:]
+
+
+def _traj_omp_by_root(window_sec):
+    """OMP 会话事件按仓库根分桶(文件级增量缓存, 无时间过期)。"""
+    from svcdash.agents import OMP_SESSION_ROOT
+    cutoff = time.time() - window_sec
+    by_root = {}
+    if not os.path.isdir(OMP_SESSION_ROOT):
+        return by_root
+    for dp, _dn, fns in os.walk(OMP_SESSION_ROOT):
+        for fn in fns:
+            if not fn.endswith(".jsonl"):
+                continue
+            p = os.path.join(dp, fn)
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            if st.st_mtime < cutoff:
+                continue                      # 窗口外的会话文件整体跳过
+            ent = _omp_files_cache.get(p)
+            if ent and ent[0] == st.st_mtime and ent[1] == st.st_size:
+                cwd, label, counts, evs = ent[2], ent[3], ent[4], ent[5]
+            else:
+                cwd, label, counts, evs = _omp_parse_file(p)
+                _omp_files_cache[p] = (st.st_mtime, st.st_size, cwd, label, counts, evs)
+            if not cwd:
+                continue
+            root = _git_root(cwd)
+            if not root:
+                continue
+            bucket = by_root.setdefault(root, {"days": {}, "events": []})
+            for k, n in counts.items():
+                bucket["days"][k] = bucket["days"].get(k, 0) + n
+            gid = fn.rsplit("_", 1)[-1][:8]
+            bucket["events"].extend(
+                {"ts": ts, "kind": kind, "gid": gid,
+                 "name": label or gid, "text": (tool + (" · " + intent if intent else ""))[:120]}
+                for ts, kind, tool, intent in evs)
+    return by_root
 
 
 def _traj_watchdog_by_root():
@@ -175,26 +273,33 @@ def _traj_data(repo):
             continue
         evs.append({"ts": ts, "kind": "commit", "gid": parts[0], "name": "", "text": parts[2]})
     evs.extend(_traj_watchdog_by_root().get(repo) or [])
+    omp = _traj_omp_by_root(_TRAJ_DAYS * 86400).get(repo) or {}
+    evs.extend(omp.get("events") or [])
     evs.sort(key=lambda x: -x["ts"])
     # 逐日分桶
     by_day = {}
     for e in evs:
+        if e["kind"] in ("tool", "compact"):
+            continue        # 工具活动由 omp days(全量计数)入桶, 不重复计
         cls = _TRAJ_KIND_CLS.get(e["kind"])
         if not cls:
             continue
         lt = time.localtime(e["ts"])
         d = by_day.setdefault((lt.tm_year, lt.tm_mon, lt.tm_mday), {})
         d[cls] = d.get(cls, 0) + 1
+    for k, n in (omp.get("days") or {}).items():
+        d = by_day.setdefault(k, {})
+        d["agent"] = d.get("agent", 0) + n
     base = time.localtime()
     noon = time.mktime((base.tm_year, base.tm_mon, base.tm_mday, 12, 0, 0, 0, 0, -1))
     strip = []
     for i in range(_TRAJ_DAYS - 1, -1, -1):
         lt = time.localtime(noon - i * 86400)
         c = by_day.get((lt.tm_year, lt.tm_mon, lt.tm_mday)) or {}
-        cls = next((k for k in ("done", "commit", "warn", "good") if c.get(k)), None)
+        cls = next((k for k in ("done", "commit", "warn", "good", "agent") if c.get(k)), None)
         strip.append({"d": "%d/%d" % (lt.tm_mon, lt.tm_mday), "cls": cls,
                       "n": sum(c.values()),
-                      "c": {k: c[k] for k in ("commit", "warn", "good", "done") if c.get(k)}})
+                      "c": {k: c[k] for k in ("commit", "warn", "good", "done", "agent") if c.get(k)}})
     data = {"strip": strip,
             "events": [{"ts": e["ts"],
                         "time": time.strftime("%m-%d %H:%M", time.localtime(e["ts"])),

@@ -212,9 +212,10 @@ function renderRepos(d) {
   }).join("");
 }
 // --- Agent 操作轨迹详情页(全屏浮层): 大号14天条 + 图例 + 事件流 ---
-const TR_KEY = { commit: "tr_commit", warn: "tr_warn", good: "tr_good", done: "tr_done" };
+const TR_KEY = { commit: "tr_commit", warn: "tr_warn", good: "tr_good", done: "tr_done", agent: "tr_agent" };
 const TR_EV_ICON = { commit: "branch", complete: "ok", recover: "up", restart: "retry",
-                     nudge: "bell", pause: "pause", cleanup: "trash", other: "dot" };
+                     nudge: "bell", pause: "pause", cleanup: "trash", other: "dot",
+                     tool: "code", compact: "box" };
 function closeTraj() {
   $("traj-view").hidden = true;
   document.documentElement.classList.remove("fs-noscroll");
@@ -242,7 +243,7 @@ async function openTraj(name) {
       return `<i class="${s.cls ? "tr-" + s.cls : "tr-idle"}" title="${escAttr(s.d + " · " + tip)}"></i>`;
     }).join("");
     $("traj-days").innerHTML = (d.strip || []).map((s, i) => `<b>${i % 2 ? "" : escHtml(s.d)}</b>`).join("");
-    $("traj-legend").innerHTML = ["commit", "warn", "good", "done"]
+    $("traj-legend").innerHTML = ["commit", "warn", "good", "done", "agent"]
       .map(k => `<span><i class="tr-${k}"></i>${t("tr_" + k)}</span>`).join("");
     const rows = (d.events || []).map(e => `<div class="traj-ev tr-ev-${e.cls || "none"}">`
       + `<span class="traj-ev-ico">${icon(TR_EV_ICON[e.kind] || "dot", 14)}</span>`

@@ -26,6 +26,7 @@
     --c-warn: #f0b662; --c-warn-bg: #2a2118; --c-warn-border: #5a4422;
     --c-green: #6ec89a; --c-green-bg: #14261c; --c-green-btn: #2e7d4f;
     --c-orange: #e0884c; --c-gray: #9a9a9a; --c-blue: #8ab4f8;
+    --c-violet: #9d8cf5; --c-violet-soft: #6b5bd6;
     --link-blue: #6ea8dc; --dot-off: #555;
     --accent-blue-bg: #1d2733; --accent-blue-bd: #2c3a4d; --accent-blue-tx: #9db8d9;
     --accent-blue-hover: #243445; --detail-bg: #101418;
@@ -60,6 +61,7 @@
       --c-warn: #8a5800; --c-warn-bg: #fdf3dd; --c-warn-border: #e3c88f;
       --c-green: #1e7d4f; --c-green-bg: #e6f4ec; --c-green-btn: #1e7d4f;
       --c-orange: #a85413; --c-gray: #5f6368; --c-blue: #2b6cb0;
+      --c-violet: #6c5ce7; --c-violet-soft: #5a4bd0;
       --link-blue: #2b6cb0; --dot-off: #b8b8b8;
       --accent-blue-bg: #e8f0fb; --accent-blue-bd: #c4d8f0; --accent-blue-tx: #3a6ea5;
       --accent-blue-hover: #d8e7fa; --detail-bg: #f0f5fa;
@@ -93,6 +95,7 @@
     --c-warn: #8a5800; --c-warn-bg: #fdf3dd; --c-warn-border: #e3c88f;
     --c-green: #1e7d4f; --c-green-bg: #e6f4ec; --c-green-btn: #1e7d4f;
     --c-orange: #a85413; --c-gray: #5f6368; --c-blue: #2b6cb0;
+      --c-violet: #6c5ce7; --c-violet-soft: #5a4bd0;
     --link-blue: #2b6cb0; --dot-off: #b8b8b8;
     --accent-blue-bg: #e8f0fb; --accent-blue-bd: #c4d8f0; --accent-blue-tx: #3a6ea5;
     --accent-blue-hover: #d8e7fa; --detail-bg: #f0f5fa;
@@ -125,6 +128,7 @@
     --c-warn: #f0b662; --c-warn-bg: #2a2118; --c-warn-border: #5a4422;
     --c-green: #6ec89a; --c-green-bg: #14261c; --c-green-btn: #2e7d4f;
     --c-orange: #e0884c; --c-gray: #9a9a9a; --c-blue: #8ab4f8;
+    --c-violet: #9d8cf5; --c-violet-soft: #6b5bd6;
     --link-blue: #6ea8dc; --dot-off: #555;
     --accent-blue-bg: #1d2733; --accent-blue-bd: #2c3a4d; --accent-blue-tx: #9db8d9;
     --accent-blue-hover: #243445; --detail-bg: #101418;
@@ -436,7 +440,8 @@
                background: var(--border-faint); opacity: .55; }
   .tr-commit { background: var(--c-blue); } .tr-warn { background: var(--c-warn); }
   .tr-good { background: var(--c-green); } .tr-done { background: var(--c-green-btn); }
-  .rp-traj .tr-commit, .rp-traj .tr-warn, .rp-traj .tr-good, .rp-traj .tr-done { opacity: 1; }
+  .tr-agent { background: var(--c-violet); }
+  .rp-traj .tr-commit, .rp-traj .tr-warn, .rp-traj .tr-good, .rp-traj .tr-done, .rp-traj .tr-agent { opacity: 1; }
   /* 轨迹详情浮层(复用 .fs-sheet 全屏壳; 桌面居中卡片) */
   .traj-sheet { display: flex; flex-direction: column; }
   .traj-stripwrap { padding: 14px 16px 2px; }
@@ -459,6 +464,7 @@
              border-bottom: 1px solid var(--border-faint); font-size: 12.5px; }
   .traj-ev-ico { flex: none; align-self: center; color: var(--text-ghost); }
   .tr-ev-commit .traj-ev-ico { color: var(--c-blue); }
+  .tr-ev-agent .traj-ev-ico { color: var(--c-violet); }
   .tr-ev-warn .traj-ev-ico { color: var(--c-warn); }
   .tr-ev-good .traj-ev-ico, .tr-ev-done .traj-ev-ico { color: var(--c-green); }
   .traj-ev-kind { flex: none; font-size: 10.5px; padding: 1px 7px; border-radius: 999px;

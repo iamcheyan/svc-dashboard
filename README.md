@@ -43,7 +43,36 @@ static/
 
 手势：左右滑动切页、触感反馈、safe-area 适配。桌面端用顶部分类条，移动端用底部页签。
 
-## 性能
+## Agent 操作轨迹（设计笔记，复习用）
+
+**灵感来源**：[icesixgod/codex-trajectory](https://github.com/icesixgod/codex-trajectory)（95★，MIT）——
+把本地 Codex 任务日志（JSONL）投影成"**事件账本 + 交互时间轴**"的只读查看器：轮次、
+近似模型步骤、推理摘要、工具调用耗时、子代理、上下文压缩、token 用量、失败，每类
+事件一种颜色块按时间排布；默认隐私模式只给"事件名+时间+状态+有界摘要"，不看对话
+全文。核心价值一句话：**不看过程全文，一眼看清一个 agent 任务"做了什么、卡在哪、
+花了多久"**。
+
+**映射到本面板**（数据源全是现有日志，零新增采集）：
+
+| 事件账本（JSONL 投影） | ① git log（每仓库 400 条）② `goal-watchdog.log`（gid→workdir→仓库根映射）+ `goal-completed.log` ③ **OMP 会话 JSONL**（`~/.omp/agent/sessions/*/*.jsonl`，172 个/478MB：`tool_execution_start` 每次工具调用含意图、`compaction` 上下文压缩、`session.cwd` 定位仓库） |
+| 检查器（点块看详情） | 点仓库卡 → 全屏轨迹详情页（大号色块条 + 图例 + 200 条事件流） |
+
+**颜色语义**（逐日主色，优先级 done > commit > warn > good）：
+
+| 色 | 含义 | 事件来源 |
+|---|---|---|
+| 🔵 蓝 `tr-commit` | 有提交 | git log |
+| 🟠 琥珀 `tr-warn` | watchdog 干预 | nudge（催"继续"）/ pause / restart（进程死亡重启） |
+| 🟢 浅绿 `tr-good` | 恢复 | recovered / resumed |
+| 🟣 紫 `tr-agent` | agent 工具活动（当日无更高优先级事件时显示） | OMP 会话 `tool_execution_start` + `compaction` |
+| 🟩 深绿 `tr-done` | goal 完成 | goal-completed.log |
+| ⬜ 灰 `tr-idle` | 当日无活动 | — |
+
+悬停色块显示当日各类计数；cleanup/other 类事件不进色条，只出现在详情页事件流。
+实现细节：watchdog/完成台账解析按 60s 共享快照（`_traj_wd_cache`，8 仓库只读一次
+日志）；**OMP 会话日志按 (path, mtime, size) 文件级增量缓存**（478MB 只在冷启动
+解析一次 ~7s，之后只重读在写的活跃会话；行级子串预筛跳过 80%+ 无关行）；
+轨迹数据 60s 缓存；`repos.py` 的 exts 文件类型统计已删除（无信息量）。
 
 - **HTTP/1.1 keep-alive**：旧版 HTTP/1.0 每请求新建 TCP 连接，现复用连接
 - **gzip**：HTML/JSON/CSS/JS 全压缩（移动端首屏 ~400KB → ~33KB）
@@ -60,6 +89,7 @@ static/
 | `/api/goals?limit=` | GET | goal 状态聚合 + 已完成台账 + 事件时间线 |
 | `/api/goaldetail?gid=&session=` | GET | 单个 goal 详情（状态/tmux 画面/活动） |
 | `/api/repos?refresh=` | GET | agent 改动过的 git 仓库统计 |
+| `/api/trajectory?repo=NAME` | GET | 单仓库 Agent 操作轨迹（14 天逐日色块 + 200 条事件流） |
 | `/api/tasks?lang=` | GET | systemd timer + cron 定时任务列表 |
 | `/api/omp` | GET | agent 聚合（OMP 会话 + Codex 进程） |
 | `/api/tmux` | GET | tmux 窗格列表 |
