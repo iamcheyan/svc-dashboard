@@ -3357,9 +3357,9 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   .detail { display: block; color: var(--text-ghost); font-size: 11px; font-family: ui-monospace, monospace; margin-top: 2px; }
   .local { color: var(--text-dim); font-size: 11px; }
   .ctl { white-space: nowrap; }
-  .ctl-btn { background: var(--btn-soft-bg); border: 1px solid var(--btn-soft-border); color: var(--text);
-            border-radius: 14px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
-  .ctl-btn:hover { border-color: var(--btn-soft-hover-bd); color: var(--text-title); }
+  .ctl-btn { background: var(--btn-bg); border: 1px solid var(--btn-border); color: var(--text-hi);
+            border-radius: 16px; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
+  .ctl-btn:hover { background: var(--btn-hover); }
   .ctl-btn[aria-disabled="true"] { opacity: .5; cursor: default; }
   .empty { color: var(--text-faint); text-align: center; padding: 48px 0; }
   /* 空状态(iOS 风): 灰色大图标 + 粗体主标题 + 灰色副标题, 垂直居中大量留白 */
@@ -4274,13 +4274,15 @@ function row(e, mobile) {
       kv(t("th_cwd"), esc(cwd)) +
       (man ? kv(t("th_ctl"), ctl) : "");
     return `<tr><td>` +
-      `${svcDot}<span class='badge ${badge[1]}'>${text}</span>${detail}` +
+      `<div class='td-head'>${svcDot}<span class='svc'>${esc(e.name)}</span>` +
+      `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
       `<span class='svc-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}' aria-label='${t("act_copy_addr")}'>${icon("copy", 15)}</span>` +
       `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>${icon("ext", 15)}</a></div>` +
       `<div class='td-rows'>${rows}</div></td></tr>`;
   }
   return `<tr>
-    <td class='port' data-label='${t("th_port")}'>${svcDot}<a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
+    <td class='name'>${svcDot}<span class='svc'>${esc(e.name)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
+    <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
     <td class='addr' data-label='${t("th_addr")}'>${esc(ip)}${loop}</td>
     <td class='pid' data-label='PID'>${e.pids.join(", ")}</td>
     <td class='cmd' data-label='${t("th_cmd")}'>
