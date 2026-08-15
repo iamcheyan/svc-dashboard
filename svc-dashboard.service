@@ -10,7 +10,7 @@ WorkingDirectory=/home/tetsuya/development/svc-dashboard
 Restart=on-failure
 RestartSec=3
 # 资源限制:防止失控拖垮系统(无人访问时实际只用 ~17MB、0% CPU)
-MemoryMax=128M
+MemoryMax=512M              # 额度刷新 spawn node 子进程, 128M 会被打爆
 CPUQuota=40%
 TasksMax=64
 

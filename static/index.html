@@ -8,7 +8,7 @@
 try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")document.documentElement.setAttribute("data-theme",_tm)}catch(e){}</script>
 <title>{{T:title}} · {{HOSTNAME}}</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/static/app.css?v=ecbdc4a2">
+<link rel="stylesheet" href="/static/app.css?v=d3f6999b">
 <header>
   <!-- topbar 重设计: 左=服务器名(HOSTNAME), 右=刷新按钮(点击刷新/长按锁定自动刷新)。
        原 meta 行与自动刷新开关已并入按钮; updated/count 保留为隐藏节点供 JS 写入。 -->
@@ -19,6 +19,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <span class="spacer"></span>
   <!-- 桌面端分类条(右上角): 全部/概览/Goal/服务/工具, 过滤主体分区; 移动端隐藏(有底部页签) -->
   <nav id="catbar" aria-label="category"></nav>
+  <!-- 连接信息: 关键 IP/ssh 一进页即可见(点击复制), JS 按 TL_CONF 填充 -->
+  <div class="connbar" id="connbar"></div>
   <span class="btn icon-btn" id="refresh" role="button" tabindex="0"
         title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:17}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
 </header>
@@ -172,7 +174,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
         <span class="btn tl-run" id="tl-clean-scan" role="button" tabindex="0">{{T:tl_clean_scan}}</span>
         <span class="btn tl-run" id="tl-clean-exec" role="button" tabindex="0" hidden>{{T:tl_clean_exec}}</span>
       </div>
-      <div id="tl-clean-body"><div class="gempty">{{T:tl_clean_scan}} →</div></div>
+      <div id="tl-clean-body" hidden></div>
     </div>
 
     <!-- G2 用户级服务重启(I-KNOW 护栏, 默认锁; 逻辑不许放松) -->
@@ -186,20 +188,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
         <span class="btn tl-run" id="tl-usvc-showlock" role="button" tabindex="0" title="{{T:tl_usvc_title}}">{{ICO:lock:14}}</span>
       </div>
       <div id="tl-usvc-body"></div>
-    </div>
-  </div>
-
-  <div class="tl-group" id="tlg-direct">
-    <div class="tl-grouph">{{T:tl_grp_direct}}</div>
-    <!-- G1 工具直达 chips(JS 填充) -->
-    <div class="tl-sec" id="tl-g1sec">
-      <h3>{{T:tl_g1_title}}</h3>
-      <div class="filters toolchips" id="tl-g1"></div>
-    </div>
-
-    <!-- F4 快速复制组(JS 填充) -->
-    <div class="tl-sec" id="tl-copy">
-      <div id="tl-copy-body" class="tl-copyrow"></div>
     </div>
   </div>
 
@@ -291,11 +279,12 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <div class="traj-days" id="traj-days"></div>
   </div>
   <div class="traj-legend" id="traj-legend"></div>
+  <div class="traj-filter" id="traj-filter" hidden></div>
   <div class="traj-body" id="traj-body"></div>
 </div>
 
 <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
-<script src="/static/app.js?v=844c8c2e" defer></script>
+<script src="/static/app.js?v=44d3c757" defer></script>
 </body>
 </html>

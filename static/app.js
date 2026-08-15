@@ -192,13 +192,9 @@ function renderRepos(d) {
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return (i ? n.toFixed(1) : n) + " " + u[i];
   };
-  // Agent 操作轨迹条: 近14天逐日色块(提交=蓝 干预=琥珀 恢复=浅绿 完成=绿); 点击整卡进详情
-  const stripOf = (traj) => (traj || []).map(d => {
-    const tip = d.n
-      ? Object.entries(d.c || {}).map(([k, v]) => `${t(TR_KEY[k] || k)}×${v}`).join(" ")
-      : t("tr_idle");
-    return `<i class="${d.cls ? "tr-" + d.cls : "tr-idle"}" title="${escAttr(d.d + " · " + tip)}"></i>`;
-  }).join("");
+  // Agent 操作轨迹条: 近14天逐日双行色块(上行=里程碑: 完成/提交/干预/恢复,
+  // 下行=活动健康: 工具调用紫 / 失败高发红); 点击整卡进详情
+  const stripOf = (traj) => (traj || []).map(trajCell).join("");
   el.innerHTML = list.map(r => {
     const meta = [t("rp_commits", { n: r.commits ?? "—" }), fmtB(r.size), t("rp_files", { n: r.files ?? "—" })];
     if (r.dirty) meta.push(`<span class="rp-dirty">${t("rp_dirty", { n: r.dirty })}</span>`);
@@ -211,11 +207,45 @@ function renderRepos(d) {
 
   }).join("");
 }
-// --- Agent 操作轨迹详情页(全屏浮层): 大号14天条 + 图例 + 事件流 ---
-const TR_KEY = { commit: "tr_commit", warn: "tr_warn", good: "tr_good", done: "tr_done", agent: "tr_agent" };
+// --- Agent 操作轨迹详情页(全屏浮层): 大号14天双行条 + 图例 + 类别筛选 + 事件流 ---
+const TR_KEY = { commit: "tr_commit", warn: "tr_warn", good: "tr_good", done: "tr_done",
+                 agent: "tr_agent", error: "tr_error", turn: "tr_turn", say: "tr_say",
+                 compact: "tr_compact", exit: "tr_exit", spawn: "tr_spawn",
+                 replan: "tr_replan", model: "tr_model" };
 const TR_EV_ICON = { commit: "branch", complete: "ok", recover: "up", restart: "retry",
                      nudge: "bell", pause: "pause", cleanup: "trash", other: "dot",
-                     tool: "code", compact: "box" };
+                     tool: "code", compact: "box", error: "err", turn: "user",
+                     say: "chat", exit: "power", spawn: "spark", replan: "refresh", model: "cpu" };
+// 双行逐日 cell: 上行里程碑色, 下行活动健康色; title 汇总当日全部类别计数
+function trajCell(s) {
+  const tip = s.n
+    ? Object.entries(s.c || {}).map(([k, v]) => `${t(TR_KEY[k] || k)}×${v}`).join(" ")
+    : t("tr_idle");
+  return `<span class="tr-day" title="${escAttr(s.d + " · " + tip)}">`
+    + `<i class="tr-top${s.cls ? " tr-" + s.cls : " tr-idle"}"></i>`
+    + `<i class="tr-bot${s.bot ? " tr-" + s.bot : " tr-idle"}"></i></span>`;
+}
+let trajEvents = [], trajFilter = "";
+function renderTrajBody() {
+  const list = trajFilter ? trajEvents.filter(e => e.kind === trajFilter) : trajEvents;
+  const rows = list.map(e => `<div class="traj-ev tr-ev-${e.cls || "none"}">`
+    + `<span class="traj-ev-ico">${icon(TR_EV_ICON[e.kind] || "dot", 14)}</span>`
+    + `<span class="traj-ev-kind">${escHtml(t("trk_" + e.kind) || e.kind)}</span>`
+    + `<span class="traj-ev-text">${e.name ? `<b>${escHtml(e.name)}</b> · ` : ""}${escHtml(e.text || "")}</span>`
+    + `<span class="traj-ev-time">${escHtml(e.time)}</span></div>`).join("");
+  $("traj-body").innerHTML = rows || `<div class="gempty">${t("tr_empty")}</div>`;
+}
+function renderTrajFilter() {
+  const el = $("traj-filter");
+  if (!el) return;
+  const counts = {};
+  trajEvents.forEach(e => { counts[e.kind] = (counts[e.kind] || 0) + 1; });
+  const kinds = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  el.innerHTML = kinds.map(k =>
+    `<span class="trf-chip${trajFilter === k ? " on" : ""}" data-tfk="${escAttr(k)}" role="button" tabindex="0">`
+    + `${icon(TR_EV_ICON[k] || "dot", 11)} ${escHtml(t("trk_" + k) || k)} <b>${counts[k]}</b></span>`).join("");
+  el.hidden = !kinds.length;
+}
 function closeTraj() {
   $("traj-view").hidden = true;
   document.documentElement.classList.remove("fs-noscroll");
@@ -228,6 +258,8 @@ async function openTraj(name) {
   $("traj-strip").innerHTML = "";
   $("traj-days").innerHTML = "";
   $("traj-legend").innerHTML = "";
+  $("traj-filter").innerHTML = "";
+  $("traj-filter").hidden = true;
   $("traj-body").innerHTML = `<div class="gempty">${t("a_loading")}</div>`;
   v.hidden = false;
   v.classList.remove("opening"); void v.offsetWidth; v.classList.add("opening");
@@ -238,24 +270,28 @@ async function openTraj(name) {
     const d = await r.json();
     if (!d.ok) { $("traj-body").innerHTML = `<div class="gempty">${escHtml(d.msg || "error")}</div>`; return; }
     $("traj-sub").textContent = d.path || "";
-    $("traj-strip").innerHTML = (d.strip || []).map(s => {
-      const tip = s.n ? Object.entries(s.c || {}).map(([k, n2]) => `${t(TR_KEY[k] || k)}×${n2}`).join(" ") : t("tr_idle");
-      return `<i class="${s.cls ? "tr-" + s.cls : "tr-idle"}" title="${escAttr(s.d + " · " + tip)}"></i>`;
-    }).join("");
+    $("traj-strip").innerHTML = (d.strip || []).map(trajCell).join("");
     $("traj-days").innerHTML = (d.strip || []).map((s, i) => `<b>${i % 2 ? "" : escHtml(s.d)}</b>`).join("");
-    $("traj-legend").innerHTML = ["commit", "warn", "good", "done", "agent"]
+    $("traj-legend").innerHTML = ["commit", "warn", "good", "done", "agent", "error"]
       .map(k => `<span><i class="tr-${k}"></i>${t("tr_" + k)}</span>`).join("");
-    const rows = (d.events || []).map(e => `<div class="traj-ev tr-ev-${e.cls || "none"}">`
-      + `<span class="traj-ev-ico">${icon(TR_EV_ICON[e.kind] || "dot", 14)}</span>`
-      + `<span class="traj-ev-kind">${escHtml(t("trk_" + e.kind) || e.kind)}</span>`
-      + `<span class="traj-ev-text">${e.name ? `<b>${escHtml(e.name)}</b> · ` : ""}${escHtml(e.text || "")}</span>`
-      + `<span class="traj-ev-time">${escHtml(e.time)}</span></div>`).join("");
-    $("traj-body").innerHTML = rows || `<div class="gempty">${t("tr_empty")}</div>`;
+    trajEvents = d.events || [];
+    trajFilter = "";
+    renderTrajFilter();
+    renderTrajBody();
   } catch (e) {
     $("traj-body").innerHTML = `<div class="gempty">${escHtml(e.message)}</div>`;
   }
 }
 document.addEventListener("click", (ev) => {
+  const chip = ev.target.closest(".trf-chip");
+  if (chip) {                       // 类别筛选: 再点同 chip 取消筛选
+    const k = chip.dataset.tfk;
+    trajFilter = trajFilter === k ? "" : k;
+    renderTrajFilter();
+    renderTrajBody();
+    haptic(6);
+    return;
+  }
   const row = ev.target.closest(".rp-row[data-traj]");
   if (row) { openTraj(row.dataset.traj); return; }
   if (ev.target.closest("#traj-back")) closeTraj();
@@ -1549,7 +1585,16 @@ function renderRuntimes(d) {
       else { setCat("log"); scrollTo(0, 0); }
     }));
   if (d.ctl && d.ctl.running) rtPollCtl();
-  else if (d.quota && d.quota.running && !rtTimer) setTimeout(() => { if (!rtTimer) refreshAgentsPage(); }, 6000);
+  else if (d.quota && d.quota.running && !rtTimer) rtPollQuota();
+}
+function rtPollQuota() {   // 额度后台刷新中: 6s 后重查重渲染(仍在刷新则继续链式等待)
+  setTimeout(async () => {
+    try {
+      rtT = 0;
+      const d = await loadRuntimes(true);
+      if ($("agents-page") && !$("agents-page").hidden) renderRuntimes(d);
+    } catch (e) { return; }
+  }, 6000);
 }
 function rtPollCtl() {
   if (rtTimer) return;
@@ -2028,31 +2073,16 @@ function renderHealth(h) {
       `${x.up ? "●" : "○"} :${x.port} ${escHtml(x.name)}`).join("\n")}</div>` : "");
 }
 
-// --- F4 快速复制组 ---
-function renderCopyGroup() {
+// --- 连接信息条(顶栏 connbar): ssh/IP 点击复制, 数据来自 TL_CONF(不写死) ---
+function renderConnbar() {
+  const bar = $("connbar");
+  if (!bar) return;
   const hosts = TL_CONF.hosts || {};
-  const sshHost = hosts.tailscale || hosts.lan || hosts.hostname || "host";
-  const items = [
-    [t("tl_copy_ssh"), `ssh tetsuya@${sshHost}`],
-    [t("tl_copy_ts"), hosts.tailscale || "—"],
-    [t("tl_copy_lan"), hosts.lan || "—"],
-  ];
-  $("tl-copy-body").innerHTML = items.map(([lbl, val]) =>
-    `<span class='btn gcopy' data-copy='${escAttr(val)}' role='button' tabindex='0'>${escHtml(lbl)}: <b>${escHtml(val)}</b></span>`).join("");
-}
-
-async function renderG1() {
-  const el = $("tl-g1");
-  const host = linkHost(location.hostname);
-  try {
-    const d = await tlGet("/api/toolports");
-    const alive = new Set(d.alive || []);
-    el.innerHTML = (TL_CONF.g1 || []).map(([n, p]) => alive.has(p)
-      ? `<a class='chip tchip' href='http://${host}:${p}/' target='_blank' rel='noopener'>${n} :${p} ${icon("ext", 11)}</a>`
-      : `<span class='chip tchip' style='opacity:.35;cursor:default'>${n} :${p}</span>`).join("");
-  } catch (e) {
-    el.innerHTML = "";
-  }
+  const ts = hosts.tailscale || "", lan = hosts.lan || "";
+  const user = (hosts.ssh_user || "tetsuya");
+  bar.innerHTML =
+    (ts ? `<span class="btn gcopy" data-copy="ssh ${user}@${ts}" role="button" tabindex="0" title="ssh">${escHtml(t("tl_copy_ssh"))} <b>${escHtml(ts)}</b></span>` : "") +
+    (lan ? `<span class="btn gcopy" data-copy="${escAttr(lan)}" role="button" tabindex="0" title="LAN">${escHtml(t("tl_copy_lan"))} <b>${escHtml(lan)}</b></span>` : "");
 }
 
 // --- F1 文件浏览: 独立全屏页(home 起点), 移动单栏 / 桌面≥1024 双栏 ---
@@ -2523,8 +2553,7 @@ function initToolsPage() {
   $("toolspage").hidden = false;
   if (!toolsInited) {
     toolsInited = true;
-    renderCopyGroup();
-    renderG1();
+    renderConnbar();
     runHealth();
     cronLoad();
     if (localStorage.getItem("svc-usvc") === "I-KNOW") usvcLoad();
@@ -2728,4 +2757,5 @@ if (isMobile()) {
 }
 initLogAgentPicker();   // 延后到这里: escHtml 等 const 已初始化(避免 TDZ 崩整页)
 load(true);
+renderConnbar();   // 顶栏连接信息(ssh/IP)随首屏渲染, 不等进工具页
 hydrateFragments();

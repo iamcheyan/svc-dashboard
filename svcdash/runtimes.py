@@ -42,10 +42,14 @@ REGISTRY = [
      "names": {"omp"}, "extra_re": r"__omp_worker|/\.bun/bin/omp",
      "wrapper": DOTFILES_AGENT + "/omp.sh",
      "rm_bins": [HOME + "/.local/bin/omp", HOME + "/.bun/bin/omp"]},
-    {"id": "codex", "name": "Codex CLI", "bins": ["codex"], "names": {"codex"},
+    {"id": "codex", "name": "Codex CLI",
+     "bins": ["codex", HOME + "/.fnm/node-versions/*/installation/bin/codex"],
+     "names": {"codex"},
      "wrapper": DOTFILES_AGENT + "/codex.sh", "npm_pkg": "@openai/codex",
      "quota": "codex"},
-    {"id": "claude", "name": "Claude Code", "bins": ["claude"], "names": {"claude"},
+    {"id": "claude", "name": "Claude Code",
+     "bins": ["claude", HOME + "/.fnm/node-versions/*/installation/bin/claude"],
+     "names": {"claude"},
      "wrapper": DOTFILES_AGENT + "/claude-code.sh", "npm_pkg": "@anthropic-ai/claude-code"},
     {"id": "agy", "name": "Antigravity (Gemini)", "bins": [HOME + "/.local/bin/agy"],
      "names": {"agy", "antigravity"},
@@ -85,18 +89,6 @@ REGISTRY = [
 ]
 _PROC_CACHE = {"t": 0.0, "data": None}
 
-
-def find_bin(cands):
-    for c in cands:
-        p = os.path.expanduser(c)
-        if os.path.isfile(p) and os.access(p, os.X_OK):
-            return p
-        if "/" not in p:
-            for d in os.environ.get("PATH", "").split(":"):
-                q = os.path.join(d, p)
-                if os.path.isfile(q) and os.access(q, os.X_OK):
-                    return q
-    return None
 
 
 def agent_version(binpath):
@@ -175,6 +167,25 @@ def _pid_alive(pid):
         return True
     except OSError:
         return False
+
+
+def find_bin(cands):
+    """cands 支持绝对路径 / PATH 裸名 / glob(fnm node-versions 版本目录)。"""
+    import glob as _glob
+    expanded = []
+    for c in cands:
+        expanded.extend(sorted(_glob.glob(os.path.expanduser(c))) or [c])
+    for c in expanded:
+        p = os.path.expanduser(c)
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+        if "/" not in p:
+            for d in os.environ.get("PATH", "").split(":"):
+                q = os.path.join(d, p)
+                if os.path.isfile(q) and os.access(q, os.X_OK):
+                    return q
+    return None
+
 
 
 def _grok_tasks():
@@ -328,8 +339,9 @@ def _parse_cursor_quota(d):
     end_ms = usage.get("billingCycleEnd")
     if end_ms:
         try:
+            reset = time.strftime("%Y-%m-%d %H:%M", time.localtime(int(end_ms) / 1000))
             for b in buckets:
-                b["reset"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(int(end_ms) / 1000))
+                b["reset"] = reset
         except (TypeError, ValueError):
             pass
     return {"ok": bool(buckets), "account": "", "plan": "", "buckets": buckets,
@@ -342,9 +354,14 @@ QUOTA_PARSERS = {"codex": _parse_codex_quota, "agy": _parse_agy_quota,
 
 
 def _runuser_tetsuya(cmd, timeout=300):
-    """以 tetsuya 身份跑命令(root 服务降权), 返回 (rc, 输出合并文本)。"""
+    """以 tetsuya 身份跑命令(root 服务降权), 返回 (rc, 输出合并文本)。
+    runuser 不加载登录环境, 显式注入用户 PATH(fnm/npm/agent bin)。"""
+    env_path = (f'export PATH="{HOME}/.local/bin:{HOME}/.bun/bin:{HOME}/.grok/bin:'
+                f'{HOME}/.opencode/bin:{HOME}/.fnm:{HOME}/.local/share/fnm:'
+                f'/usr/local/bin:/usr/bin:/bin" && ')
     try:
-        out = subprocess.run(["/usr/sbin/runuser", "-u", "tetsuya", "--", "bash", "-c", cmd],
+        out = subprocess.run(["/usr/sbin/runuser", "-u", "tetsuya", "--", "bash", "-c",
+                              env_path + cmd],
                              capture_output=True, text=True, timeout=timeout)
         txt = ((out.stdout or "") + (("\n[stderr] " + out.stderr) if out.stderr else "")).strip()
         return out.returncode, txt[-4000:]
@@ -363,8 +380,16 @@ def refresh_quota(force=False):
             return
         _quota["running"] = True
     def _work():
-        rc, txt = _runuser_tetsuya(
-            f"bash {QUOTA_SCRIPT} --json", timeout=120)
+        try:
+            out = subprocess.run(
+                ["/usr/sbin/runuser", "-u", "tetsuya", "--", "bash",
+                 QUOTA_SCRIPT, "--json"],
+                capture_output=True, text=True, timeout=120)
+            rc, txt = out.returncode, (out.stdout or "").strip()
+        except subprocess.TimeoutExpired:
+            rc, txt = 124, ""
+        except OSError as e:
+            rc, txt = 1, ""
         with _quota["lock"]:
             _quota["running"] = False
             _quota["t"] = time.time()
@@ -372,7 +397,7 @@ def refresh_quota(force=False):
                 _quota["err"] = txt or f"exit {rc}"
                 return
             try:
-                raw = json.loads(txt[txt.index("{"):])
+                raw = json.loads(txt[txt.index("{"):txt.rindex("}") + 1])
             except ValueError:
                 _quota["err"] = txt[:200]
                 return

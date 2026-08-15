@@ -440,34 +440,45 @@
   .rp-dirty { color: var(--c-warn); }
   .rp-last { margin-top: 4px; font-size: 12px; color: var(--text-mid); overflow: hidden;
              text-overflow: ellipsis; white-space: nowrap; }
-  /* Agent 操作轨迹条: 近14天逐日色块(替换原文件类型条)。
-     颜色规则必须 ≥ 容器元素选择器(.rp-traj i = 0,1,1)的优先级,
-     用双类(0,2,0)覆盖灰底 —— 单类 .tr-commit(0,1,0) 会被灰底压住(踩过)。 */
+  /* Agent 操作轨迹条: 近14天逐日双行色块 —— 每日一个 .tr-day(上下两根 i):
+     上行=里程碑(完成/提交/干预/恢复), 下行=活动健康(工具调用紫/失败高发红)。
+     ⚠ 优先级: 基础规则 .rp-traj .tr-day i = 0,2,1, 颜色规则必须用
+     .rp-traj .tr-day i.tr-xxx = 0,3,0 覆盖(背景+opacity 一并写, 踩过两次)。 */
   .rp-traj { display: flex; gap: 3px; margin-top: 7px; }
-  .rp-traj i { flex: 1 1 0; min-width: 0; height: 9px; border-radius: 2.5px;
-               background: var(--border-faint); opacity: .55; }
-  .rp-traj .tr-commit, .traj-strip .tr-commit, .traj-legend .tr-commit { background: var(--c-blue); }
-  .rp-traj .tr-warn, .traj-strip .tr-warn, .traj-legend .tr-warn { background: var(--c-warn); }
-  .rp-traj .tr-good, .traj-strip .tr-good, .traj-legend .tr-good { background: var(--c-green); }
-  .rp-traj .tr-done, .traj-strip .tr-done, .traj-legend .tr-done { background: var(--c-green-btn); }
-  .rp-traj .tr-agent, .traj-strip .tr-agent, .traj-legend .tr-agent { background: var(--c-violet); }
-  .rp-traj .tr-commit, .rp-traj .tr-warn, .rp-traj .tr-good, .rp-traj .tr-done, .rp-traj .tr-agent { opacity: 1; }
+  .rp-traj .tr-day { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .rp-traj .tr-day i { flex: none; min-width: 0; height: 4.5px; border-radius: 2px;
+                       background: var(--border-faint); opacity: .55; }
+  .rp-traj .tr-day i.tr-commit, .traj-strip .tr-day i.tr-commit, .traj-legend i.tr-commit { background: var(--c-blue); opacity: 1; }
+  .rp-traj .tr-day i.tr-warn, .traj-strip .tr-day i.tr-warn, .traj-legend i.tr-warn { background: var(--c-warn); opacity: 1; }
+  .rp-traj .tr-day i.tr-good, .traj-strip .tr-day i.tr-good, .traj-legend i.tr-good { background: var(--c-green); opacity: 1; }
+  .rp-traj .tr-day i.tr-done, .traj-strip .tr-day i.tr-done, .traj-legend i.tr-done { background: var(--c-green-btn); opacity: 1; }
+  .rp-traj .tr-day i.tr-agent, .traj-strip .tr-day i.tr-agent, .traj-legend i.tr-agent { background: var(--c-violet); opacity: 1; }
+  .rp-traj .tr-day i.tr-error, .traj-strip .tr-day i.tr-error, .traj-legend i.tr-error { background: var(--c-red); opacity: 1; }
+  .tr-ev-error .traj-ev-ico { color: var(--c-red); }
   /* 轨迹详情浮层(复用 .fs-sheet 全屏壳; 桌面居中卡片) */
   .traj-sheet { display: flex; flex-direction: column; }
   .traj-stripwrap { padding: 14px 16px 2px; }
-  .traj-strip { display: flex; gap: 4px; }
-  .traj-strip i { flex: 1 1 0; min-width: 0; height: 26px; border-radius: 5px;
-                  background: var(--border-faint); opacity: .5; }
-  .traj-strip .tr-commit, .traj-strip .tr-warn,
-  .traj-strip .tr-good, .traj-strip .tr-done, .traj-strip .tr-agent { opacity: 1; }
+  .traj-strip { display: flex; gap: 4px; height: 30px; }
+  .traj-strip .tr-day { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .traj-strip .tr-day i { flex: 1 1 0; min-width: 0; border-radius: 4px;
+                          background: var(--border-faint); opacity: .5; }
   .traj-days { display: flex; gap: 4px; margin-top: 4px; }
   .traj-days b { flex: 1 1 0; text-align: center; font-size: 9.5px; font-weight: 400;
                  color: var(--text-ghost); white-space: nowrap; overflow: hidden; }
   .traj-legend { display: flex; gap: 14px; padding: 10px 16px; font-size: 11px;
-                 color: var(--text-dim); border-bottom: 1px solid var(--border-faint); flex-wrap: wrap; }
+                 color: var(--text-dim); flex-wrap: wrap; }
   .traj-legend span { display: inline-flex; align-items: center; gap: 5px; }
   .traj-legend i { width: 9px; height: 9px; border-radius: 2.5px; display: inline-block;
                    background: var(--border-faint); }
+  /* 类别筛选 chips: 点击只看该类事件, 再点取消 */
+  .traj-filter { display: flex; gap: 6px; padding: 4px 16px 10px; flex-wrap: wrap;
+                 border-bottom: 1px solid var(--border-faint); }
+  .trf-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 9px;
+              border-radius: 999px; border: 1px solid var(--chip-border); background: var(--chip-bg);
+              color: var(--text-dim); cursor: pointer; user-select: none; }
+  .trf-chip b { font-weight: 600; color: var(--text-mid); font-variant-numeric: tabular-nums; }
+  .trf-chip.on { border-color: var(--c-blue); color: var(--c-blue); background: var(--accent-blue-bg); }
+  .trf-chip.on b { color: var(--c-blue); }
   .traj-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
                padding: 4px 16px calc(24px + env(safe-area-inset-bottom)); }
   .traj-ev { display: flex; align-items: baseline; gap: 8px; padding: 8px 0;
@@ -861,11 +872,21 @@
   .tl-grouph { margin: 0 0 4px; font-size: 13px; color: var(--text-dim); font-weight: 500;
                display: flex; align-items: center; gap: 8px; }
   .tl-grouph::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--border-faint); }
-  .tl-group .tl-sec + .tl-sec { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
+  .tl-group .tl-sec { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
+                      padding: 12px 14px; }
+  .tl-group .tl-sec + .tl-sec { margin-top: 0; }
+  #toolspage { row-gap: 12px; }
   @media (min-width: 769px) {
     #toolspage[hidden] { display: none !important; }
-    #toolspage { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; align-items: start; }
-    #toolspage > h2, #tlg-direct, #tlg-pref { grid-column: 1 / -1; }
+    /* 工具页: 运维操作一排(3列) → 巡检诊断一排(3列) → 计划任务全宽; 分组头不再占整行 */
+    #toolspage { display: grid; grid-template-columns: repeat(6, 1fr); column-gap: 14px; align-items: start; }
+    #toolspage > h2, #tlg-pref { grid-column: 1 / -1; }
+    #tlg-insp, #tlg-ops { grid-column: 1 / -1; display: contents; }
+    #tlg-insp .tl-grouph, #tlg-ops .tl-grouph { grid-column: 1 / -1; }
+    /* 卡片按内容自适应高度; 计划任务全宽第二排(内部限高), 避免撑高同行 */
+    #tl-health, #tl-net, #tl-cron, #tl-fs, #tl-clean, #tl-usvc { grid-column: span 2; align-self: start; }
+    #tl-cron { grid-column: 1 / -1; }
+    #tl-cron-body { max-height: 300px; }
     #tlg-insp { grid-column: 1; }
     #tlg-ops { grid-column: 2; }
     .tl-group { margin-top: 20px; }
@@ -875,6 +896,7 @@
   .tl-sechead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .tl-sechead h3 { margin: 0; flex: 1 1 auto; }
   .tl-run { flex: none; cursor: pointer; user-select: none; }
+  #tl-cron-body { max-height: 340px; overflow-y: auto; padding-right: 4px; }
   .tl-row { display: flex; align-items: center; gap: 8px; padding: 5px 0;
             font-size: 12.5px; border-bottom: 1px dashed var(--border-faint); }
   .tl-row:last-child { border-bottom: none; }
@@ -1123,13 +1145,17 @@
   }
   /* 桌面端分类条(右上角): 移动端隐藏(有底部页签); 选中态复用 --nav-pill+--accent */
   #catbar { display: none; gap: 6px; align-items: center; }
+  /* 连接信息条(顶栏): 桌面常显, 移动端隐藏(首页 sysbar 已有IP卡片) */
+  .connbar { display: none; gap: 6px; align-items: center; }
+  .connbar .btn { font-size: 11px; padding: 4px 10px; gap: 3px; white-space: nowrap; }
+  .connbar .btn b { font-family: ui-monospace, monospace; font-weight: 600; font-size: 11px; }
   #catbar .cat { appearance: none; border: 1px solid var(--chip-border); background: var(--chip-bg);
       color: var(--text-mid); border-radius: 999px; padding: 7px 15px; font-size: 12.5px;
       cursor: pointer; transition: background .18s ease, color .18s ease; }
   #catbar .cat:hover { color: var(--text-hi); }
   #catbar .cat.active { background: var(--nav-pill); border-color: transparent; color: var(--accent); font-weight: 600; }
   .cat-off { display: none !important; }   /* 分类过滤: 仅桌面 JS 加, 断点切回移动时移除 */
-  @media (min-width: 769px) { #catbar { display: flex; } }
+  @media (min-width: 769px) { #catbar { display: flex; } .connbar { display: flex; } }
   /* "全部"模式预览折叠: 分区限高渐隐 + 右下"查看更多"跳对应分类 */
 
 /* ===== Agent 运行时总览 (rt-*) ===== */

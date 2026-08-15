@@ -126,23 +126,37 @@ def _repo_one_stats(repo):
 # ---------------- Agent 操作轨迹(时间条 + 事件流) ----------------
 # 每仓库三类数据源(codex-trajectory 思想: 把原始日志投影成事件账本+时间轴):
 # 1. git 提交(commit); 2. watchdog 事件(nudge/pause/restart=warn, recover=good)
-#    + goal 完成(done); 3. OMP 会话 JSONL(tool_execution_start 每次工具调用 /
-#    compaction 上下文压缩 = agent 紫)。
-# 逐日分桶,主色优先级 done>commit>warn>good>agent(agent 填充否则灰色的工作日)。
-# cleanup/other 不进色条,只在详情事件流里出现。
+#    + goal 完成台账(done); 3. OMP 会话 JSONL 全信号(见下方 _omp_parse_file)。
+# 逐日色块为双行: 上行=里程碑(done>commit>warn>good), 下行=活动健康
+# (error: 失败率>=10%且>=5次 > agent 工具调用; 空闲日仅上半灰条)。
+# cleanup/other 只进事件流不进色条。
 _TRAJ_KIND_CLS = {"commit": "commit", "complete": "done", "recover": "good",
                   "restart": "warn", "nudge": "warn", "pause": "warn",
-                  "tool": "agent", "compact": "agent"}
+                  "tool": "agent", "compact": "agent",
+                  "error": "error", "turn": "turn", "say": "say", "exit": "exit",
+                  "spawn": "spawn", "replan": "replan", "model": "model"}
+_TRAJ_MILESTONE = ("done", "commit", "warn", "good")          # 上行
+_TRAJ_C_KEYS = ("commit", "warn", "good", "done", "agent", "error", "turn",
+                "say", "compact", "exit", "spawn", "replan", "model")  # tooltip 顺序
 _TRAJ_DAYS = 14
 _traj_cache = {"t": 0.0, "data": {}}          # repo -> {"strip", "events"}
 _traj_wd_cache = {"t": 0.0, "by_root": None}  # 60s: watchdog/完成事件按仓库根分桶(共享快照)
 
 
-# OMP 会话日志适配: ~/.omp/agent/sessions/*/*.jsonl 共 ~478MB, 按
+# OMP 会话日志适配: ~/.omp/agent/sessions/*/*.jsonl 共 ~500MB, 按
 # (path, mtime, size) 文件级增量缓存 —— 只重读在写的活跃会话; 行级先做
 # 子串预筛再 json.loads(80%+ 行是 message/toolResult, 无需解析)。
+# 覆盖 OMP 全部可用信号(对齐 codex-trajectory 的信息面):
+#   工具调用/工具失败(含退出码与耗时)/上下文压缩(tokensBefore)/用户轮次/
+#   助手声明(>=160字)/子代理 init/会话退出(signal=异常)/goal 完成(含 token
+#   用量与时长)/重规划(title_change)/模型切换。
 _omp_files_cache = {}   # path -> (mtime, size, cwd, label, day_counts, events)
-_OMP_MARKERS = ('"tool_execution_start"', '"type":"compaction"', '"type": "compaction"', '"type":"session"', '"type": "session"')
+_OMP_MARKERS = ('"tool_execution_start"', '"type":"compaction"', '"type": "compaction"',
+                '"type":"session"', '"type": "session"', '"type":"session_init"',
+                '"customType":"session_exit"', '"customType":"goal-completed"',
+                '"type":"title_change"', '"type":"model_change"',
+                '"isError":true', '"isError": true',
+                '"role":"user"', '"role": "user"')
 
 
 def _omp_parse_iso(ts):
@@ -154,42 +168,107 @@ def _omp_parse_iso(ts):
         return None
 
 
+def _omp_txt(content):
+    """message.content(块数组或纯文本) -> 首个 text 块的纯文本。"""
+    if isinstance(content, list):
+        for b in content:
+            if isinstance(b, dict) and b.get("type") == "text":
+                return " ".join(str(b.get("text") or "").split())
+        return ""
+    return " ".join(str(content or "").split())
+
+
 def _omp_parse_file(path):
     """流式解析单个会话文件 -> (cwd, label, day_counts, events)。
-    day_counts: {(y,m,d): {"agent": n}}; events: (ts, kind, tool, intent) 尾部400条。"""
+    day_counts: {(y,m,d): {kind: n}} 全量计数; events: (ts, kind, name, text) 尾部500条。"""
     cwd, label = "", ""
     counts, evs = {}, []
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 if not any(m in line for m in _OMP_MARKERS):
-                    continue
+                    # assistant 声明行双条件预筛: 3.8万行里只解析带 text 块的
+                    if ('"role":"assistant"' not in line
+                            or '"type":"text"' not in line):
+                        continue
                 try:
                     d = json.loads(line)
                 except ValueError:
                     continue
                 ty = d.get("type")
+                ts = _omp_parse_iso(d.get("timestamp") or "")
                 if ty == "session":
                     cwd = d.get("cwd") or ""
+                elif ty == "session_init":
+                    if ts:
+                        ag = str(d.get("agent") or "agent")
+                        evs.append((ts, "spawn", ag, "subagent init · " + ag))
                 elif ty == "compaction":
-                    ts = _omp_parse_iso(d.get("timestamp") or "")
                     if ts:
-                        evs.append((ts, "compact", "", "context compaction"))
-                elif ty == "custom" and d.get("customType") == "tool_execution_start":
-                    data = d.get("data") or {}
-                    ts = _omp_parse_iso(data.get("startedAt") or d.get("timestamp") or "")
-                    if ts:
-                        evs.append((ts, "tool", str(data.get("toolName") or "?"),
-                                    str(data.get("intent") or "")[:80]))
+                        tok = d.get("tokensBefore")
+                        evs.append((ts, "compact", "",
+                                    f"context compaction · {tok} tok" if tok is not None
+                                    else "context compaction"))
                 elif ty == "title":
                     label = (d.get("title") or "").strip()
+                elif ty == "title_change":
+                    if ts and d.get("trigger") == "replan":
+                        evs.append((ts, "replan", label, str(d.get("title") or "")[:70]))
+                elif ty == "model_change":
+                    if ts:
+                        evs.append((ts, "model", str(d.get("model") or "?"),
+                                    "fallback" if d.get("resolvedModelIsFallback") else "switch"))
+                elif ty == "custom":
+                    ct = d.get("customType")
+                    data = d.get("data") or {}
+                    if ct == "tool_execution_start":
+                        t2 = _omp_parse_iso(data.get("startedAt") or d.get("timestamp") or "")
+                        if t2:
+                            evs.append((t2, "tool", str(data.get("toolName") or "?"),
+                                        str(data.get("intent") or "")[:80]))
+                    elif ct == "session_exit" and ts:
+                        evs.append((ts, "exit", "",
+                                    "%s/%s" % (data.get("kind") or "?", data.get("reason") or "?")))
+                    elif ct == "goal-completed" and ts:
+                        mins = int((data.get("timeUsedSeconds") or 0) // 60)
+                        evs.append((ts, "complete", "",
+                                    "OMP goal · %s tok · %d min" % (data.get("tokensUsed") or "?", mins)))
+                elif ty == "message":
+                    m = d.get("message") or {}
+                    role = m.get("role")
+                    if role == "user" and ts:
+                        txt = _omp_txt(m.get("content"))
+                        if txt:
+                            evs.append((ts, "turn", "", txt[:80]))
+                    elif role == "assistant" and ts:
+                        c = m.get("content")
+                        if isinstance(c, list):
+                            for b in c:
+                                if (isinstance(b, dict) and b.get("type") == "text"
+                                        and len(b.get("text") or "") >= 160):
+                                    evs.append((ts, "say", "",
+                                                " ".join(str(b.get("text") or "").split())[:110]))
+                                    break
+                    elif role == "toolResult" and m.get("isError") and ts:
+                        det = m.get("details") or {}
+                        wall = det.get("wallTimeMs")
+                        parts = []
+                        if det.get("exitCode") is not None:
+                            parts.append("exit %s" % det["exitCode"])
+                        if isinstance(wall, (int, float)):
+                            parts.append("%.1fs" % (wall / 1000))
+                        txt = _omp_txt(m.get("content"))
+                        if txt:
+                            parts.append(txt[:70])
+                        evs.append((ts, "error", str(m.get("toolName") or "?"), " · ".join(parts)))
     except OSError:
         pass
-    for ts, kind, _t, _i in evs:
+    for ts, kind, _n, _t in evs:
         lt = time.localtime(ts)
         k = (lt.tm_year, lt.tm_mon, lt.tm_mday)
-        counts[k] = counts.get(k, 0) + 1
-    return cwd, label, counts, evs[-400:]
+        c = counts.setdefault(k, {})
+        c[kind] = c.get(kind, 0) + 1
+    return cwd, label, counts, evs[-500:]
 
 
 def _traj_omp_by_root(window_sec):
@@ -222,13 +301,14 @@ def _traj_omp_by_root(window_sec):
             if not root:
                 continue
             bucket = by_root.setdefault(root, {"days": {}, "events": []})
-            for k, n in counts.items():
-                bucket["days"][k] = bucket["days"].get(k, 0) + n
+            for k, kinds in counts.items():
+                d = bucket["days"].setdefault(k, {})
+                for kk, n in kinds.items():
+                    d[kk] = d.get(kk, 0) + n
+            # 存引用而非逐事件 dict(86k 事件建 dict 会吃 ~40MB, 128M 限额吃不消);
+            # dict 投影推迟到 _traj_data 请求时做, 用后即弃。
             gid = fn.rsplit("_", 1)[-1][:8]
-            bucket["events"].extend(
-                {"ts": ts, "kind": kind, "gid": gid,
-                 "name": label or gid, "text": (tool + (" · " + intent if intent else ""))[:120]}
-                for ts, kind, tool, intent in evs)
+            bucket["events"].append((gid, label or gid, evs))
     return by_root
 
 
@@ -257,7 +337,7 @@ def _traj_watchdog_by_root():
 
 
 def _traj_data(repo):
-    """单仓库轨迹: strip(近14天逐日主色) + events(时间倒序详情, 上限200)。"""
+    """单仓库轨迹: strip(近14天逐日双行色块) + events(时间倒序详情, 上限500)。"""
     now = time.time()
     cached = _traj_cache["data"].get(repo)
     if cached and now - _traj_cache["t"] < 60:
@@ -272,40 +352,58 @@ def _traj_data(repo):
         except ValueError:
             continue
         evs.append({"ts": ts, "kind": "commit", "gid": parts[0], "name": "", "text": parts[2]})
-    evs.extend(_traj_watchdog_by_root().get(repo) or [])
+    wd_evs = _traj_watchdog_by_root().get(repo) or []
+    evs.extend(wd_evs)
     omp = _traj_omp_by_root(_TRAJ_DAYS * 86400).get(repo) or {}
-    evs.extend(omp.get("events") or [])
+    # 完成去重: OMP goal-completed 与完成台账记同一 goal —— 台账时间戳 30min
+    # 窗内已有时, 丢弃 OMP 侧重复(不同 goal 同日完成互不影响)
+    wd_done_ts = [e["ts"] for e in wd_evs if e["kind"] == "complete"]
+    cutoff = time.time() - _TRAJ_DAYS * 86400
+    for gid, name, tuples in omp.get("events") or []:
+        for ts, kind, tool, intent in tuples:
+            if kind == "complete" and any(abs(ts - w) < 1800 for w in wd_done_ts):
+                continue
+            if ts < cutoff:
+                continue
+            evs.append({"ts": ts, "kind": kind, "gid": gid, "name": name,
+                        "text": (tool + (" · " + intent if intent else ""))[:120]})
     evs.sort(key=lambda x: -x["ts"])
-    # 逐日分桶
+    # 逐日分桶: 里程碑(事件计数) + 活动类别(omp days 全量计数)
     by_day = {}
     for e in evs:
-        if e["kind"] in ("tool", "compact"):
-            continue        # 工具活动由 omp days(全量计数)入桶, 不重复计
         cls = _TRAJ_KIND_CLS.get(e["kind"])
-        if not cls:
-            continue
+        if cls not in _TRAJ_MILESTONE:
+            continue        # 活动类别由 omp days(全量)入桶, 不重复计
         lt = time.localtime(e["ts"])
         d = by_day.setdefault((lt.tm_year, lt.tm_mon, lt.tm_mday), {})
         d[cls] = d.get(cls, 0) + 1
-    for k, n in (omp.get("days") or {}).items():
+    for k, kinds in (omp.get("days") or {}).items():
         d = by_day.setdefault(k, {})
-        d["agent"] = d.get("agent", 0) + n
+        for kk, n in kinds.items():
+            key = "agent" if kk == "tool" else kk
+            if key == "complete":
+                continue      # 完成计数走里程碑桶(已去重)
+            d[key] = d.get(key, 0) + n
     base = time.localtime()
     noon = time.mktime((base.tm_year, base.tm_mon, base.tm_mday, 12, 0, 0, 0, 0, -1))
     strip = []
     for i in range(_TRAJ_DAYS - 1, -1, -1):
         lt = time.localtime(noon - i * 86400)
         c = by_day.get((lt.tm_year, lt.tm_mon, lt.tm_mday)) or {}
-        cls = next((k for k in ("done", "commit", "warn", "good", "agent") if c.get(k)), None)
-        strip.append({"d": "%d/%d" % (lt.tm_mon, lt.tm_mday), "cls": cls,
-                      "n": sum(c.values()),
-                      "c": {k: c[k] for k in ("commit", "warn", "good", "done", "agent") if c.get(k)}})
+        top = next((k for k in _TRAJ_MILESTONE if c.get(k)), None)
+        err, tools = c.get("error", 0), c.get("agent", 0)
+        bot = ("error" if err >= 10 and err * 100 >= tools * 8
+               else ("agent" if tools else None))
+        keys = [k for k in _TRAJ_C_KEYS if c.get(k)]
+        strip.append({"d": "%d/%d" % (lt.tm_mon, lt.tm_mday), "cls": top, "bot": bot,
+                      "n": sum(c[k] for k in keys),
+                      "c": {k: c[k] for k in keys}})
     data = {"strip": strip,
             "events": [{"ts": e["ts"],
                         "time": time.strftime("%m-%d %H:%M", time.localtime(e["ts"])),
                         "kind": e["kind"], "cls": _TRAJ_KIND_CLS.get(e["kind"]) or "",
                         "name": e.get("name") or "", "text": (e.get("text") or "")[:200]}
-                       for e in evs[:200]]}
+                       for e in evs[:500]]}
     _traj_cache["data"][repo] = data
     _traj_cache["t"] = now
     return data

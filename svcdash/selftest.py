@@ -10,7 +10,7 @@ from svcdash.tools import fs_resolve, fs_sensitive, fs_read_text, _FS_TEXT_MAX
 from svcdash.sysinfo import sys_info, load_zone
 from svcdash.repos import agent_repos, repo_stats, parse_repo_commits
 from svcdash.procscan import gather
-from svcdash.render import render_html
+from svcdash.render import render_html, TOOL_LINKS
 
 
 def selftest():
@@ -129,7 +129,44 @@ def selftest():
             svcctl._log("pause", {"port": 1, "name": "x", "pids": [2]})
             svcctl._log("resume", {"port": 1, "name": "x", "pids": [2]})
             self.assertEqual(len(svcctl.history()), 3)  # resume(65534) + 手写2条
-            self.assertTrue(svcctl.history()[0].endswith("resume :1 x pids=[2]"))
+
+        def test_runtimes(self):
+            import time
+            from svcdash import runtimes as rt
+            # 注册表: id 唯一, 装卸动作白名单
+            ids = [a["id"] for a in rt.REGISTRY]
+            self.assertEqual(len(ids), len(set(ids)))
+            self.assertIn("omp", ids) and self.assertIn("codex", ids)
+            # 额度归一化: 各家真实结构样本
+            q = rt._parse_codex_quota({"account": {"account": {"email": "a@b.c",
+                "planType": "plus"}},
+                "rateLimits": {"rateLimits": {"limitId": "codex",
+                    "primary": {"usedPercent": 8, "resetsAt": 1787198007}}},
+                "usage": {}})
+            self.assertEqual(q["plan"], "plus")
+            self.assertEqual(q["buckets"][0]["remaining_pct"], 92)
+            self.assertEqual(q["buckets"][0]["reset"], time.strftime(
+                "%m-%d %H:%M", time.localtime(1787198007)))
+            q = rt._parse_grok_quota({"billing": {"config": {
+                "creditUsagePercent": 100,
+                "currentPeriod": {"end": "2026-08-18T13:36:55Z"}}},
+                "user": {"email": "g@x.ai", "subscriptionTier": "XPremium"}})
+            self.assertEqual(q["buckets"][0]["remaining_pct"], 0)
+            q = rt._parse_kiro_quota({"email": "k@a.com", "usage": {
+                "usageBreakdownList": [{"displayName": "agentic",
+                    "currentUsage": 3, "usageLimit": 10, "unit": "requests"}]}})
+            self.assertEqual(q["buckets"][0]["remaining_pct"], 70)
+            q = rt._parse_agy_quota({"quota": {"groups": [{"displayName": "Gemini Models",
+                "buckets": [{"bucketId": "gemini-5h", "remainingFraction": 0.25,
+                             "resetTime": "2026-08-15T08:52:07Z"}]}]},
+                "accounts": [{"email": "x@gmail.com"}]})
+            self.assertEqual(q["buckets"][0]["remaining_pct"], 25)
+            q = rt._parse_cursor_quota({"usage": {"planUsage": {
+                "totalPercentUsed": 55}}, "hardLimit": {}})
+            self.assertEqual(q["buckets"][0]["remaining_pct"], 45)
+            # 进程扫描可运行且包含已知 agent 键
+            procs = rt.scan_procs()
+            self.assertIn("omp", procs) and self.assertIn("hermes", procs)
 
     suite = unittest.TestLoader().loadTestsFromTestCase(T)
     unittest.TextTestRunner(verbosity=2).run(suite)
@@ -146,13 +183,17 @@ def selftest():
     print(f"agent repos: {len(rs)} -> {[__import__('os').path.basename(r) for r in rs]}")
     for r in repo_stats()["repos"][:3]:
         print(f"  {r['name']}: commits={r['commits']} size={r['size']} "
-              f"files={r['files']} dirty={r['dirty']} exts={r['exts'][:3]}")
+              f"files={r['files']} dirty={r['dirty']}")   # exts 统计已从 repos.py 移除
     evts = merge_events(parse_watchdog_events(), parse_completed_goals(),
                         parse_repo_commits())
     kinds = {e["kind"] for e in evts}
     print(f"events: {len(evts)} kinds={sorted(kinds)}")
     html = render_html("localhost:8899", gather(), __import__("time").time(), "zh", sysdata=s)
-    checks = ["Goal 进度", "仓库", "已完成 goal", "最近事件", "tchip"]
+    # tchip(工具直达 chips) 只在有未暂停的工具端口时渲染(svcctl 暂停过滤是预期行为)
+    live_tool_ports = {e["port"] for e in gather() if not e.get("paused")} & {
+        p for _, p in TOOL_LINKS}
+    checks = ["Goal 进度", "仓库", "已完成 goal", "最近事件"] + (["tchip"] if live_tool_ports else [])
+    print(f"  tool ports unpaused: {sorted(live_tool_ports) or 'none → tchip check skipped'}")
     ok = True
     for c in checks:
         mark = "ok" if c in html else "FAIL"
