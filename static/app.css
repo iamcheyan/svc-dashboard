@@ -707,8 +707,14 @@
     html { -webkit-tap-highlight-color: transparent; }
     /* topbar 不固定(iOS Large Title 风, 基础样式已静态化/透明/大标题/玻璃圆钮):
        移动端仅收窄边距+safe-area, header 由 JS 移入 main 随内容滚出视口 */
-    header { padding: 12px max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
-             padding-top: calc(8px + env(safe-area-inset-top)); gap: 8px; }
+    header { padding: 12px max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+             padding-top: calc(8px + env(safe-area-inset-top)); gap: 6px 8px; }
+    /* 确定性两行 grid: 行1=品牌+刷新钮, 行2=连接 chips 整行(flex-wrap 数学不可控) */
+    header { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+    header h1 { grid-row: 1; grid-column: 1; min-width: 0; }
+    header #refresh { grid-row: 1; grid-column: 2; }
+    .h-conn { grid-row: 2; grid-column: 1 / -1; justify-self: start; padding: 2px 2px 0; }
+    .h-conn .gcopy { min-height: 30px; padding: 4px 11px; }  /* 触控可点但不吃全局 .gcopy 38px */
     .btn, .chip, .mbtn, .ctl-btn, .tcol, .aglog-refresh { padding: 9px 14px; font-size: 13px; min-height: 38px; }
     /* 内部滚动: main 自滚, 底部页签栏固定在文档流尾, 不再遮住最后一屏 */
     html, body { height: 100%; }

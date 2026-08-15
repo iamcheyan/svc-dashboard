@@ -1311,7 +1311,7 @@ const PAGE_GROUPS = [
   ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   ["#logpage"],
   ["#goals"],
-  ["#filters", "#tasks", "#svc"],
+  ["#filters", "#tasks", "#svc-panel"],
   ["#agents-page"],
   ["#toolspage"],
 ];
