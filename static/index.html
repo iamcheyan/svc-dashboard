@@ -88,6 +88,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <span class="chip" data-f="manage" role="button" tabindex="0">{{T:chip_manage}} <span id="n-manage"></span></span>
 </div>
 <div id="tasks" hidden></div>
+<div class="gpanel svc-panel" id="svc-panel">
 <table id="svc" data-col="cmd">
   <thead><tr>
     <th>{{T:th_svc}}</th><th>{{T:th_port}}</th><th>{{T:th_addr}}</th><th>{{T:th_pid}}</th>
@@ -100,6 +101,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 <!--TABLE-->
   </tbody>
 </table>
+</div>
 <div class="gpanel" id="agents-page" hidden>
   <h2>{{T:tab_agent}} <span class="ghint">{{T:chip_omp}}</span></h2>
 </div>
@@ -294,6 +296,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 
 <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
-<script src="/static/app.js?v=e2c6a473" defer></script>
+<script src="/static/app.js?v=844c8c2e" defer></script>
 </body>
 </html>

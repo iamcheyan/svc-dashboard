@@ -383,18 +383,12 @@ def goal_detail(gid, session=""):
     pane = next((p for p in panes if p["session"] == tmux), None)
     capture = _tmux_capture(f'{tmux}:{pane["pane"]}' if pane else "") or []
     path = g.get("jsonl", "")
-    if not path:
-        # 兜底1: watchdog 行按 session 反查到的完整 gid 已在 ev_gid; 兜底2: scan_omp 的会话 id
-        omg = next((o for o in scan_omp() if o.get("id")), None) if not gid else None
-        for cand in (gid, omg and omg.get("id")):
-            if not cand:
-                continue
-            for q in glob.glob(os.path.join(OMP_SESSION_ROOT, "**", f"*_{cand}.jsonl"), recursive=True):
-                path = q
-                break
-            if path:
-                break
-        # 兜底3: 按 tmux session 名在 sessions 目录找最新 jsonl(文件名无会话id时)
+    if not path and gid:
+        # gid(完整或短8位)在 sessions 目录定位 jsonl
+        for q in glob.glob(os.path.join(OMP_SESSION_ROOT, "**", f"*_{gid}.jsonl"), recursive=True):
+            path = q
+            break
+        # 兜底: 按 tmux session 名在 sessions 目录找最新 jsonl(文件名无会话id时)
         if not path and tmux:
             cands = sorted(glob.glob(os.path.join(OMP_SESSION_ROOT, "**", "*.jsonl"), recursive=True), key=os.path.getmtime, reverse=True)
             for q in cands[:80]:

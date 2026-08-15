@@ -144,7 +144,7 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
             f'<div class="gcards">{body}</div>{fold}</div>')
 def render_toolchips(entries, host_header, lang=DEFAULT_LANG):
     """快捷工具入口 chips: 端口存活才显示,点击直达。"""
-    ports = {e["port"] for e in entries}
+    ports = {e["port"] for e in entries if not e.get("paused")}   # 暂停/冻结的服务不出现在快捷入口
     hostname = (host_header or "").split(":")[0] or socket.gethostname()
     chips = "".join(
         f'<a class="chip tchip" href="http://{escape(hostname)}:{port}/" target="_blank" rel="noopener">'

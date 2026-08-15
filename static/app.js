@@ -276,7 +276,7 @@ const TOOL_LINKS = [["dbeditor", 8810], ["dbviewer", 8800], ["wilviewer", 8765],
 function renderToolchips() {
   const el = $("toolchips");
   if (!el) return;
-  const ports = new Set(services.map(s => s.port));
+  const ports = new Set(services.filter(s => !s.paused).map(s => s.port));   // 暂停服务不显示
   const chips = TOOL_LINKS.filter(([n, p]) => ports.has(p)).map(([n, p]) =>
     `<a class='chip tchip' href='http://${linkHost(location.hostname)}:${p}/' target='_blank' rel='noopener'>${n} :${p} ${icon("ext", 11)}</a>`).join("");
   el.innerHTML = chips;
@@ -1405,6 +1405,9 @@ async function initLogPage(force) {
   agents.codex.forEach(x => { opts += `<option value='' data-cwd='${escAttr(x.cwd)}' data-tmux=''>Codex · ${escHtml(x.cwd.slice(-40))}</option>`; });
   sel.innerHTML = opts;
   syncLogAgentPicker();
+  // 默认选中最近活跃的 agent(omp 已按 活跃→闲置 排序), 免得默认空选择
+  const first = [...sel.options].find(o => o.value);
+  if (first && !sel.selectedOptions[0].value) { sel.value = first.value; }
   if (!body.children.length) loadLogView();
 }
 async function loadLogView() {
@@ -1438,47 +1441,134 @@ function toastCopied(anchor) {
 }
 // (escHtml/escAttr 已上移到 syncLogAgentPicker 之前, 此处勿重复声明)
 
-// --- 模型页: OMP / Codex agent 卡片(状态灯+名称+最近活动+日志入口) ---
-let agentsInit = false;
-async function initAgentsPage() {
-  $("agents-page").hidden = false;  // 双端进入 agent 页即显示(移动页签 / 桌面 cat=agent)
-  if (agentsInit) return;
-  agentsInit = true;
+// --- Agent 运行时总览: 已知 agent 注册表 + 装卸 + 状态/进程/任务/额度 ---
+let agentsInit = false, rtCache = null, rtT = 0, rtTimer = null;
+async function loadRuntimes(force) {
+  const n = Date.now();
+  if (!force && rtCache && n - rtT < 15000) return rtCache;
+  rtCache = await tlGet("/api/runtimes");
+  rtT = n;
+  return rtCache;
+}
+function rtBar(b) {
+  const p = b.remaining_pct;
+  if (p == null) return "";
+  const col = p >= 50 ? "var(--c-green)" : p >= 20 ? "var(--c-warn)" : "var(--c-red)";
+  return `<div class="rt-qrow"><span class="rt-qlabel">${escHtml(b.label)}</span>` +
+    `<span class="rt-qbar"><i style="width:${p}%;background:${col}"></i></span>` +
+    `<span class="rt-qval">${p}%${b.reset ? ` <em>${escHtml(b.reset)}</em>` : ""}</span></div>`;
+}
+function rtTasksHtml(a) {
+  const rows = [];
+  (a.tasks || []).forEach(x => {
+    if (x.kind === "omp") rows.push(`<div class="rt-task" data-sid="${escAttr(x.id)}" data-cwd="${escAttr(x.cwd)}" data-tmux="${escAttr(x.tmux)}" role="button" tabindex="0">
+      <span class="rt-dot2 ${x.health === "running" ? "run" : "warn"}"></span>
+      <span class="rt-taskgoal">${escHtml(stripMd(x.goal || x.cwd).slice(0, 70))}</span>
+      <span class="rt-taskmeta">${agoStr(x.idle_seconds)} · ${escHtml(x.tool)}</span></div>`);
+    else if (x.kind === "grok") rows.push(`<div class="rt-task"><span class="rt-dot2 run"></span>
+      <span class="rt-taskgoal">${escHtml(x.cwd)}</span><span class="rt-taskmeta">pid ${escHtml(String(x.pid))}</span></div>`);
+    else if (x.kind === "file") rows.push(`<div class="rt-task"><span class="rt-dot2 dim"></span>
+      <span class="rt-taskgoal">${escHtml(x.file)}</span><span class="rt-taskmeta">${agoStr(x.age_sec)}</span></div>`);
+  });
+  return rows.join("");
+}
+async function refreshAgentsPage() {
   const el = $("agents-page");
-  el.innerHTML = `<h2>${t("a_title")} <span class="ghint">${t("a_hint", { n: "" })}</span></h2>` + mobileSkelDiv(3);
-  const agents = await loadAgents();
-  const total = agents.omp.length + agents.codex.length;
-  const cards = [];
-  agents.omp.forEach(x => {
-    const [dot, txt] = x.health === "running" ? ["var(--c-green)", t("a_running")]
-      : x.health === "blocked" ? ["var(--c-warn)", t("a_blocked")]
-      : x.health === "completed" ? ["var(--c-gray)", t("a_done")] : ["var(--text-ghost)", t("a_idle")];
-    cards.push(`<div class="gcard" data-sid="${escAttr(x.id)}" data-cwd="${escAttr(x.cwd)}" data-tmux="${escAttr(x.tmux)}" role="button" tabindex="0">
-      <div class="ghead"><span class="mdot" style="background:${dot};width:9px;height:9px;border-radius:50%;display:inline-block"></span>
-      <span class="gname">OMP</span><span class="gstate">${txt}</span></div>
-      <div class="gsub">${escHtml(stripMd(x.goal || x.cwd).slice(0, 60))}</div>
-      <div class="grow"><span>${t("a_active")}</span><span class="gidle">${agoStr(x.idle_seconds)}</span></div>
-      <div class="grow"><span>${t("a_tool")}</span><span class="gtx">${escHtml(x.tool)}</span></div></div>`);
+  if (!el || el.hidden) return;
+  el.innerHTML = `<h2>${t("rt_title")}</h2>` + mobileSkelDiv(3);
+  try { renderRuntimes(await loadRuntimes(true)); }
+  catch (e) { el.innerHTML = esHtml("cpu", t("a_fail", { e: escHtml(e.message) })); }
+}
+function renderRuntimes(d) {
+  const el = $("agents-page");
+  if (!el || !d || !d.agents) return;
+  const low = [];
+  d.agents.forEach(a => ((a.quota && a.quota.buckets) || []).forEach(b => {
+    if (b.remaining_pct != null && b.remaining_pct < 20) low.push(a.name);
+  }));
+  const hist = ((d.ctl && d.ctl.history) || []).slice(-3).reverse();
+  const cards = d.agents.map(a => {
+    const q = a.quota;
+    const qhtml = q ? ((q.buckets && q.buckets.length) ? q.buckets.slice(0, 4).map(rtBar).join("")
+      : `<div class="rt-qnone">${t("rt_quotafail")}</div>`) : "";
+    const meta = [];
+    if (q && q.account) meta.push(escHtml(q.account));
+    if (q && q.plan) meta.push(escHtml(q.plan));
+    if (a.meta && a.meta.sessions_24h != null) meta.push(t("rt_sess24", { n: a.meta.sessions_24h }));
+    if (a.meta && a.meta.sessions_total != null) meta.push(t("rt_sessall", { n: a.meta.sessions_total }));
+    const pr = a.procs > 0 ? `${t("rt_procs")} ${a.procs}` +
+      (a.proc_list && a.proc_list[0] ? ` · ${a.proc_list[0].cpu_pct}% CPU · ${a.proc_list[0].mem_mb}MB` : "") : "";
+    const tasks = rtTasksHtml(a);
+    const state = !a.installed ? "none" : a.procs > 0 ? "run" : "idle";
+    const btns = [];
+    if (a.installed) {
+      if (a.installable) btns.push(`<button class="rt-btn danger" data-act="uninstall" data-id="${escAttr(a.id)}">${t("rt_uninstbtn")}</button>`);
+    } else if (a.installable) btns.push(`<button class="rt-btn" data-act="install" data-id="${escAttr(a.id)}">${t("rt_instbtn")}</button>`);
+    return `<div class="rt-card ${state}">
+      <div class="rt-head"><span class="rt-dot"></span><b>${escHtml(a.name)}</b>
+        <span class="rt-ver">${escHtml(a.version || t("rt_notinst"))}</span></div>
+      ${meta.length ? `<div class="rt-meta">${meta.join(" · ")}</div>` : ""}
+      ${qhtml}${pr ? `<div class="rt-proc">${pr}</div>` : ""}
+      ${tasks ? `<div class="rt-tasks">${tasks}</div>` : ""}
+      ${btns.length ? `<div class="rt-actions">${btns.join("")}</div>` : ""}
+    </div>`;
+  }).join("");
+  el.innerHTML = `<h2>${t("rt_title")} <span class="ghint">${t("rt_summary", { i: d.total_installed, n: d.agents.length, p: d.total_running })}</span></h2>` +
+    `${low.length ? `<div class="rt-low">${t("rt_low", { n: [...new Set(low)].join(" / ") })}</div>` : ""}` +
+    `${d.quota && d.quota.running ? `<div class="rt-qrefresh">${t("rt_refreshing")}</div>` : ""}` +
+    `<div class="rt-top"><button class="rt-btn" id="rt-quota-btn">${t("rt_refresh")}</button></div>` +
+    `<div class="rt-grid">${cards}</div>` +
+    `${hist.length ? `<div class="rt-hist">${hist.map(h =>
+      `<div>${escHtml(h.t || "")} ${escHtml(h.agent)} ${escHtml(h.action)} ${h.ok ? "✓" : "✗"} ${escHtml(h.msg || "")}</div>`).join("")}</div>` : ""}`;
+  const qb = $("rt-quota-btn");
+  if (qb) qb.addEventListener("click", async () => {
+    qb.textContent = "…";
+    await tlPost("/api/runtimes", { agent: "", action: "quota" });
+    setTimeout(refreshAgentsPage, 800);
   });
-  agents.codex.forEach(x => {
-    cards.push(`<div class="gcard" data-sid="" data-cwd="${escAttr(x.cwd)}" data-tmux="" role="button" tabindex="0">
-      <div class="ghead"><span style="background:var(--c-green);width:9px;height:9px;border-radius:50%;display:inline-block"></span>
-      <span class="gname">Codex</span><span class="gstate">${t("a_running")}</span></div>
-      <div class="gsub">${escHtml(x.cwd)}</div>
-      <div class="grow"><span>${t("a_active")}</span><span class="gidle">${agoStr(x.idle_seconds)}</span></div></div>`);
-  });
-  el.innerHTML = `<h2>${t("a_title")} <span class="ghint">${t("a_hint", { n: total })}</span></h2>` +
-    `<div class="gcards">${cards.join("") || esHtml("cpu", t("a_none"))}</div>`;
-  // 点 agent 卡 → 跳日志页并选中该 agent(手机切页签, 桌面切分类)
-  el.querySelectorAll(".gcard").forEach(c =>
+  el.querySelectorAll(".rt-btn[data-act]").forEach(b => b.addEventListener("click", async () => {
+    const id = b.dataset.id, act = b.dataset.act;
+    const a = d.agents.find(x => x.id === id) || {};
+    const msg = act === "install" ? t("rt_ask_inst", { n: a.name }) : t("rt_ask_uninst", { n: a.name });
+    if (!(await uiConfirm(msg))) return;
+    b.textContent = "…"; b.disabled = true;
+    try {
+      const r = await tlPost("/api/runtimes", { agent: id, action: act });
+      if (r && !r.ok && r.msg) uiNotice(r.msg);
+    } catch (e) { uiNotice(e.message); }
+    rtPollCtl();
+  }));
+  // omp 任务行 → 跳日志页并选中该 agent(手机切页签, 桌面切分类)
+  el.querySelectorAll(".rt-task[data-sid]").forEach(c =>
     c.addEventListener("click", async () => {
       await initLogPage();
       const sel = $("logagent-sel");
-      const opt = [...sel.options].find(o => o.value === c.dataset.sid && o.dataset.cwd === c.dataset.cwd);
+      const opt = sel && [...sel.options].find(o => o.value === c.dataset.sid && o.dataset.cwd === c.dataset.cwd);
       if (opt) { sel.value = opt.value; loadLogView(); }
       if (isMobile()) setPage(1);
       else { setCat("log"); scrollTo(0, 0); }
     }));
+  if (d.ctl && d.ctl.running) rtPollCtl();
+  else if (d.quota && d.quota.running && !rtTimer) setTimeout(() => { if (!rtTimer) refreshAgentsPage(); }, 6000);
+}
+function rtPollCtl() {
+  if (rtTimer) return;
+  rtTimer = setInterval(async () => {
+    try {
+      const s = await tlGet("/api/agentctl");
+      if (!s || !s.running) { clearInterval(rtTimer); rtTimer = null; refreshAgentsPage(); }
+    } catch (e) { clearInterval(rtTimer); rtTimer = null; }
+  }, 2000);
+}
+async function initAgentsPage() {
+  const el = $("agents-page");
+  if (!el) return;
+  el.hidden = false;  // 双端进入 agent 页即显示(移动页签 / 桌面 cat=agent)
+  if (agentsInit) { refreshAgentsPage(); return; }
+  agentsInit = true;
+  el.innerHTML = `<h2>${t("rt_title")}</h2>` + mobileSkelDiv(3);
+  try { renderRuntimes(await loadRuntimes()); }
+  catch (e) { el.innerHTML = esHtml("cpu", t("a_fail", { e: escHtml(e.message) })); }
 }
 
 // --- Goal 详情: 状态 + watchdog 配置 + tmux 画面 + JSONL 活动 + watchdog 事件 ---
@@ -2558,7 +2648,7 @@ const CAT_SELS = {   // 桌面可见分区 → 分类(与移动端 PAGE_GROUPS �
   home: ["#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   log: ["#logpage"],
   goal: ["#goals"],
-  svc: ["#filters", "#tasks", "#svc"],
+  svc: ["#filters", "#tasks", "#svc-panel"],
   agent: ["#agents-page"],
   tools: ["#toolspage"],
 };

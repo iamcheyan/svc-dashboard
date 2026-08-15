@@ -6,7 +6,7 @@ from html import escape
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
 
-from svcdash import procscan, sysinfo, tasks, manage, agents, goals, repos, tools, render, svcctl
+from svcdash import procscan, sysinfo, tasks, manage, agents, goals, repos, tools, render, svcctl, runtimes
 from svcdash.i18n import t, detect_lang, DEFAULT_LANG
 from svcdash.config import SERVER_VER
 
@@ -248,6 +248,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, tools.health_check())
         elif path == "/api/nettest":
             self._send_json(200, tools.net_test())
+        elif path == "/api/runtimes":
+            # 额度后台刷新(过期 5 分钟且无任务在跑时触发), 本响应返回缓存快照
+            if not runtimes.quota_snapshot()["running"]:
+                runtimes.refresh_quota()
+            self._send_json(200, runtimes.scan_runtimes())
+        elif path == "/api/agentctl":
+            self._send_json(200, runtimes.agentctl_status())
         elif path == "/api/toolports":
             self._send_json(200, tools.tool_ports_alive())
         elif path == "/api/uservice":
@@ -299,7 +306,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/manage", "/api/cleanup", "/api/uservice", "/api/svcctl"):
+        if path not in ("/api/manage", "/api/cleanup", "/api/uservice", "/api/svcctl", "/api/runtimes"):
             self.send_error(404)
             return
         try:
@@ -349,7 +356,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, svcctl.svcctl_action(port, action, lang))
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
-
+        elif path == "/api/runtimes":
+            agent = str(body.get("agent") or "")
+            action = str(body.get("action") or "")
+            self.log_message("agentctl %s %s", agent, action)
+            try:
+                ok, msg = runtimes.agentctl_start(agent, action)
+                self._send_json(200, {"ok": ok, "msg": msg})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
     def log_message(self, fmt, *args):
         sys_write = __import__("sys").stderr.write
         sys_write("[%s] %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
