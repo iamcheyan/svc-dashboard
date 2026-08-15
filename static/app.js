@@ -779,10 +779,9 @@ async function renderOverview(apiData) {
       `<span class="rc-sub">${escHtml(e.text)}</span></span>` +
       `<span class="rc-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
   }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
-  if (!isMobile()) {   // 桌面首页: Web磁贴 + Goal 摘要(移动端走原卡片流)
-    renderHomeTiles(apiData && apiData.services);
-    renderHomeGoals(goals, nRun, nBad);
-  }
+  // Web磁贴 + Goal 摘要: 双端都渲染(移动端 #hp-grid 同样显示, 修复永久"loading…")
+  renderHomeTiles(apiData && apiData.services);
+  renderHomeGoals(goals, nRun, nBad);
   updateBadge(nAlert);
   refreshFreshness();
 }
@@ -800,10 +799,50 @@ function renderHomeTiles(services) {
   web.forEach(e => { const k = e.port + ":" + (e.name || ""); if (!seen.has(k)) { seen.add(k); uniq.push(e); } });
   el.innerHTML = uniq.length ? uniq.map(e => {
     const link = `http://${linkHost(location.hostname)}:${e.port}/`;
-    const nm = (e.name || "?").replace(/ (docker)/, "").replace(/[.]py$/, "");
-    return `<a class="hp-tile" href="${escAttr(link)}" target="_blank" rel="noopener">`
-      + `<span class="hp-tile-name">${escHtml(nm)}</span><span class="hp-tile-port">:${e.port}</span></a>`;
+    const id = svcIdentity(e);
+    return `<a class="hp-tile" href="${escAttr(link)}" target="_blank" rel="noopener" title="${escAttr(id.tip)}">`
+      + `<span class="hp-tile-main"><span class="hp-tile-name">${escHtml(id.main)}</span>`
+      + `<span class="hp-tile-port">:${e.port}</span></span>`
+      + `<span class="hp-tile-sub">${escHtml(id.sub)}</span></a>`;
   }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
+}
+// Web 磁贴身份识别: 主标签选"最能认出这是啥"的名字, 副行给程序/路径上下文。
+// docker → 容器名; systemd 真单元 → 单元名; 否则脚本名(解释器/dashboard 这类泛化名
+// 退回 cwd 目录名, 如 python3 -m http.server + cwd=yomu → 主标签 yomu)。
+function svcIdentity(e) {
+  const interp = new Set(["python", "python3", "python", "node", "bun", "npm", "npx",
+    "uv", "dotnet", "java", "ruby", "perl", "php", "sh", "bash", "sudo", "nohup"]);
+  const cmdline = (e.cmdline || "").trim();
+  const cwd = e.cwd || "";
+  const parts = cmdline.split(/\s+/).filter(Boolean);
+  let script = "", isModule = false;
+  for (const p of parts.slice(1)) {          // 跳过 argv0, 取首个非 flag 参数
+    if (p === "-m") { isModule = true; continue; }
+    if (p.startsWith("-")) continue;
+    script = p; break;
+  }
+  const scriptBase = script ? script.split("/").pop().replace(/\.(py|js|ts)$/, "") : "";
+  const cwdBase = cwd && cwd !== "/" ? cwd.replace(/\/+$/, "").split("/").pop() : "";
+  const dockerName = (e.name || "").includes("(docker)") ? e.name.replace(/\s*\(docker\)/, "") : "";
+  const unit = e.unit || "";
+  const realUnit = unit && !unit.endsWith(".scope") ? unit.replace(/\.service$/, "") : "";
+  const cmdShort = (() => {
+    const p = cmdline.split(/\s+/).filter(Boolean);
+    if (p.length > 1) p[0] = p[0].split("/").pop();
+    let s = p.join(" ");
+    return s.length > 46 ? s.slice(0, 45) + "…" : s;
+  })();
+  let main = "", sub = "";
+  if (dockerName && e.type === "docker") { main = dockerName; sub = "Docker"; }
+  else if (realUnit) { main = realUnit; sub = unit; }
+  else {
+    const generic = isModule || !scriptBase || interp.has(scriptBase) || scriptBase === "dashboard";
+    if (!generic && scriptBase !== cwdBase && cwdBase !== "tetsuya") { main = scriptBase; sub = cwd; }
+    else if (cwdBase && cwdBase !== "tetsuya") { main = cwdBase; sub = cmdShort; }
+    else { main = (e.name || "?").replace(/\s*\(docker\)/, ""); sub = cmdShort; }
+  }
+  const tip = [cmdline, cwd ? `cwd: ${cwd}` : "", unit ? `unit: ${unit}` : ""].filter(Boolean).join("\n");
+  return { main, sub, tip };
 }
 function renderHomeGoals(goals, nRun, nBad) {
   const el = $("hp-goal-body");
