@@ -167,17 +167,27 @@ function renderSys(s) {
 }
 
 // --- 仓库面板: agent/goal 改动过的仓库(/api/repos; 客户端 60s 缓存) ---
-let reposCache = { t: 0, data: null };
+let reposCache = { t: 0, data: null }, reposInflight = false;
 async function loadRepos(force) {
   const now = Date.now();
   if (!force && reposCache.data && now - reposCache.t < 60000) return;
+  if (reposInflight && !force) return;          // 冷启动 /api/repos 可达 14s, 防重复并发
+  const snap = snapGet("repos");
+  if (snap && snap.data && !reposCache.data) {  // 首屏先用快照渲染(轨迹条/仓库卡)
+    reposCache = { t: 0, data: snap.data };
+    renderRepos(snap.data);
+  }
+  reposInflight = true;
   try {
     const r = await fetch(force ? "/api/repos?refresh=1" : "/api/repos", { cache: "no-store" });
     reposCache.data = await r.json();
-    reposCache.t = now;
+    reposCache.t = Date.now();
     renderRepos(reposCache.data);
+    snapSet("repos", { data: reposCache.data });
   } catch (err) {
-    console.error("repos load failed", err);
+    if (!snap) console.error("repos load failed", err);   // 有快照兜底时不刷屏
+  } finally {
+    reposInflight = false;
   }
 }
 function renderRepos(d) {
@@ -750,6 +760,28 @@ async function doManage(btn) {
   setTimeout(() => loadManage(), 600); // 等 systemd 状态落地再刷新
 }
 
+// --- 首屏快照缓存(localStorage): 打开页面先用上次数据秒渲染, 后台再拉新覆盖 ---
+// 慢接口(/api/repos 冷启动 ~14s)不再阻塞首屏; 右上刷新钮照常拉最新。
+const SNAP_K = "svc-snap1:";
+function snapGet(k) {
+  try { const raw = localStorage.getItem(SNAP_K + k); return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+function snapSet(k, v) {
+  try { localStorage.setItem(SNAP_K + k, JSON.stringify(v)); } catch (e) { /* 超限/隐私模式: 忽略 */ }
+}
+
+function applyFragment(part, selector, html) {
+  const box = document.createElement("template");
+  box.innerHTML = html.trim();
+  const next = box.content.querySelector(selector);
+  const old = document.querySelector(selector);
+  if (next && old) old.replaceWith(next);
+  else if (part === "toolchips" && next) document.querySelector("#filters")?.before(next);
+  else return false;
+  return true;
+}
+
 async function hydrateFragments() {
   const jobs = [
     ["goals", "#goals"],
@@ -757,44 +789,58 @@ async function hydrateFragments() {
     ["toolchips", "#toolchips"],
   ];
   await Promise.all(jobs.map(async ([part, selector]) => {
+    const snap = snapGet("frag:" + part);          // 先落快照, 骨架屏立即变实数据
+    if (snap && snap.html) {
+      try { if (applyFragment(part, selector, snap.html)) remeasureTrack(); } catch (e) {}
+    }
     try {
       const r = await fetch("/api/fragment?p=" + part + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const html = await r.text();
-      const box = document.createElement("template");
-      box.innerHTML = html.trim();
-      const next = box.content.querySelector(selector);
-      const old = document.querySelector(selector);
-      if (next && old) old.replaceWith(next);
-      else if (part === "toolchips" && next) document.querySelector("#filters")?.before(next);
+      if (applyFragment(part, selector, html)) {
+        snapSet("frag:" + part, { html });
+        remeasureTrack();   // fragment 落地改变当前页高度, 立即重测(RO 兜底其余异步)
+      }
     } catch (err) {
       console.error("fragment hydrate failed: " + part, err);
     }
   }));
-  remeasureTrack();   // P0-1: fragment 落地改变当前页高度, 立即重测(RO 兜底其余异步)
+}
+
+function applyApiData(data) {
+  $("updated").textContent = new Date(data.updated * 1000).toLocaleString();
+  lastUpdatedTs = data.updated * 1000;
+  services = data.services;
+  renderToolchips();
+  applyFilter();
+  renderOverview(data);          // 概要摘要(状态卡/指标/需要处理/最近活动)
+  loadRepos();                    // 仓库面板(客户端 60s 缓存; 面板内按钮强制重算)
 }
 
 async function load(alsoSys) {
   const btns = [$("refresh"), $("fab-refresh")].filter(Boolean);
   btns.forEach(b => { b.classList.add("spinning"); b.setAttribute("aria-disabled", "true"); });
   ompCache = null; tasksCache = null; tmuxCache = null; // 手动刷新清面板缓存,拿到最新 agent/tmux/任务状态
+  const snap = snapGet("api");
+  if (snap && snap.data) {                 // 快照先行: 不等网络
+    try { applyApiData(snap.data); } catch (e) { console.error("snapshot render failed", e); }
+  }
   try {
     const r = await fetch("/api", { cache: "no-store" });
     const data = await r.json();
-    $("updated").textContent = new Date(data.updated * 1000).toLocaleString();
-    lastUpdatedTs = data.updated * 1000;
-    services = data.services;
-    renderToolchips();
-    applyFilter();
-    renderOverview(data);          // 概要摘要(状态卡/指标/需要处理/最近活动)
-    loadRepos();                    // 仓库面板(客户端 60s 缓存; 面板内按钮强制重算)
+    applyApiData(data);
+    snapSet("api", { data });
   } catch (err) {
     console.error("refresh failed", err);
   }
   if (alsoSys) {
+    const ss = snapGet("sys");
+    if (ss && ss.data) { try { renderSys(ss.data); } catch (e) {} }
     try {
       const r = await fetch("/api/sys", { cache: "no-store" });
-      renderSys(await r.json());
+      const d = await r.json();
+      renderSys(d);
+      snapSet("sys", { data: d });
     } catch (err) {
       console.error("sys refresh failed", err);
     }
