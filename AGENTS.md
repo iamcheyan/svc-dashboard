@@ -1,75 +1,83 @@
 # AGENTS.md — svc-dashboard 移动运维中枢（智能体必读）
 
-> 读者假设：你从未见过这个项目。本文告诉你：架构、怎么跑、全部 API、今天踩过的坑、
-> 部署与重启。事实来自 dashboard.py 实际代码与 git 历史（2026-08-14 核对）。
->
-> ⚠️ 本文件名暂为 AGENTS.staged.md：写入 AGENTS.md 需用户对"修改智能体指令文件"显式
-> 同意（平台保护）。用户确认后 `git mv AGENTS.staged.md AGENTS.md` 即可，内容已定稿。
+> 读者假设：你从未见过这个项目。本文告诉你：架构、怎么跑、全部 API、踩过的坑、
+> 部署与重启。事实来自实际代码与 git 历史（2026-08-15 核对）。
 
 ## 一、这是什么
 
-单文件 Python 服务器监控面板 → 已进化成**手机+tailscale 的随身运维中枢**：服务列表、
-系统负载、goal 看板、模型检测、agent 日志、服务管理、文件浏览/健康检查/垃圾清理。
+手机+tailscale 的随身运维中枢：服务列表、系统负载、goal 看板、模型检测、agent 日志、
+服务管理、文件浏览/健康检查/垃圾清理。
 
-- **单文件架构**：全部逻辑（后端 + HTML/CSS/JS 前端模板）内嵌在 `dashboard.py`
-  （约 4500 行）里。前端 JS 是模板字符串，服务端用 `str.replace` 注入运行时值
-  （`{{TS_MODE}}`/`{{T_JSON}}` 等）。
+- **包架构**：薄入口 `dashboard.py`（9 行）+ 后端包 `svcdash/`（13 个领域模块）+
+  静态前端 `static/{index.html, app.css, app.js}`。前端 JS/CSS 是**真文件**（不再内嵌
+  Python 字符串），浏览器可缓存；运行时值经内联 `window.__BOOT__` 注入。
 - **纯 Python 标准库**，零第三方依赖——`python3 dashboard.py` 直接跑。
 - 已部署为 **root 级 systemd 服务**（监听 80 特权端口）。
 
-## 二、页面结构（底部五页签，移动优先）
+```
+dashboard.py          薄入口（参数解析 + 启动）
+svcdash/              后端：config/i18n/icons/procscan/sysinfo/tasks/manage/
+                      agents/goals/repos/tools/render/handler/selftest/main
+static/               前端：index.html(壳+占位) app.css app.js
+```
 
-`N_PAGES = 5`（dashboard.py:3886），页序=概要/日志/Goal/服务/模型（`pageLabels()`
-:3888；i18n 三语 zh/en/ja，按 Accept-Language 自动切换，`?lang=` 可强制）。
+## 二、页面结构（六页签，移动优先）
 
-- **概要**：状态大字卡 → 指标 2×2 → 需要处理（轻告警中心）→ 最近活动（UX 定式：
-  状态大字卡 3 秒判断，整屏日志是反模式）。
+六页：概要/日志/Goal/服务/模型/ツール（i18n 三语 zh/en/ja，按 Accept-Language 自动切换，
+`?lang=` 可强制）。
+
+- **概要**：状态大字卡 → 指标 2×2 → 需要处理（轻告警中心）→ 最近活动。
 - **日志**：agent 选择器 + 事件时间线（默认 24h，同 goal 循环事件折叠）。
-- **Goal**：omp goal 进度卡片（状态灯/上下文体积警示/Retrying 检测）+ 负载水位
-  "还可开 N 个 goal"。
+- **Goal**：omp goal 进度卡片（状态灯/上下文体积警示/Retrying 检测）+ 负载水位。
 - **服务**：监听端口表 + 分类 chips（用户服务默认）+ 手动进程服务启停按钮。
 - **模型**：模型可用性检测（⚠️ evomap=用户充值仅探活 GET /v1/models **禁发 chat**；
   其余 1-token 实测）。
-- 手势：左右滑动切页（`setPage`，dashboard.py:3897）、触感反馈、safe-area 适配。
-- **svctools goal（019ffeb7，进行中）规划新增第六页签「ツール」**：文件浏览
-  （`/api/fs/list|file`，白名单根+防穿越+密钥文件 404）/ 健康检查（`/api/health`，
-  磁盘趋势外推满盘日期）/ 垃圾清理（`POST /api/cleanup`，dry_run 默认 true）/
-  工具直达 chips / 快捷复制组 / 计划任务页。**截至 2026-08-14 14:30 这些端点尚未
-  出现在 dashboard.py（goal 刚启动）——落地后更新本文的 API 表**。
+- **ツール**：文件浏览（`/api/fs/list|file`，白名单根+防穿越+密钥文件 404）/ 健康检查
+  （`/api/health`，磁盘趋势外推满盘日期）/ 垃圾清理（`POST /api/cleanup`，dry_run
+  默认 true）/ 网络速测 / 工具直达 chips / 快捷复制组。
+- 桌面端用顶部分类条 `[data-cat]`，移动端用底部页签 `[data-p=0..5]`；手势：左右滑动切页。
 
-## 三、API 端点表（dashboard.py:4377-4410 分发，均已实现）
+## 三、API 端点表（svcdash/handler.py 路由，均已实现）
 
 | 端点 | 方法 | 说明 |
 |---|---|---|
+| `/` | GET | HTML 壳（lite 骨架 + BOOT 注入，gzip + ETag） |
+| `/static/*` | GET | CSS/JS（ETag + immutable 缓存，304） |
 | `/api` | GET | 服务列表 JSON（ip/port/pids/cmdline/cwd/type/unit） |
-| `/api/sys` | GET | 负载/CPU/内存/磁盘/开机时长 |
-| `/api/goals?limit=` | GET | goal 状态聚合（15s 缓存，概要与日志页共用） |
+| `/api/sys` | GET | 负载/CPU/内存/磁盘/开机时长 + 水位 + top 进程 |
+| `/api/fragment?p=goals\|events\|toolchips` | GET | 渲染好的 HTML 片段（5s 缓存，首屏异步填充） |
+| `/api/goals?limit=` | GET | goal 状态聚合 + 已完成台账 + 事件时间线 |
+| `/api/goaldetail?gid=&session=` | GET | 单 goal 详情 |
+| `/api/repos?refresh=` | GET | agent 改动过的 git 仓库统计（600s 缓存） |
 | `/api/tasks?lang=` | GET | systemd timer + cron 定时任务列表 |
 | `/api/omp` | GET | agent 聚合（OMP 会话 + Codex 进程） |
 | `/api/tmux` | GET | tmux 窗格列表 |
-| `/api/manage?unit=` | GET | 受管单元状态（zircon-server/zircon-bots/tailscaled + wilviewer/mapviewer 进程型，MANAGE_UNITS :1204） |
-| `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（走免密 sudo） |
-| `/api/agentlog?sid=&cwd=&tmux=` | GET | 某 agent 会话日志时间线 + 终端画面 |
-| `/api/disk`（webclient 侧） | — | （此端点属 webclient:8822，非本服务） |
+| `/api/agentlog?sid=&cwd=&tmux=` | GET | agent 会话日志时间线 + 终端画面 |
+| `/api/manage?unit=` | GET | 受管单元状态 |
+| `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（免密 sudo） |
+| `/api/fs/list?path=` | GET | 目录列表（白名单+防穿越+敏感隐藏） |
+| `/api/fs/file?path=&mode=view\|download` | GET | 文件预览/下载 |
+| `/api/health` | GET | 健康快检（系统/磁盘趋势/温度/进程/端口/看门狗） |
+| `/api/nettest` | GET | 外网延迟 + tailscale ping |
+| `/api/toolports` | GET | 工具 chips 端口存活 |
+| `/api/uservice` | GET | 用户级 systemd 服务列表 |
+| `POST /api/uservice` | POST | 用户级服务重启（I-KNOW 护栏） |
+| `POST /api/cleanup` | POST | 垃圾清理扫描/执行（dry_run 默认 true） |
 
-## 四、⚠️ 今天踩的坑（改前端必读，commit 85102dc→0b87bee 事故）
+## 四、⚠️ 踩过的坑（改前端必读）
 
-1. **模板字符串 str.replace 改 JS 极易整页崩**：85102dc 删了 header 的 statusline
-   HTML，但 JS 里引用它的代码没判空 → 一个 null 引用让**整页 JS 崩溃、页面完全错乱**
-   （0b87bee 修复）。规则：**删/改任何 DOM 结构前，先 grep 它在 JS 里的所有引用**；
-   JS 侧取元素一律判空（`el && ...` / `?.`）。
-1b. **const 声明顺序 = 求值期地雷（f8df6ef 实战）**：IIFE 在模块求值期立即执行时，
-   用到的 `const` 必须声明在它**之前**——`initLogAgentPicker()` 求值期调
-   `syncLogAgentPicker` → 用 `escHtml`，但声明在 50 行后 → TDZ ReferenceError
-   **杀死整个主脚本**：catbar 不构建、`#cat=` URL 路由失效、`load()`/
-   `hydrateFragments()` 全不跑（服务表 0 行、Goal 卡永久"加载中"）。次生假象：
-   `autoSec before initialization` 刷屏（死亡前注册的定时器残留）。排查法：
-   CDP `Runtime.exceptionThrown` 抓**第一个**异常，别被次生症状带偏。工具：
-   `python3 ~/.hermes/scripts/cdp_eval.py watch 8`（Chrome 需
-   `--remote-debugging-port=9222`，Xvfb :101 + openbox 起）。
+1. ~~**模板字符串 str.replace 改 JS 极易整页崩**~~（commit 85102dc→0b87bee 事故）：
+   **已通过 2026-08-15 重构根治**——前端 JS 抽到 `static/app.js` 真文件，不再内嵌
+   Python 字符串、不再 str.replace 注入。但历史教训仍适用：**删/改任何 DOM 结构前，
+   先 grep 它在 app.js 里的所有引用**；JS 侧取元素一律判空（`el && ...` / `?.`）。
+1b. **const 声明顺序 = 求值期地雷（f8df6ef 实战）**：app.js 模块求值期立即执行的 IIFE，
+   用到的 `const` 必须声明在它**之前**。TDZ ReferenceError 会**杀死整个主脚本**：
+   catbar 不构建、`#cat=` 路由失效、`load()`/`hydrateFragments()` 全不跑（服务表 0 行、
+   Goal 卡永久"加载中"）。次生假象：`autoSec before initialization` 刷屏。排查法：
+   CDP `Runtime.exceptionThrown` 抓**第一个**异常，别被次生症状带偏。
 2. **改前端必须无头浏览器双视口复验**：桌面 1440x900 + 移动 390x844
-   （`Emulation.setDeviceMetricsOverride`）逐页导航截图 + **console pageerror 收集为空**
-   才算过——curl 200 ≠ 界面对（2026-08-14 移动端验收实战三次重复）。
+   （`Emulation.setDeviceMetricsOverride`）逐页导航 + **console pageerror 收集为空**才算过
+   ——curl 200 ≠ 界面对。回归验证时用新旧服务同协议对比（见本仓 2026-08-15 重构验证）。
 3. 高频移动端坑：固定底部导航必须给滚动容器 `padding-bottom: calc(导航高+24px+safe-area)`
    （实测导航高 ~115-120px）；横向 chips 最后项被截断→容器横向滚动+渐隐；
    页面内容与页签名错位=页签映射 bug。
@@ -79,24 +87,28 @@
 
 ```bash
 # unit 文件: /etc/systemd/system/svc-dashboard.service（仓库内模板 svc-dashboard.service 同内容）
-# 限制: MemoryMax=128M / CPUQuota=10% / TasksMax=64（实测空闲 ~17MB、0% CPU）
+# 限制: MemoryMax=128M / CPUQuota=40% / TasksMax=64（实测空闲 ~17MB、0% CPU）
 
 sudo systemctl restart svc-dashboard      # 重启
 systemctl status svc-dashboard            # 看状态
 journalctl -u svc-dashboard -f            # 看日志
 curl -s http://127.0.0.1/api/sys | head -c 200   # 验证
+python3 dashboard.py --selftest          # 离线自检（单测 + 真实数据源 dry-run）
 ```
 
-命令行参数：`--port N`（默认 80）`--host IP`（默认 0.0.0.0，tailscale 手机可达必须 0.0.0.0）。
+命令行参数：`--port N`（默认 80）`--host IP`（默认 0.0.0.0，tailscale 手机可达必须
+0.0.0.0）`--scan`（一次性扫描打印 JSON）`--selftest`（自检）。
+
+HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）。
 
 ## 六、tailscale 源切换机制
 
 用户手机经 Tailscale（CGNAT 段 `100.64.0.0/10`，本机 TS IP=100.76.219.104）访问时，
 页面里的服务链接主机要自动从 `192.168.3.82` 切到 TS IP：
 
-- 服务端（dashboard.py:4332-4335）：`_client_ip()` 落在 `100.64.0.0/10` 网段 →
-  渲染时 `{{TS_MODE}}` 替换为 `"true"`（:2373）。
-- 前端（:2996-2997）：`const TS_HOST = "100.76.219.104"; linkHost = (h) => (TS_MODE && h === "192.168.3.82") ? TS_HOST : h`。
+- 服务端（svcdash/handler.py `_is_tailscale_client`）：`_client_ip()` 落在
+  `100.64.0.0/10` 网段 → BOOT 里 `tsMode=true`。
+- 前端（static/app.js）：`const TS_HOST = "100.76.219.104"; linkHost = (h) => (TS_MODE && h === "192.168.3.82") ? TS_HOST : h`。
 - 新增带链接的前端功能时**必须走 `linkHost()`**，否则手机端点不通。
 
 ## 七、goal_watchdog 集成
