@@ -8,7 +8,7 @@
 try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")document.documentElement.setAttribute("data-theme",_tm)}catch(e){}</script>
 <title>{{T:title}} · {{HOSTNAME}}</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/static/app.css?v=9e7ffb7b">
+<link rel="stylesheet" href="/static/app.css?v=76ebe008">
 <header>
   <!-- topbar 重设计: 左=服务器名(HOSTNAME), 右=刷新按钮(点击刷新/长按锁定自动刷新)。
        原 meta 行与自动刷新开关已并入按钮; updated/count 保留为隐藏节点供 JS 写入。 -->
@@ -279,8 +279,21 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <div class="fsv-status" id="fsv-status"></div>
 </div>
 </div>
+<div class="fs-sheet traj-sheet" id="traj-view" hidden>
+  <div class="fsv-top">
+    <span class="fs-iconbtn" id="traj-back" role="button" tabindex="0" aria-label="{{T:fs_back}}">{{ICO:back:20}}</span>
+    <div class="fsv-title"><span class="fsv-name" id="traj-name"></span><span class="fsv-sub" id="traj-sub"></span></div>
+  </div>
+  <div class="traj-stripwrap">
+    <div class="traj-strip" id="traj-strip"></div>
+    <div class="traj-days" id="traj-days"></div>
+  </div>
+  <div class="traj-legend" id="traj-legend"></div>
+  <div class="traj-body" id="traj-body"></div>
+</div>
+
 <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
-<script src="/static/app.js?v=3e0f2373" defer></script>
+<script src="/static/app.js?v=bd1436fe" defer></script>
 </body>
 </html>

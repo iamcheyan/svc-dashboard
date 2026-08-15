@@ -192,20 +192,77 @@ function renderRepos(d) {
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return (i ? n.toFixed(1) : n) + " " + u[i];
   };
-  const PAL = ["var(--c-blue)", "var(--c-green)", "var(--c-warn)", "var(--c-red)", "var(--text-faint)"];
+  // Agent 操作轨迹条: 近14天逐日色块(提交=蓝 干预=琥珀 恢复=浅绿 完成=绿); 点击整卡进详情
+  const stripOf = (traj) => (traj || []).map(d => {
+    const tip = d.n
+      ? Object.entries(d.c || {}).map(([k, v]) => `${t(TR_KEY[k] || k)}×${v}`).join(" ")
+      : t("tr_idle");
+    return `<i class="${d.cls ? "tr-" + d.cls : "tr-idle"}" title="${escAttr(d.d + " · " + tip)}"></i>`;
+  }).join("");
   el.innerHTML = list.map(r => {
     const meta = [t("rp_commits", { n: r.commits ?? "—" }), fmtB(r.size), t("rp_files", { n: r.files ?? "—" })];
     if (r.dirty) meta.push(`<span class="rp-dirty">${t("rp_dirty", { n: r.dirty })}</span>`);
-    const bar = (r.exts || []).map((x, i) => `<span style="width:${x[2]}%;background:${PAL[i % PAL.length]}"></span>`).join("");
-    const legend = (r.exts || []).map(x => `${escHtml(x[0])} ${x[2]}%`).join(" · ");
-    return `<div class="rp-row">
+    return `<div class="rp-row" role="button" tabindex="0" data-traj="${escAttr(r.name)}">
       <div class="rp-l1"><span class="rp-name">${escHtml(r.name)}</span><span class="rp-branch">${escHtml(r.branch)}</span>
         <span class="rp-meta">${meta.join(" · ")}</span></div>
       ${r.last ? `<div class="rp-last"><span class="rp-hash">${escHtml(r.last.hash)}</span> ${escHtml(r.last.subject)} <span class="rp-ago">· ${escHtml(agoFromTs(r.last.ts))}</span></div>` : ""}
-      ${(r.exts || []).length ? `<div class="rp-ext"><div class="rp-bar">${bar}</div><div class="rp-exts">${legend}</div></div>` : ""}
+      ${(r.traj || []).length ? `<div class="rp-traj" title="${escAttr(t("tr_days"))}">${stripOf(r.traj)}</div>` : ""}
     </div>`;
+
   }).join("");
 }
+// --- Agent 操作轨迹详情页(全屏浮层): 大号14天条 + 图例 + 事件流 ---
+const TR_KEY = { commit: "tr_commit", warn: "tr_warn", good: "tr_good", done: "tr_done" };
+const TR_EV_ICON = { commit: "branch", complete: "ok", recover: "up", restart: "retry",
+                     nudge: "bell", pause: "pause", cleanup: "trash", other: "dot" };
+function closeTraj() {
+  $("traj-view").hidden = true;
+  document.documentElement.classList.remove("fs-noscroll");
+}
+async function openTraj(name) {
+  const v = $("traj-view");
+  if (!v) return;
+  $("traj-name").textContent = name;
+  $("traj-sub").textContent = "";
+  $("traj-strip").innerHTML = "";
+  $("traj-days").innerHTML = "";
+  $("traj-legend").innerHTML = "";
+  $("traj-body").innerHTML = `<div class="gempty">${t("a_loading")}</div>`;
+  v.hidden = false;
+  v.classList.remove("opening"); void v.offsetWidth; v.classList.add("opening");
+  document.documentElement.classList.add("fs-noscroll");
+  haptic(8);
+  try {
+    const r = await fetch("/api/trajectory?repo=" + encodeURIComponent(name), { cache: "no-store" });
+    const d = await r.json();
+    if (!d.ok) { $("traj-body").innerHTML = `<div class="gempty">${escHtml(d.msg || "error")}</div>`; return; }
+    $("traj-sub").textContent = d.path || "";
+    $("traj-strip").innerHTML = (d.strip || []).map(s => {
+      const tip = s.n ? Object.entries(s.c || {}).map(([k, n2]) => `${t(TR_KEY[k] || k)}×${n2}`).join(" ") : t("tr_idle");
+      return `<i class="${s.cls ? "tr-" + s.cls : "tr-idle"}" title="${escAttr(s.d + " · " + tip)}"></i>`;
+    }).join("");
+    $("traj-days").innerHTML = (d.strip || []).map((s, i) => `<b>${i % 2 ? "" : escHtml(s.d)}</b>`).join("");
+    $("traj-legend").innerHTML = ["commit", "warn", "good", "done"]
+      .map(k => `<span><i class="tr-${k}"></i>${t("tr_" + k)}</span>`).join("");
+    const rows = (d.events || []).map(e => `<div class="traj-ev tr-ev-${e.cls || "none"}">`
+      + `<span class="traj-ev-ico">${icon(TR_EV_ICON[e.kind] || "dot", 14)}</span>`
+      + `<span class="traj-ev-kind">${escHtml(t("trk_" + e.kind) || e.kind)}</span>`
+      + `<span class="traj-ev-text">${e.name ? `<b>${escHtml(e.name)}</b> · ` : ""}${escHtml(e.text || "")}</span>`
+      + `<span class="traj-ev-time">${escHtml(e.time)}</span></div>`).join("");
+    $("traj-body").innerHTML = rows || `<div class="gempty">${t("tr_empty")}</div>`;
+  } catch (e) {
+    $("traj-body").innerHTML = `<div class="gempty">${escHtml(e.message)}</div>`;
+  }
+}
+document.addEventListener("click", (ev) => {
+  const row = ev.target.closest(".rp-row[data-traj]");
+  if (row) { openTraj(row.dataset.traj); return; }
+  if (ev.target.closest("#traj-back")) closeTraj();
+});
+// 独立 Esc: 轨迹页可从首页仓库面板打开(此时工具页未初始化, 其 Esc 链未绑定)
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("traj-view").hidden) closeTraj();
+});
 const rpRefreshBtn = $("rp-refresh");
 if (rpRefreshBtn) rpRefreshBtn.addEventListener("click", () => {
   haptic(8);
@@ -2431,7 +2488,6 @@ function initToolsPage() {
       fsPopupMenu([
         { label: t("tl_fs_hidden"), ico: "folder", on: fsState.hidden, act: () => {
           fsState.hidden = !fsState.hidden;
-          localStorage.setItem("svc-fs-hidden", fsState.hidden ? "1" : "0");
           fsRender();
         } },
         "-",
@@ -2484,6 +2540,7 @@ function initToolsPage() {
       if (e.key !== "Escape") return;
       if ($("fs-menu")) { fsCloseMenu(); return; }
       if (!$("tl-lightbox").hidden) { $("tl-lightbox").hidden = true; return; }
+      if (!$("traj-view").hidden) { closeTraj(); return; }
       if (!$("fs-view").hidden) { fsvClose(); return; }
       if (!$("fs-app").hidden) fsCloseBrowser();
     });

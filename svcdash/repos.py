@@ -118,19 +118,101 @@ def _repo_one_stats(repo):
     except (OSError, ValueError, IndexError, subprocess.SubprocessError):
         st["size"] = None
     st["dirty"] = len([x for x in _git(repo, ["status", "--porcelain"]).splitlines() if x.strip()])
-    # 文件占比: git ls-files 只读索引,按后缀计数(后缀 ≤6 字符)
-    exts, n_files = {}, 0
-    for f in _git(repo, ["ls-files"]).splitlines():
-        if not f:
-            continue
-        n_files += 1
-        i = f.rfind(".")
-        ext = f[i:].lower() if 0 < i and len(f) - i <= 6 else "—"
-        exts[ext] = exts.get(ext, 0) + 1
-    st["files"] = n_files
-    top = sorted(exts.items(), key=lambda kv: -kv[1])[:5]
-    st["exts"] = [[k, v, round(v * 100.0 / n_files, 1)] for k, v in top] if n_files else []
+    st["files"] = sum(1 for f in _git(repo, ["ls-files"]).splitlines() if f)
+    st["traj"] = _traj_data(repo)["strip"]   # agent 操作轨迹条(近14天逐日色块)
     return st
+
+
+# ---------------- Agent 操作轨迹(时间条 + 事件流) ----------------
+# 每仓库: git 提交(commit) + watchdog 事件(nudge/pause/restart=warn,
+# recover=good) + goal 完成(done)。逐日分桶,主色优先级 done>commit>warn>good。
+# cleanup/other 不进色条,只在详情事件流里出现。
+_TRAJ_KIND_CLS = {"commit": "commit", "complete": "done", "recover": "good",
+                  "restart": "warn", "nudge": "warn", "pause": "warn"}
+_TRAJ_DAYS = 14
+_traj_cache = {"t": 0.0, "data": {}}          # repo -> {"strip", "events"}
+_traj_wd_cache = {"t": 0.0, "by_root": None}  # 60s: watchdog/完成事件按仓库根分桶(共享快照)
+
+
+def _traj_watchdog_by_root():
+    """watchdog + 完成台账事件, 按 git 仓库根分桶(60s 缓存, 全仓库共享一次解析)。"""
+    now = time.time()
+    if _traj_wd_cache["by_root"] is not None and now - _traj_wd_cache["t"] < 60:
+        return _traj_wd_cache["by_root"]
+    from svcdash.goals import parse_watchdog_events
+    wd_goals = watchdog_goals()
+    by_root = {}
+    for e in parse_watchdog_events(limit=240):
+        g = wd_goals.get(e.get("gid") or "") or {}
+        root = _git_root(g.get("workdir") or "")
+        if root:
+            by_root.setdefault(root, []).append(e)
+    for c in parse_completed_goals(limit=100):
+        root = _git_root(c.get("workdir") or "")
+        if root:
+            by_root.setdefault(root, []).append(
+                {"ts": c["ts"], "kind": "complete", "gid": c["gid"],
+                 "name": c.get("label") or c["gid"][:8],
+                 "text": "status=" + c.get("status", "")})
+    _traj_wd_cache.update({"t": now, "by_root": by_root})
+    return by_root
+
+
+def _traj_data(repo):
+    """单仓库轨迹: strip(近14天逐日主色) + events(时间倒序详情, 上限200)。"""
+    now = time.time()
+    cached = _traj_cache["data"].get(repo)
+    if cached and now - _traj_cache["t"] < 60:
+        return cached
+    evs = []
+    for line in _git(repo, ["log", "-n", "400", "--format=%h%x1f%ct%x1f%s"]).splitlines():
+        parts = line.split("\x1f")
+        if len(parts) != 3:
+            continue
+        try:
+            ts = float(parts[1])
+        except ValueError:
+            continue
+        evs.append({"ts": ts, "kind": "commit", "gid": parts[0], "name": "", "text": parts[2]})
+    evs.extend(_traj_watchdog_by_root().get(repo) or [])
+    evs.sort(key=lambda x: -x["ts"])
+    # 逐日分桶
+    by_day = {}
+    for e in evs:
+        cls = _TRAJ_KIND_CLS.get(e["kind"])
+        if not cls:
+            continue
+        lt = time.localtime(e["ts"])
+        d = by_day.setdefault((lt.tm_year, lt.tm_mon, lt.tm_mday), {})
+        d[cls] = d.get(cls, 0) + 1
+    base = time.localtime()
+    noon = time.mktime((base.tm_year, base.tm_mon, base.tm_mday, 12, 0, 0, 0, 0, -1))
+    strip = []
+    for i in range(_TRAJ_DAYS - 1, -1, -1):
+        lt = time.localtime(noon - i * 86400)
+        c = by_day.get((lt.tm_year, lt.tm_mon, lt.tm_mday)) or {}
+        cls = next((k for k in ("done", "commit", "warn", "good") if c.get(k)), None)
+        strip.append({"d": "%d/%d" % (lt.tm_mon, lt.tm_mday), "cls": cls,
+                      "n": sum(c.values()),
+                      "c": {k: c[k] for k in ("commit", "warn", "good", "done") if c.get(k)}})
+    data = {"strip": strip,
+            "events": [{"ts": e["ts"],
+                        "time": time.strftime("%m-%d %H:%M", time.localtime(e["ts"])),
+                        "kind": e["kind"], "cls": _TRAJ_KIND_CLS.get(e["kind"]) or "",
+                        "name": e.get("name") or "", "text": (e.get("text") or "")[:200]}
+                       for e in evs[:200]]}
+    _traj_cache["data"][repo] = data
+    _traj_cache["t"] = now
+    return data
+
+
+def repo_trajectory(name):
+    """/api/trajectory?repo=NAME -> 单仓库完整轨迹(strip + 事件流)。"""
+    for repo in agent_repos():
+        if os.path.basename(repo.rstrip("/")) == name:
+            d = _traj_data(repo)
+            return {"ok": True, "repo": name, "path": repo, "days": _TRAJ_DAYS, **d}
+    return {"ok": False, "msg": "unknown repo"}
 
 
 def repo_stats(refresh=False):

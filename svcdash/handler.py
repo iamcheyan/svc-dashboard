@@ -219,6 +219,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, manage.manage_status(uid, lang))
         elif path == "/api/svcctl":
             self._send_json(200, svcctl.status())
+        elif path == "/api/trajectory":
+            qs = parse_qs(urlparse(self.path).query)
+            repo = (qs.get("repo") or [""])[0]
+            self._send_json(200, repos.repo_trajectory(repo))
         elif path.startswith("/api/agentlog"):
             qs = parse_qs(urlparse(self.path).query)
             sid = (qs.get("sid") or [""])[0]
