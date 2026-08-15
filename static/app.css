@@ -1,8 +1,10 @@
 
   /* ============ 主题变量: 深色为默认, 浅色经 prefers-color-scheme / [data-theme] 覆盖 ============
      语义色规约: 红=严重 黄=关注 绿=正常 灰=历史 蓝=交互。
-     文本档均按 WCAG AA(≥4.5:1)对各自主题底色校准; 终端画面(termlog)双主题保持深色。 */
+     文本档均按 WCAG AA(≥4.5:1)对各自主题底色校准; 终端画面(termlog)双主题保持深色。
+     面板垂直节奏: 所有顶层面板 margin-bottom 统一走 --gap-panel(桌面 14 / 移动 12)。 */
   :root {
+    --gap-panel: 14px;
     color-scheme: dark;
     --bg: #0a0a0a; --bg-elev: #141414; --bg-panel: #131313; --bg-deep: #101010;
     --bg-input: #141414; --bg-hover: #1f1f1f; --bg-active: #262626;
@@ -241,7 +243,7 @@
   #chart-wrap canvas { width: 100%; height: 150px; display: block; touch-action: none; }
   #chart-empty { color: var(--text-dead); font-size: 12px; padding: 18px 0; }
   .gmore { display: none; color: var(--text-dim); font-size: 11px; }
-  .sysbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 14px; }
+  .sysbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: var(--gap-panel); }
   .stat { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px;
           padding: 10px 16px; min-width: 130px; }
   .stat .label { color: var(--text-dim); font-size: 11px; margin-bottom: 3px;
@@ -255,10 +257,10 @@
   .tbadge.wd { background: var(--tbadge-wd-bg); color: var(--tbadge-wd-tx); border: 1px solid var(--tbadge-wd-bd); }
   .tbadge.rd { background: var(--tbadge-rd-bg); color: var(--tbadge-rd-tx); border: 1px solid var(--tbadge-rd-bd); }
   .tbadge.sc { background: var(--tbadge-sc-bg); color: var(--tbadge-sc-tx); border: 1px solid var(--tbadge-sc-bd); }
-  .filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .filters { display: flex; gap: 8px; margin-bottom: var(--gap-panel); flex-wrap: wrap; align-items: center; }
   .filters .spacer { flex: 1; }
   .watchdog-panel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 14px;
-                    padding: 12px 14px; margin-bottom: 14px; }
+                    padding: 12px 14px; margin-bottom: var(--gap-panel); }
   .watchdog-panel h2 { margin: 0 0 8px; font-size: 13px; color: var(--text-dim); font-weight: 500; }
   .watchdog-panel table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   .watchdog-panel th { text-align: left; color: var(--text-ghost); font-weight: 400; font-size: 11.5px;
@@ -309,11 +311,11 @@
   .chip span { opacity: .6; margin-left: 4px; font-size: 11px; }
   a.chip { text-decoration: none; }
   a.chip:hover { color: var(--text-title); border-color: var(--btn-hover); }
-  .toolchips { margin-bottom: 14px; }
+  .toolchips { margin-bottom: var(--gap-panel); }
 
   /* ---------------- Goal 进度卡片 / 负载水位 / 事件时间线 ---------------- */
   .gpanel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px;
-            padding: 12px 14px; margin-bottom: 14px; }
+            padding: 12px 14px; margin-bottom: var(--gap-panel); }
   .gpanel h2 { margin: 0 0 10px; font-size: 13px; color: var(--text-dim); font-weight: 500; }
   .gpanel .ghint { color: var(--text-faint); font-weight: 400; font-size: 11.5px; }
   .gcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 10px; align-items: stretch; }
@@ -342,7 +344,7 @@
   .gcard .grow { display: flex; justify-content: space-between; gap: 10px;
                  font-size: 12.5px; color: var(--text-soft); padding: 3px 0 0; }
   /* 桌面首页网格: Web磁贴(左 2fr) / Goal摘要(右 1fr); 最近活动/仓库在下方全宽 */
-  .hp-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+  .hp-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: var(--gap-panel); }
   .hp-grid .gpanel { margin-bottom: 0; }
   .hp-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
   .hp-tile { display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
@@ -590,9 +592,10 @@
   .lv-more { font-size: 12px; color: var(--text-dim); padding: 10px 0 2px; }
 
   @media (max-width: 768px) {
-  /* 手机: 首页网格单列堆叠(磁贴两列小格) */
+  /* 手机: 首页网格单列堆叠(磁贴两列小格); 面板间距收紧到 12 */
+  :root { --gap-panel: 12px; }
   .hp-grid { display: block; }
-  .hp-grid .gpanel { margin-bottom: 14px; }
+  .hp-grid .gpanel { margin-bottom: var(--gap-panel); }
   .hp-tiles { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 7px; }
   .hp-tile { padding: 9px 10px; font-size: 12.5px; }
     .meta { display: none !important; }  /* 移动端: 更新时间/端口数与主体状态卡重复,隐藏 */
@@ -662,9 +665,9 @@
     #chart-wrap, #logpage, #agents-page, #toolspage { display: block; }  /* 移动专用面板 */
     #logpage[hidden], #agents-page[hidden], #toolspage[hidden] { display: none !important; }
     /* 概要摘要组件(状态卡+指标2×2+需要处理+最近活动) */
-    .statuscard { display: block; margin-bottom: 10px; }
-    .mgrid4 { display: grid; margin-bottom: 12px; }
-    #alerts, #recent { display: block; margin-bottom: 12px; }
+    .statuscard { display: block; margin-bottom: var(--gap-panel); }
+    .mgrid4 { display: grid; margin-bottom: var(--gap-panel); }
+    #alerts, #recent { display: block; margin-bottom: var(--gap-panel); }
     #recent h2 { display: flex; justify-content: space-between; align-items: baseline; }
     .rc-more { cursor: pointer; }
     #events { display: none; }  /* 概要页只留 3-5 条摘要(最近活动), 全量事件进日志页 */
@@ -675,14 +678,14 @@
     #log-filters::-webkit-scrollbar { display: none; }
     #log-filters .chip { flex: none; }
 
-    .sysbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }   /* 双列 2×N(桌面为 5 列 grid) */
+    .sysbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--gap-panel); }   /* 双列 2×N(桌面为 5 列 grid) */
     .stat { min-width: calc(50% - 6px); flex: 1 1 calc(50% - 6px); padding: 8px 12px;
             touch-action: manipulation; } /* 双击手势目标: 消除 300ms 缩放 */
     .stat .value { font-size: 12.5px; }
 
     /* chips 横向滚动 */
     .filters { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
-               scrollbar-width: none; margin: 0 -12px 10px; padding: 0 12px 4px; }
+               scrollbar-width: none; margin: 0 -12px var(--gap-panel); padding: 0 12px 4px; }
     .filters::-webkit-scrollbar { display: none; }
     .filters .spacer { display: none; }
     .chip { flex: none; font-size: 12.5px; }
@@ -738,7 +741,7 @@
 
     /* 日志页: 展开式(不嵌套滚动) */
     #logpage .agentlog { max-height: none; overflow: visible; }
-    .logbar { margin-bottom: 10px; }
+    .logbar { margin-bottom: var(--gap-panel); }
 
     /* 服务管理卡片 */
     .mgrid { grid-template-columns: 1fr; gap: 10px; }
