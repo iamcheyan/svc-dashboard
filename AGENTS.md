@@ -17,7 +17,7 @@
 ```
 dashboard.py          薄入口（参数解析 + 启动）
 svcdash/              后端：config/i18n/icons/procscan/sysinfo/tasks/manage/
-                      agents/goals/repos/tools/render/handler/selftest/main
+                      agents/runtimes/goals/repos/tools/render/handler/selftest/main
 static/               前端：index.html(壳+占位) app.css app.js
 ```
 
@@ -28,13 +28,15 @@ static/               前端：index.html(壳+占位) app.css app.js
 
 - **概要**：状态大字卡 → 指标 2×2 → Web 服务磁贴（真身份+资源占用 CPU/内存/时长，
   ≥30%橙/≥80%红高亮 + 迷你暂停/恢复钮，点击直达服务）→ Goal 摘要 → 仓库卡
-  （近 14 天 **Agent 操作轨迹条**：提交蓝/干预琥珀/恢复浅绿/完成深绿/OMP 工具活动紫，
-  点击进全屏轨迹详情页——设计原理见 README「Agent 操作轨迹」节，灵感 codex-trajectory）
+  （近 14 天 **Agent 操作轨迹条**：上下双行——上行里程碑 完成/提交/干预/恢复，
+  下行活动健康 工具调用紫/失败高发红；OMP 会话 JSONL 全信号 13 类事件流 + 类别筛选
+  chips——设计原理见 README「Agent 操作轨迹」节，灵感 codex-trajectory）
   → 系统指标 → 最近活动。
 - **日志**：agent 选择器 + 事件时间线（默认 24h，同 goal 循环事件折叠）。
 - **Goal**：omp goal 进度卡片（状态灯/上下文体积警示/Retrying 检测）+ 负载水位。
 - **服务**：监听端口表 + 分类 chips（用户服务默认）+ 手动进程服务启停按钮。
-- **模型**：模型可用性检测（⚠️ evomap=用户充值仅探活 GET /v1/models **禁发 chat**；
+- **模型**：模型可用性检测
+- **Agent**：agent CLI 运行时总览(装卸/进程/任务/五家额度条, svcdash/runtimes.py)（⚠️ evomap=用户充值仅探活 GET /v1/models **禁发 chat**；
   其余 1-token 实测）。
 - **ツール**：文件浏览（`/api/fs/list|file`，白名单根+防穿越+密钥文件 404）/ 健康检查
   （`/api/health`，磁盘趋势外推满盘日期）/ 垃圾清理（`POST /api/cleanup`，dry_run
@@ -54,10 +56,12 @@ static/               前端：index.html(壳+占位) app.css app.js
 | `/api/goaldetail?gid=&session=` | GET | 单 goal 详情 |
 | `/api/repos?refresh=` | GET | agent 改动过的 git 仓库统计（600s 缓存） |
 | `/api/tasks?lang=` | GET | systemd timer + cron 定时任务列表 |
+| `/api/runtimes` | GET | Agent 运行时总览(12 agent 注册表: 安装/版本/进程/任务/额度) |
+| `GET /api/agentctl` | GET | 装卸动作状态+历史 |
+| `POST /api/runtimes` | POST | `{"agent":id,"action":"install\|uninstall\|quota"}` 装卸(runuser 降权跑 ~/dotfiles/agent wrapper)/刷额度 |
 | `/api/omp` | GET | agent 聚合（OMP 会话 + Codex 进程） |
 | `/api/tmux` | GET | tmux 窗格列表 |
-| `/api/agentlog?sid=&cwd=&tmux=` | GET | agent 会话日志时间线 + 终端画面 |
-| `/api/trajectory?repo=NAME` | GET | 单仓库 Agent 操作轨迹（14 天逐日色块 + 200 条事件流；`repos.py:_traj_data`，含 OMP 会话工具调用/压缩事件） |
+| `/api/trajectory?repo=NAME` | GET | 单仓库轨迹（14 天双行色块 + 500 条事件流；`repos.py:_traj_data`，OMP 会话全信号：工具/失败/压缩/指令/声明/退出/子代理/重规划/模型） |
 | `/api/manage?unit=` | GET | 受管单元状态 |
 | `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（免密 sudo） |
 | `GET /api/svcctl` | GET | 通用暂停台账 + 历史（`~/.omp/svc-dashboard/{paused.json,actions.log}`） |
@@ -94,7 +98,7 @@ static/               前端：index.html(壳+占位) app.css app.js
 
 ```bash
 # unit 文件: /etc/systemd/system/svc-dashboard.service（仓库内模板 svc-dashboard.service 同内容）
-# 限制: MemoryMax=128M / CPUQuota=40% / TasksMax=64（实测空闲 ~17MB、0% CPU）
+# 限制: MemoryMax=512M(额度刷新 spawn node, 128M 会 OOM) / CPUQuota=40% / TasksMax=64（实测空闲 ~17MB、0% CPU）
 
 sudo systemctl restart svc-dashboard      # 重启
 systemctl status svc-dashboard            # 看状态

@@ -22,6 +22,7 @@ svcdash/              后端包（按领域拆分）
   goals.py             goal_watchdog 解析、上下文体积、事件时间线
   repos.py             agent 改动过的 git 仓库统计
   tools.py             文件浏览 / 健康检查 / 垃圾清理 / 网络速测 / 用户服务
+  runtimes.py          Agent 运行时注册表: 装卸/进程/任务/额度(agent-quota.sh)
   render.py            壳渲染 + 片段渲染（静态模板 + BOOT 注入）
   handler.py           HTTP 路由（HTTP/1.1 + gzip + ETag）
   selftest.py          离线自检（单测 + 真实数据源 dry-run）
@@ -39,6 +40,7 @@ static/
 - **Goal**：omp goal 进度卡片（状态灯/上下文体积警示/Retrying 检测）+ 负载水位
 - **服务**：监听端口表 + 分类 chips（用户服务默认）+ 手动进程服务启停按钮
 - **模型**：模型可用性检测
+- **Agent**：agent CLI 运行时总览——12 个已知 agent（omp/codex/claude/antigravity/grok/cursor/opencode/copilot/kiro/pi/mimo/hermes）：安装状态/版本/活跃进程(CPU·内存)/活跃任务(OMP goal、grok 会话、codex·claude 24h 会话)/订阅额度（codex/agy/grok/kiro/cursor，剩余条+重置时间+不足告警），支持一键装卸（复用 ~/dotfiles/agent wrapper；卸载只删二进制，配置与登录保留）
 - **ツール**：文件浏览 / 健康检查 / 垃圾清理 / 网络速测 / 工具直达 / 快捷复制组
 
 手势：左右滑动切页、触感反馈、safe-area 适配。桌面端用顶部分类条，移动端用底部页签。
@@ -54,25 +56,31 @@ static/
 
 **映射到本面板**（数据源全是现有日志，零新增采集）：
 
-| 事件账本（JSONL 投影） | ① git log（每仓库 400 条）② `goal-watchdog.log`（gid→workdir→仓库根映射）+ `goal-completed.log` ③ **OMP 会话 JSONL**（`~/.omp/agent/sessions/*/*.jsonl`，172 个/478MB：`tool_execution_start` 每次工具调用含意图、`compaction` 上下文压缩、`session.cwd` 定位仓库） |
-| 检查器（点块看详情） | 点仓库卡 → 全屏轨迹详情页（大号色块条 + 图例 + 200 条事件流） |
+| 事件账本（JSONL 投影） | ① git log（每仓库 400 条）② `goal-watchdog.log`（gid→workdir→仓库根映射）+ `goal-completed.log` ③ **OMP 会话 JSONL 全信号**（`~/.omp/agent/sessions/*/*.jsonl`，172 个/~500MB：工具调用含意图、工具失败含退出码与耗时、上下文压缩含 tokensBefore、用户轮次、助手声明、子代理 init、会话退出、goal 完成 含 token 用量与时长、重规划、模型切换；`session.cwd` 定位仓库） |
+| 检查器（点块看详情） | 点仓库卡 → 全屏轨迹详情页（大号双行色块条 + 图例 + **类别筛选 chips** + 500 条事件流） |
 
-**颜色语义**（逐日主色，优先级 done > commit > warn > good）：
+**颜色语义**——每列上下双行：上行=里程碑，下行=活动健康：
 
-| 色 | 含义 | 事件来源 |
-|---|---|---|
-| 🔵 蓝 `tr-commit` | 有提交 | git log |
-| 🟠 琥珀 `tr-warn` | watchdog 干预 | nudge（催"继续"）/ pause / restart（进程死亡重启） |
-| 🟢 浅绿 `tr-good` | 恢复 | recovered / resumed |
-| 🟣 紫 `tr-agent` | agent 工具活动（当日无更高优先级事件时显示） | OMP 会话 `tool_execution_start` + `compaction` |
-| 🟩 深绿 `tr-done` | goal 完成 | goal-completed.log |
-| ⬜ 灰 `tr-idle` | 当日无活动 | — |
+| 行 | 色 | 含义 | 事件来源 |
+|---|---|---|---|
+| 上 | 🟩 深绿 `tr-done` | goal 完成（台账与 OMP goal-completed 30min 窗去重） | 双源 |
+| 上 | 🔵 蓝 `tr-commit` | 有提交 | git log |
+| 上 | 🟠 琥珀 `tr-warn` | watchdog 干预（nudge/pause/restart） | watchdog 日志 |
+| 上 | 🟢 浅绿 `tr-good` | 恢复 | recovered / resumed |
+| 下 | 🟣 紫 `tr-agent` | 工具调用活动 | OMP `tool_execution_start` |
+| 下 | 🔴 红 `tr-error` | **失败高发日**（≥10 次且 ≥8% 工具调用失败） | OMP toolResult `isError:true` |
+| — | ⬜ 灰 `tr-idle` | 当日无活动 | — |
 
-悬停色块显示当日各类计数；cleanup/other 类事件不进色条，只出现在详情页事件流。
-实现细节：watchdog/完成台账解析按 60s 共享快照（`_traj_wd_cache`，8 仓库只读一次
-日志）；**OMP 会话日志按 (path, mtime, size) 文件级增量缓存**（478MB 只在冷启动
-解析一次 ~7s，之后只重读在写的活跃会话；行级子串预筛跳过 80%+ 无关行）；
-轨迹数据 60s 缓存；`repos.py` 的 exts 文件类型统计已删除（无信息量）。
+悬停色块显示当日 13 类计数（提交/干预/恢复/完成/工具/失败/指令/声明/压缩/退出/
+子代理/重规划/模型）。事件流类别筛选：点 chip 只看该类，再点取消。
+
+实现细节：watchdog/完成台账解析按 60s 共享快照（`_traj_wd_cache`）；**OMP 会话日志
+按 (path, mtime, size) 文件级增量缓存**（500MB 冷启动解析一次 ~14s / 峰值 RSS 29MB，
+之后只重读在写的活跃会话；行级子串预筛跳过 80%+ 无关行，by_root 存引用、dict 投影
+推迟到请求期避免 86k 事件常驻内存）；轨迹数据 60s 缓存。
+前端坑两次：① 色块颜色规则必须 ≥ 容器元素选择器优先级（`.rp-traj .tr-day i.tr-xxx`
+0,3,0），否则灰底压色；② 内条 `flex:1 1 0` 在 auto 高 column 容器里被 Chrome 解析
+为 0 高，必须 `flex:none` + 显式 height。
 
 - **HTTP/1.1 keep-alive**：旧版 HTTP/1.0 每请求新建 TCP 连接，现复用连接
 - **gzip**：HTML/JSON/CSS/JS 全压缩（移动端首屏 ~400KB → ~33KB）
@@ -89,8 +97,11 @@ static/
 | `/api/goals?limit=` | GET | goal 状态聚合 + 已完成台账 + 事件时间线 |
 | `/api/goaldetail?gid=&session=` | GET | 单个 goal 详情（状态/tmux 画面/活动） |
 | `/api/repos?refresh=` | GET | agent 改动过的 git 仓库统计 |
-| `/api/trajectory?repo=NAME` | GET | 单仓库 Agent 操作轨迹（14 天逐日色块 + 200 条事件流） |
+| `/api/trajectory?repo=NAME` | GET | 单仓库 Agent 操作轨迹（14 天双行色块 + 500 条事件流） |
 | `/api/tasks?lang=` | GET | systemd timer + cron 定时任务列表 |
+| `/api/runtimes` | GET | Agent 运行时总览（安装/版本/进程/任务/额度快照；触发额度后台刷新）|
+| `GET /api/agentctl` | GET | 安装/卸载动作状态 + 历史 |
+| `POST /api/runtimes` | POST | `{"agent":id,"action":"install\|uninstall\|quota"}` 一键装卸/刷新额度（白名单 wrapper，台账 `~/.omp/svc-dashboard/agentctl.json`）|
 | `/api/omp` | GET | agent 聚合（OMP 会话 + Codex 进程） |
 | `/api/tmux` | GET | tmux 窗格列表 |
 | `/api/agentlog?sid=&cwd=&tmux=` | GET | agent 会话日志时间线 + 终端画面 |
@@ -174,7 +185,7 @@ python3 dashboard.py --selftest            # 自检
 journalctl -u svc-dashboard -f             # 日志
 ```
 
-资源限制（unit 文件内置）：`MemoryMax=128M` / `CPUQuota=40%` / `TasksMax=64`（实测空闲 ~17MB、0% CPU）。
+资源限制（unit 文件内置）：`MemoryMax=512M`（额度刷新要 spawn node/codex 子进程，原 128M 会 OOM） / `CPUQuota=40%` / `TasksMax=64`（实测空闲 ~17MB、0% CPU）。
 
 ## Tailscale 源切换
 
