@@ -415,6 +415,73 @@ async function fetchAgentLog(sid, cwd, tmx) {
   const r = await fetch("/api/agentlog?sid=" + encodeURIComponent(sid) + "&cwd=" + encodeURIComponent(cwd) + "&tmux=" + encodeURIComponent(tmx) + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
   return r.json();
 }
+// --- tmux capture-pane -e 的 ANSI(SGR) → HTML: 真彩/256色/16色 + 粗/暗, 其余 CSI/OSC 丢弃 ---
+const ANSI_16 = ["#4c566a","#bf616a","#a3be8c","#ebcb8b","#81a1c1","#b48ead","#88c0d0","#e5e9f0",
+                 "#616e88","#d08770","#97b67c","#f0d390","#8ca9c9","#c8a2c8","#9fc6d8","#ffffff"];
+function _xterm256(n) {
+  if (n < 16) return ANSI_16[n];
+  if (n < 232) { const s = [0, 95, 135, 175, 215, 255], c = n - 16;
+    return "rgb(" + s[(c / 36) | 0] + "," + s[((c % 36) / 6) | 0] + "," + s[c % 6] + ")"; }
+  const v = 8 + (n - 232) * 10; return "rgb(" + v + "," + v + "," + v + ")";
+}
+function ansiToHtml(s) {
+  // 逐行处理(tmux capture 每行 SGR 自含): 收集 {text, st} 段 → 行尾裁掉"无背景色"的尾随空格
+  // (TUI 把空格涂满 pane 宽度, 是假宽度) → 同风格相邻段合并为一个 span。
+  const re = /\x1b(?:\[[0-9;:<=>?]*[A-Za-z]|\][^\x07]*\x07|\][^\x1b]*\x1b\\)/g;
+  const sgr = (seq, st) => {
+    const parts = seq.slice(2, -1).split(/[;:]/);
+    for (let i = 0; i < parts.length; i++) {
+      const c = parseInt(parts[i] || "0", 10) || 0;
+      if (c === 0) { st.fg = st.bg = ""; st.bold = st.dim = false; }
+      else if (c === 1) st.bold = true;
+      else if (c === 2) st.dim = true;
+      else if (c === 22) { st.bold = st.dim = false; }
+      else if (c >= 30 && c <= 37) st.fg = ANSI_16[c - 30];
+      else if (c >= 90 && c <= 97) st.fg = ANSI_16[c - 82];
+      else if (c === 39) st.fg = "";
+      else if (c >= 40 && c <= 47) st.bg = ANSI_16[c - 40];
+      else if (c >= 100 && c <= 107) st.bg = ANSI_16[c - 92];
+      else if (c === 49) st.bg = "";
+      else if (c === 38 || c === 48) {
+        let col = "";
+        if (+parts[i + 1] === 2) { col = "rgb(" + (+parts[i + 2] || 0) + "," + (+parts[i + 3] || 0) + "," + (+parts[i + 4] || 0) + ")"; i += 4; }
+        else if (+parts[i + 1] === 5) { col = _xterm256(+parts[i + 2] || 0); i += 2; }
+        if (c === 38) st.fg = col; else st.bg = col;
+      }
+    }
+  };
+  const st2css = (st) => [st.fg && "color:" + st.fg, st.bg && "background:" + st.bg,
+                           st.bold && "font-weight:600", st.dim && "opacity:.62"].filter(Boolean).join(";");
+  let out = "";
+  for (const line of String(s).split("\n")) {
+    const segs = [];
+    const st = { fg: "", bg: "", bold: false, dim: false };
+    let last = 0, m;
+    re.lastIndex = 0;
+    while ((m = re.exec(line))) {
+      if (m.index > last) segs.push({ text: line.slice(last, m.index), st: { ...st } });
+      if (m[0].charCodeAt(1) === 91 && m[0].endsWith("m")) sgr(m[0], st);
+      last = m.index + m[0].length;
+    }
+    if (last < line.length) segs.push({ text: line.slice(last), st: { ...st } });
+    // 行尾裁剪: 尾随空格段直接丢弃(即使带背景——TUI 涂满 pane 宽的死宽度, 是假滚动条元凶),
+    // 最末非空白段去掉尾随空格
+    for (let i = segs.length - 1; i >= 0; i--) {
+      if (/^ *$/.test(segs[i].text)) { segs.splice(i, 1); continue; }
+      segs[i].text = segs[i].text.replace(/ +$/, "");
+      break;
+    }
+    for (const sg of segs) {
+      if (!sg.text) continue;
+      const css = st2css(sg.st);
+      if (css !== open) { if (open) out += "</span>"; if (css) out += '<span style="' + css + '">'; open = css || null; }
+      out += escHtml(sg.text);
+    }
+    if (open) out += "</span>";
+    out += "\n";
+  }
+  return out.replace(/\n$/, "");
+}
 function agentLogHtml(d) {
   const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   let html = "<div class='agentlog'>";
@@ -424,7 +491,7 @@ function agentLogHtml(d) {
   }
   if (d.capture && d.capture.length) {
     html += "<div class='aglog-title'>" + t("a_term") + " <span class='aglog-refresh' role='button' tabindex='0'>" + t("refresh") + "</span></div><pre class='termlog'>" +
-      d.capture.map(l => esc(l)).join("\n") + "</pre>";
+      ansiToHtml(d.capture.join("\n")) + "</pre>";
   }
   if (!(d.events || []).length && !d.capture) html += "<div class='aglog-empty'>" + t("a_nolog") + "</div>";
   return html + "</div>";
@@ -1765,34 +1832,39 @@ async function initAgentsPage() {
   try { renderRuntimes(await loadRuntimes()); }
   catch (e) { el.innerHTML = esHtml("cpu", t("a_fail", { e: escHtml(e.message) })); }
 }
-
-// --- Goal 详情: 状态 + watchdog 配置 + tmux 画面 + JSONL 活动 + watchdog 事件 ---
+// --- Goal 详情: 双栏 KV + ANSI 彩色终端 + 活动/事件; 宽弹层 ---
 function goalDetailHtml(d) {
   const esc = escHtml;
   const g = d.goal || {}, w = d.watchdog || {}, p = d.pane || {};
   const kv = (k, v) => `<span class="k">${esc(k)}</span><span class="v">${esc(v || "—")}</span>`;
+  const nAct = (d.activities || []).length, nEvt = (d.events || []).length;
   const activity = (d.activities || []).map(x => `<div class="g-detail-event"><span class="kind">${esc(x.kind)}</span>${esc(x.text)}</div>`).join("");
   const events = (d.events || []).map(x => `<div class="g-detail-event"><span class="time">${esc(x.time || "")}</span><span class="kind">${esc(x.kind || "event")}</span>${esc(x.text || "")}</div>`).join("");
   const capture = (d.capture || []).join("\n");
   return `<div class="g-detail-body">
+    <div class="g-detail-grid">
     <section class="g-detail-section"><h3>${t("g_status_detail")}</h3><div class="g-detail-kv">` +
       kv(t("g_field_status"), g.light) + kv(t("g_field_idle"), g.idle_sec == null ? "—" : t("g_seconds", { n: g.idle_sec })) +
       kv("Context", g.ctx_raw) + kv("Retry", g.retry) + kv("进度", (g.progress || []).join("\n")) + `</div></section>` +
     `<section class="g-detail-section"><h3>${t("g_runtime_detail")}</h3><div class="g-detail-kv">` +
-      kv("Goal ID", g.gid || w.gid) + kv("Session", w.session) + kv("PID / Pane", `${p.pid || "—"} / ${p.pane || "—"}`) + kv("工作目录", w.workdir) + kv("JSONL", w.jsonl) + `</div></section>` +
-    (capture ? `<section class="g-detail-section"><h3>${t("g_terminal_detail")}</h3><pre class="g-detail-log">${esc(capture)}</pre></section>` : "") +
-    `<section class="g-detail-section"><h3>${t("g_activity_detail")} (${(d.activities || []).length})</h3><div class="g-detail-events">${activity || `<div>${t("g_no_activity")}</div>`}</div></section>` +
-    `<section class="g-detail-section"><h3>${t("g_watchdog_detail")} (${(d.events || []).length})</h3><div class="g-detail-events">${events || `<div>${t("g_no_activity")}</div>`}</div></section>
+      kv("Goal ID", g.gid || w.gid) + kv("Session", w.session) + kv("PID / Pane", `${p.pid || "—"} / ${p.pane || "—"}`) + kv("工作目录", w.workdir) + kv("JSONL", w.jsonl) + `</div></section>
+    </div>` +
+    (capture ? `<section class="g-detail-section"><h3>${t("g_terminal_detail")}</h3><pre class="g-detail-log">${ansiToHtml(capture)}</pre></section>` : "") +
+    `<div class="g-detail-grid">
+    <section class="g-detail-section"><h3>${t("g_activity_detail")} (${nAct})</h3><div class="g-detail-events">${activity || `<div>${t("g_no_activity")}</div>`}</div></section>` +
+    `<section class="g-detail-section"><h3>${t("g_watchdog_detail")} (${nEvt})</h3><div class="g-detail-events">${events || `<div>${t("g_no_activity")}</div>`}</div></section>
+    </div>
   </div>`;
 }
 async function openGoalDetail(btn) {
   const modal = $("ui-modal"), title = $("ui-dialog-title"), msg = $("ui-dialog-msg"), ok = $("ui-ok"), cancel = $("ui-cancel");
   if (!modal || !title || !msg || !cancel) return;
-  title.innerHTML = icon("doc", 17) + " <span>" + t("g_view_detail") + "</span>";
+  title.innerHTML = icon("doc", 17) + " <span>" + escHtml(btn.closest(".gcard")?.querySelector(".gname")?.textContent?.trim() || t("g_view_detail")) + "</span>";
   msg.innerHTML = `<div class="g-detail-body">${t("a_loading")}</div>`;
   if (ok) ok.hidden = true;
   cancel.textContent = t("m_close"); modal.hidden = false; document.body.classList.add("modal-open");
-  const close = () => { modal.hidden = true; document.body.classList.remove("modal-open"); if (ok) ok.hidden = false; cancel.textContent = t("m_cancel"); cancel.removeEventListener("click", close); modal.removeEventListener("click", outside); document.removeEventListener("keydown", key); };
+  modal.classList.add("detail-wide");
+  const close = () => { modal.hidden = true; document.body.classList.remove("modal-open"); modal.classList.remove("detail-wide"); if (ok) ok.hidden = false; cancel.textContent = t("m_cancel"); cancel.removeEventListener("click", close); modal.removeEventListener("click", outside); document.removeEventListener("keydown", key); };
   const outside = e => { if (e.target === modal) close(); };
   const key = e => { if (e.key === "Escape") close(); };
   cancel.addEventListener("click", close); modal.addEventListener("click", outside); document.addEventListener("keydown", key);
