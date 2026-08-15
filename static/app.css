@@ -157,6 +157,14 @@
                       display: inline-flex; align-items: baseline; gap: 6px; }
   header h1 .h-server { width: 7px; height: 7px; border-radius: 50%; background: var(--c-green);
                         flex: none; align-self: center; }
+  /* 顶栏连接 chip: ssh/LAN IP 点击复制(折叠自原首页独立面板, 零新增纵向空间) */
+  .h-conn { display: inline-flex; align-items: center; gap: 6px; }
+  .h-conn .gcopy { font-family: ui-monospace, monospace; font-size: 11px; padding: 2px 8px;
+                   border-radius: 999px; border: 1px solid var(--border-faint);
+                   color: var(--text-faint); cursor: pointer; user-select: none;
+                   transition: color .12s, border-color .12s; }
+  .h-conn .gcopy b { font-weight: 500; }
+  .h-conn .gcopy:hover { color: var(--text-hi); border-color: var(--text-faint); }
   header .meta { color: var(--text-soft); font-size: 12.5px; }
   header .spacer { flex: 1; }
   /* ---------------- 自绘控件体系 ----------------
@@ -617,7 +625,8 @@
   .statuscard .sc-head { display: flex; align-items: center; gap: 12px; }
   .statuscard .sc-ico { font-size: 30px; line-height: 1; }
   .statuscard .sc-big { font-size: 24px; font-weight: 700; color: var(--text-title); }
-  .statuscard .sc-sub { margin-top: 8px; color: var(--text-dim); font-size: 12px; }
+  .statuscard .sc-sub { margin-top: 8px; color: var(--text-dim); font-size: 12px;
+                        display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   #gh-link { margin-left: auto; color: var(--text-faint); display: inline-flex; padding: 4px;
              border-radius: 8px; align-self: flex-start; }
   #gh-link:hover { color: var(--text); background: var(--bg-hover); }
@@ -1151,12 +1160,6 @@
   }
   /* 桌面端分类条(右上角): 移动端隐藏(有底部页签); 选中态复用 --nav-pill+--accent */
   #catbar { display: none; gap: 6px; align-items: center; }
-  /* 连接信息面板(首页): 等宽网格卡, 点击复制 ssh/IP */
-  .conn-panel .conn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
-  .conn-panel .btn { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
-                     font-size: 12px; padding: 9px 12px; white-space: nowrap; overflow: hidden; }
-  .conn-panel .btn b { font-family: ui-monospace, monospace; font-weight: 600; font-size: 12px; }
-  .conn-panel .conn-k { color: var(--text-faint); flex: none; }
   #catbar .cat { appearance: none; border: 1px solid var(--chip-border); background: var(--chip-bg);
       color: var(--text-mid); border-radius: 999px; padding: 7px 15px; font-size: 12.5px;
       cursor: pointer; transition: background .18s ease, color .18s ease; }

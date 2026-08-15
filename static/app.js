@@ -1039,7 +1039,7 @@ const staleHtml = icon("warn", 12) + " " + t("st_stale");
 setInterval(() => { if (!document.hidden) refreshFreshness(); }, 20000);
 
 // 概要页交互: 状态卡→Goal页 / 状态栏→回概要 / 最近活动→日志页 / 告警操作
-$("statuscard").addEventListener("click", () => setPage(2));
+$("statuscard").addEventListener("click", (e) => { if (!e.target.closest(".gcopy")) setPage(2); });
 const statuslineEl = $("statusline");   // header 状态栏已移除(85102dc), 此处判空防崩
 if (statuslineEl) statuslineEl.addEventListener("click", () => {
   setPage(0);
@@ -1262,7 +1262,7 @@ const gesture = { claimed: null };
 // 移动端把各分区装进 6 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#conn-panel", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
+  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   ["#logpage"],
   ["#goals"],
   ["#filters", "#tasks", "#svc"],
@@ -1477,8 +1477,8 @@ function toastCopied(anchor) {
 }
 // (escHtml/escAttr 已上移到 syncLogAgentPicker 之前, 此处勿重复声明)
 
-// --- Agent 运行时总览: 已知 agent 注册表 + 装卸 + 状态/进程/任务/额度 ---
-let agentsInit = false, rtCache = null, rtT = 0, rtTimer = null;
+// --- Agent 运行时总览: 注册表 + 过滤分组 + 装卸 + 状态/进程/任务/额度 ---
+let agentsInit = false, rtCache = null, rtT = 0, rtTimer = null, rtFilter = null, rtModelTimer = null;
 async function loadRuntimes(force) {
   const n = Date.now();
   if (!force && rtCache && n - rtT < 15000) return rtCache;
@@ -1486,13 +1486,25 @@ async function loadRuntimes(force) {
   rtT = n;
   return rtCache;
 }
-function rtBar(b) {
-  const p = b.remaining_pct;
-  if (p == null) return "";
-  const col = p >= 50 ? "var(--c-green)" : p >= 20 ? "var(--c-warn)" : "var(--c-red)";
-  return `<div class="rt-qrow"><span class="rt-qlabel">${escHtml(b.label)}</span>` +
-    `<span class="rt-qbar"><i style="width:${p}%;background:${col}"></i></span>` +
-    `<span class="rt-qval">${p}%${b.reset ? ` <em>${escHtml(b.reset)}</em>` : ""}</span></div>`;
+const rtState = a => !a.installed ? "none" : a.procs > 0 ? "run" : "idle";
+const rtHasQuota = a => !!(a.quota && a.quota.ok && a.quota.buckets && a.quota.buckets.length);
+const rtHasTasks = a => a.installed && (a.task_count || 0) > 0;
+function rtQuotaHtml(a) {
+  const q = a.quota;
+  if (!q) return "";
+  if (!q.buckets || !q.buckets.length)
+    return `<div class="rt-qnone">${t("rt_quotafail")}</div>`;
+  return q.buckets.slice(0, 3).map(b => {
+    const p = b.remaining_pct;
+    if (p == null) return "";
+    const cls = p >= 50 ? "green" : p >= 20 ? "warn" : "red";
+    const dead = p <= 0;
+    return `<div class="rt-q ${cls}">
+      <div class="rt-q-top"><span>${escHtml(b.label)}</span><b>${p}%</b></div>
+      <div class="rt-q-track"><i style="width:${Math.max(p, 1.5)}%"></i></div>
+      ${b.reset ? `<div class="rt-q-sub">${dead ? t("rt_exhausted") : t("rt_reset")} ${escHtml(b.reset)}</div>` : ""}
+    </div>`;
+  }).join("");
 }
 function rtTasksHtml(a) {
   const rows = [];
@@ -1508,6 +1520,38 @@ function rtTasksHtml(a) {
   });
   return rows.join("");
 }
+function rtCardHtml(a) {
+  const meta = [];
+  if (a.quota && a.quota.account) meta.push(escHtml(a.quota.account));
+  if (a.quota && a.quota.plan) meta.push(escHtml(a.quota.plan));
+  if (a.meta && a.meta.sessions_24h != null && a.meta.sessions_24h > 0) meta.push(t("rt_sess24", { n: a.meta.sessions_24h }));
+  if (a.meta && a.meta.sessions_total != null) meta.push(t("rt_sessall", { n: a.meta.sessions_total }));
+  let procs = "";
+  if (a.procs > 0 && a.proc_list && a.proc_list[0]) {
+    const p0 = a.proc_list[0];
+    procs = `<div class="rt-procline"><b>${a.procs}</b> ${t("rt_procs")} · <b>${p0.cpu_pct}%</b> CPU · <b>${p0.mem_mb}</b> MB</div>`;
+  }
+  const tasks = rtTasksHtml(a);
+  const quota = rtQuotaHtml(a);
+  const btn = a.installable
+    ? `<button class="rt-btn ghost danger" data-act="uninstall" data-id="${escAttr(a.id)}">${t("rt_uninstbtn")}</button>` : "";
+  return `<div class="rt-card ${rtState(a)}">
+    <div class="rt-head"><b>${escHtml(a.name)}</b><span class="rt-ver">${escHtml(a.version || "")}</span></div>
+    ${meta.length ? `<div class="rt-sub">${meta.join(" · ")}</div>` : ""}
+    ${procs}${quota}
+    ${tasks ? `<div class="rt-tasks">${tasks}</div>` : ""}
+    ${btn ? `<div class="rt-actions">${btn}</div>` : ""}
+  </div>`;
+}
+function rtMatch(a, f) {
+  const st = rtState(a);
+  if (f === "run") return st === "run";
+  if (f === "idle") return st === "idle";
+  if (f === "tasks") return rtHasTasks(a);
+  if (f === "quota") return a.installed && rtHasQuota(a);
+  if (f === "none") return st === "none";
+  return true;   // all
+}
 async function refreshAgentsPage() {
   const el = $("agents-page");
   if (!el || el.hidden) return;
@@ -1518,44 +1562,52 @@ async function refreshAgentsPage() {
 function renderRuntimes(d) {
   const el = $("agents-page");
   if (!el || !d || !d.agents) return;
+  if (!rtFilter) { try { rtFilter = localStorage.getItem("svc-rtf") || "all"; } catch (e) { rtFilter = "all"; } }
+  const all = d.agents;
+  const run = all.filter(a => rtState(a) === "run");
+  const idle = all.filter(a => rtState(a) === "idle");
+  const none = all.filter(a => rtState(a) === "none");
   const low = [];
-  d.agents.forEach(a => ((a.quota && a.quota.buckets) || []).forEach(b => {
-    if (b.remaining_pct != null && b.remaining_pct < 20) low.push(a.name);
+  all.forEach(a => ((a.quota && a.quota.buckets) || []).forEach(b => {
+    // 横幅只报即将耗尽(>0 且 <10%); 已耗尽(0%)卡片里红色可见, 不再重复横幅
+    if (b.remaining_pct != null && b.remaining_pct > 0 && b.remaining_pct < 10) low.push(a.name);
   }));
+  const counts = { all: all.length, run: run.length, tasks: all.filter(rtHasTasks).length,
+    quota: all.filter(a => a.installed && rtHasQuota(a)).length, none: none.length };
+  const FILTERS = [["all", "rt_f_all"], ["run", "rt_f_run"], ["tasks", "rt_f_tasks"],
+    ["quota", "rt_f_quota"], ["none", "rt_f_none"]];
   const hist = ((d.ctl && d.ctl.history) || []).slice(-3).reverse();
-  const cards = d.agents.map(a => {
-    const q = a.quota;
-    const qhtml = q ? ((q.buckets && q.buckets.length) ? q.buckets.slice(0, 4).map(rtBar).join("")
-      : `<div class="rt-qnone">${t("rt_quotafail")}</div>`) : "";
-    const meta = [];
-    if (q && q.account) meta.push(escHtml(q.account));
-    if (q && q.plan) meta.push(escHtml(q.plan));
-    if (a.meta && a.meta.sessions_24h != null) meta.push(t("rt_sess24", { n: a.meta.sessions_24h }));
-    if (a.meta && a.meta.sessions_total != null) meta.push(t("rt_sessall", { n: a.meta.sessions_total }));
-    const pr = a.procs > 0 ? `${t("rt_procs")} ${a.procs}` +
-      (a.proc_list && a.proc_list[0] ? ` · ${a.proc_list[0].cpu_pct}% CPU · ${a.proc_list[0].mem_mb}MB` : "") : "";
-    const tasks = rtTasksHtml(a);
-    const state = !a.installed ? "none" : a.procs > 0 ? "run" : "idle";
-    const btns = [];
-    if (a.installed) {
-      if (a.installable) btns.push(`<button class="rt-btn danger" data-act="uninstall" data-id="${escAttr(a.id)}">${t("rt_uninstbtn")}</button>`);
-    } else if (a.installable) btns.push(`<button class="rt-btn" data-act="install" data-id="${escAttr(a.id)}">${t("rt_instbtn")}</button>`);
-    return `<div class="rt-card ${state}">
-      <div class="rt-head"><span class="rt-dot"></span><b>${escHtml(a.name)}</b>
-        <span class="rt-ver">${escHtml(a.version || t("rt_notinst"))}</span></div>
-      ${meta.length ? `<div class="rt-meta">${meta.join(" · ")}</div>` : ""}
-      ${qhtml}${pr ? `<div class="rt-proc">${pr}</div>` : ""}
-      ${tasks ? `<div class="rt-tasks">${tasks}</div>` : ""}
-      ${btns.length ? `<div class="rt-actions">${btns.join("")}</div>` : ""}
-    </div>`;
-  }).join("");
-  el.innerHTML = `<h2>${t("rt_title")} <span class="ghint">${t("rt_summary", { i: d.total_installed, n: d.agents.length, p: d.total_running })}</span></h2>` +
+  const secCards = (key, arr, cls) => {
+    const list = arr.filter(a => rtMatch(a, rtFilter));
+    if (!list.length) return "";
+    return `<section class="rt-sec"><h3 class="rt-sechead"><span class="rt-sq ${cls}"></span>${t(key)} <em>${list.length}</em></h3>
+      <div class="rt-grid">${list.map(rtCardHtml).join("")}</div></section>`;
+  };
+  const secNone = () => {
+    const list = none.filter(a => rtMatch(a, rtFilter));
+    if (!list.length) return "";
+    return `<section class="rt-sec"><h3 class="rt-sechead"><span class="rt-sq none"></span>${t("rt_f_none")} <em>${list.length}</em></h3>
+      <div class="rt-none-list">${list.map(a => `<div class="rt-none-row"><b>${escHtml(a.name)}</b>
+        ${a.installable ? `<button class="rt-btn" data-act="install" data-id="${escAttr(a.id)}">${t("rt_instbtn")}</button>` : ""}</div>`).join("")}</div></section>`;
+  };
+  const any = all.some(a => rtMatch(a, rtFilter));
+  el.innerHTML = `<h2>${t("rt_title")} <span class="ghint">${t("rt_summary", { i: d.total_installed, n: all.length, p: d.total_running })}</span></h2>` +
     `${low.length ? `<div class="rt-low">${t("rt_low", { n: [...new Set(low)].join(" / ") })}</div>` : ""}` +
     `${d.quota && d.quota.running ? `<div class="rt-qrefresh">${t("rt_refreshing")}</div>` : ""}` +
-    `<div class="rt-top"><button class="rt-btn" id="rt-quota-btn">${t("rt_refresh")}</button></div>` +
-    `<div class="rt-grid">${cards}</div>` +
+    `<div class="rt-toolbar"><div class="rt-filters">${FILTERS.map(([id, key]) =>
+      `<button class="rt-f${rtFilter === id ? " on" : ""}" data-f="${id}">${t(key)}<em>${counts[id]}</em></button>`).join("")}</div>` +
+    `<button class="rt-btn ghost" id="rt-quota-btn">${t("rt_refresh")}</button></div>` +
+    (any ? secCards("rt_f_run", run, "run") + secCards("rt_sec_idle", idle, "idle") + secNone()
+      : `<div class="rt-empty">${t("rt_empty")}</div>`) +
+    rtModelsSection(d) +
     `${hist.length ? `<div class="rt-hist">${hist.map(h =>
       `<div>${escHtml(h.t || "")} ${escHtml(h.agent)} ${escHtml(h.action)} ${h.ok ? "✓" : "✗"} ${escHtml(h.msg || "")}</div>`).join("")}</div>` : ""}`;
+  el.querySelectorAll(".rt-f").forEach(b => b.addEventListener("click", () => {
+    if (rtFilter === b.dataset.f) return;
+    rtFilter = b.dataset.f;
+    try { localStorage.setItem("svc-rtf", rtFilter); } catch (e) {}
+    renderRuntimes(d);   // 纯前端过滤, 用缓存数据重渲染
+  }));
   const qb = $("rt-quota-btn");
   if (qb) qb.addEventListener("click", async () => {
     qb.textContent = "…";
@@ -1584,8 +1636,60 @@ function renderRuntimes(d) {
       if (isMobile()) setPage(1);
       else { setCat("log"); scrollTo(0, 0); }
     }));
+  rtBindModels(el, d);
+  if ((d.models && d.models.providers || []).some(p => p.models.some(m => m.test && m.test.status === "running"))) rtPollModels();
   if (d.ctl && d.ctl.running) rtPollCtl();
   else if (d.quota && d.quota.running && !rtTimer) rtPollQuota();
+}
+function rtModelTestHtml(m) {
+  const r = m.test;
+  if (!r) return `<button class="rt-btn ghost" data-mtest="1">${t("rt_m_test")}</button>`;
+  if (r.status === "running") return `<span class="rt-mst testing">${t("rt_m_testing")}</span>`;
+  return r.ok
+    ? `<span class="rt-mst ok">✓ ${r.ms}ms</span><button class="rt-btn ghost" data-mtest="1">${t("rt_m_test")}</button>`
+    : `<span class="rt-mst err" title="${escAttr(r.detail || "")}">✗ ${r.http || ""}</span><button class="rt-btn ghost" data-mtest="1">${t("rt_m_test")}</button>`;
+}
+function rtModelsSection(d) {
+  const provs = (d.models && d.models.providers) || [];
+  if (!provs.length) return "";
+  const anyRunning = provs.some(p => p.models.some(m => m.test && m.test.status === "running"));
+  const cards = provs.map(p => {
+    const rows = p.models.map(m => `<div class="rt-mrow" data-prov="${escAttr(p.id)}" data-model="${escAttr(m.id)}">
+      <span class="rt-mid">${escHtml(m.id)}</span><span class="rt-macts">${rtModelTestHtml(m)}</span></div>`).join("");
+    const badge = p.chat_allowed ? "" : `<em class="rt-mprobe" title="${escAttr(t("rt_m_probehint"))}">${t("rt_m_probeonly")}</em>`;
+    return `<div class="rt-mcard">
+      <div class="rt-mhead"><span class="rt-mkey ${p.has_key ? "ok" : ""}" title="${escAttr(t("rt_m_key"))}"></span>
+        <b>${escHtml(p.name)}</b>${badge}<span class="rt-mhost">${escHtml((p.base || "").replace(/^https?:\/\//, "").split("/")[0])}</span></div>
+      ${rows}</div>`;
+  }).join("");
+  return `<section class="rt-sec"><h3 class="rt-sechead"><span class="rt-sq model"></span>${t("rt_m_title")} <em>${provs.length}</em></h3>
+    <div class="rt-mhint">${t("rt_m_hint")}</div>
+    <div class="rt-mgrid">${cards}</div></section>`;
+}
+function rtBindModels(el, d) {
+  el.querySelectorAll("[data-mtest]").forEach(b => b.addEventListener("click", async e => {
+    e.stopPropagation();
+    const row = b.closest(".rt-mrow");
+    const prov = row.dataset.prov, model = row.dataset.model;
+    b.outerHTML = `<span class="rt-mst testing">${t("rt_m_testing")}</span>`;
+    try { await tlPost("/api/models", { provider: prov, model }); } catch (err) {}
+    rtPollModels();
+  }));
+}
+function rtPollModels() {   // 有测试在跑: 2.5s 轮询直到全部完成再整页重渲染
+  if (rtModelTimer) return;
+  rtModelTimer = setInterval(async () => {
+    try {
+      const m = await tlGet("/api/models");
+      const running = (m.providers || []).some(p => p.models.some(x => x.test && x.test.status === "running"));
+      const el = $("agents-page");
+      if (el && !el.hidden) {
+        const d = rtCache || await loadRuntimes(true);
+        if (d.models) { d.models = m; renderRuntimes(d); }
+      }
+      if (!running) { clearInterval(rtModelTimer); rtModelTimer = null; }
+    } catch (e) { clearInterval(rtModelTimer); rtModelTimer = null; }
+  }, 2500);
 }
 function rtPollQuota() {   // 额度后台刷新中: 6s 后重查重渲染(仍在刷新则继续链式等待)
   setTimeout(async () => {
@@ -2073,7 +2177,7 @@ function renderHealth(h) {
       `${x.up ? "●" : "○"} :${x.port} ${escHtml(x.name)}`).join("\n")}</div>` : "");
 }
 
-// --- 连接信息(首页 conn-panel): ssh/IP 点击复制, 数据来自 TL_CONF(不写死) ---
+// --- 连接信息(状态卡 sc-sub 行内的 IP 复制 chip): ssh/LAN 点击复制, 数据来自 TL_CONF(不写死) ---
 function renderConnbar() {
   const grid = $("conn-grid");
   if (!grid) return;
@@ -2081,9 +2185,8 @@ function renderConnbar() {
   const ts = hosts.tailscale || "", lan = hosts.lan || "";
   const user = (hosts.ssh_user || "tetsuya");
   grid.innerHTML =
-    (ts ? `<span class="btn gcopy" data-copy="ssh ${user}@${ts}" role="button" tabindex="0" title="ssh"><span class="conn-k">${escHtml(t("tl_copy_ssh"))}</span><b>${escHtml(ts)}</b></span>` : "") +
-    (lan ? `<span class="btn gcopy" data-copy="${escAttr(lan)}" role="button" tabindex="0" title="LAN"><span class="conn-k">${escHtml(t("tl_copy_lan"))}</span><b>${escHtml(lan)}</b></span>` : "") +
-    `<span class="btn gcopy" data-copy="${escAttr(ts || lan)}" role="button" tabindex="0" title="TS"><span class="conn-k">${escHtml(t("tl_copy_ts"))}</span><b>${escHtml(ts || "—")}</b></span>`;
+    (ts ? `<span class="gcopy" data-copy="ssh ${user}@${ts}" role="button" tabindex="0" title="ssh ${escAttr(user + '@' + ts)}"><b>${escHtml(ts)}</b></span>` : "") +
+    (lan ? `<span class="gcopy" data-copy="${escAttr(lan)}" role="button" tabindex="0" title="LAN ${escAttr(lan)}"><b>${escHtml(lan)}</b></span>` : "");
 }
 
 // --- F1 文件浏览: 独立全屏页(home 起点), 移动单栏 / 桌面≥1024 双栏 ---
@@ -2675,7 +2778,7 @@ const CATS = [   // [id, i18n key]; 顺序 = 展示顺序, 与移动端 6 页签
   ["svc", "tab_svc"], ["agent", "tab_agent"], ["tools", "tab_tools"],
 ];
 const CAT_SELS = {   // 桌面可见分区 → 分类(与移动端 PAGE_GROUPS 一一对应)
-  home: ["#hp-grid", "#conn-panel", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
+  home: ["#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   log: ["#logpage"],
   goal: ["#goals"],
   svc: ["#filters", "#tasks", "#svc-panel"],

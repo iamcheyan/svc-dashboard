@@ -8,10 +8,11 @@
 try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")document.documentElement.setAttribute("data-theme",_tm)}catch(e){}</script>
 <title>Mikata · {{HOSTNAME}}</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="%23141519"/><path d="M9 16C12.2 11.2 19.8 11.2 23 16M9 16C12.2 20.8 19.8 20.8 23 16" stroke="%23F4F0E6" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="16" cy="16" r="3" fill="%23E2604C"/></svg>'>
-<link rel="stylesheet" href="/static/app.css?v=c3d0324e">
+<link rel="stylesheet" href="/static/app.css?v=308a850c">
 <header>
   <!-- topbar: 左=品牌 Mikata(守护之眼纹 logo) · 服务器名(绿点=在线), 右=分类条+刷新。 -->
   <h1 title="Mikata · {{T:title}}"><span class="h-logo" aria-hidden="true">{{ICO:mikata:23}}</span><span class="h-brand">Mikata</span><span class="h-sep" aria-hidden="true">·</span><span class="h-host"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</span></h1>
+  <span class="h-conn" id="conn-grid"></span>
   <span class="meta" id="meta-line" hidden>
     <span id="updated">{{UPDATED}}</span> <span id="count">{{COUNT}}</span>
   </span>
@@ -41,11 +42,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <div class="mcell"><span class="mnum" id="m-run">—</span><span class="mlabel">{{T:m_goal_run}}</span></div>
   <div class="mcell"><span class="mnum" id="m-bad">—</span><span class="mlabel">{{T:m_goal_bad}}</span></div>
   <div class="mcell"><span class="mnum" id="m-alert">—</span><span class="mlabel">{{T:m_alerts}}</span></div>
-</div>
-<!-- 连接信息: ssh/IP 点击复制(首页专属, 桌面+移动都可见) -->
-<div class="gpanel conn-panel" id="conn-panel">
-  <h2>{{T:conn_title}}</h2>
-  <div class="conn-grid" id="conn-grid"></div>
 </div>
 <div class="gpanel" id="alerts">
   <h2>{{T:al_title}}</h2>
@@ -288,6 +284,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 
 <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
-<script src="/static/app.js?v=c2fb7ec4" defer></script>
+<script src="/static/app.js?v=2c0b8cf2" defer></script>
 </body>
 </html>
