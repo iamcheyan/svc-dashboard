@@ -355,6 +355,17 @@
                 font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis;
                 white-space: nowrap; }
   .hp-tile-port { color: var(--text-faint); font-weight: 400; font-size: 11px; font-family: ui-monospace, monospace; flex: none; }
+  .hp-tile-main-r { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+  .hp-tile.sv-paused { opacity: .6; border-style: dashed; }
+  .hp-tile-res { font-size: 10.5px; font-family: ui-monospace, monospace; color: var(--text-faint); }
+  .hp-tile-res.hot { color: var(--c-orange); }
+  .hp-tile-res.crit { color: var(--c-red); font-weight: 700; }
+  /* 磁贴内迷你 暂停/恢复: 小方块图标钮(嵌在 <a> 内, 点击由委托拦截) */
+  .svctl-btn.hp-sv { width: 24px; height: 24px; min-height: 0; padding: 0; gap: 0;
+            border-radius: 7px; background: transparent; color: var(--text-faint);
+            display: inline-flex; align-items: center; justify-content: center; }
+  .svctl-btn.hp-sv:hover { background: var(--btn-hover); color: var(--text-hi); border-color: var(--btn-hover); }
+  .svctl-btn.hp-sv.paused { color: var(--c-warn); border-color: var(--c-warn-border); background: var(--c-warn-bg); }
   .hp-goal-line { font-size: 13px; color: var(--text-main); margin-bottom: 8px; }
   .hp-goal-row { display: flex; align-items: baseline; gap: 7px; padding: 5px 0; font-size: 12.5px;
                  border-bottom: 1px solid var(--border-faint); }
@@ -726,6 +737,7 @@
                           overflow: hidden; word-break: break-all; cursor: pointer; }
     .td-rows .v .mclamp.open { -webkit-line-clamp: unset; display: block; }
     .ctl-btn, .svctl-btn { min-height: 44px; padding: 10px 16px; font-size: 13px; }
+    .svctl-btn.hp-sv { min-height: 0; width: 28px; height: 28px; padding: 0; }  /* 磁贴迷你钮不受 44px 拉高 */
     .colswitch, .tcol { display: none; }
     .empty { padding: 32px 0; }
 

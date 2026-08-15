@@ -292,7 +292,7 @@ try:
                 break
 except OSError:
     pass
-_res_prev = {"t": 0.0, "pids": {}}   # pid -> (utime+stime jiffies, starttime ticks)
+_res_prev = {"pids": {}}   # pid -> (utime+stime jiffies, starttime ticks, 采样时刻)
 
 
 def _read_proc_stat(pid):
@@ -316,24 +316,36 @@ def _read_proc_rss(pid):
 
 
 def service_resources(pids):
-    """聚合一组 pid 的 {cpu, mem_mb, up_sec}, 并滚动全局前值快照(差分算 CPU)。"""
+    """聚合一组 pid 的 {cpu, mem_mb, up_sec}。
+
+    CPU 差分按"每 pid 各自的上次采样时刻"计算: 同一次 gather() 里 29 个服务
+    顺序调用, 若共用一个全局时间戳, 除第一个服务外 elapsed≈0 → 全部 0%。
+    快照合并更新: 只覆盖本组 pid, 其他服务的采样保留(替换语义会互相抹掉)。
+    """
     now = time.time()
-    elapsed = now - _res_prev["t"] if _res_prev["t"] else 0.0
-    cur = {}                          # pid -> (jiffies, start_ticks)
+    cur = {}
     for pid in pids:
         st = _read_proc_stat(pid)
         if st:
             cur[pid] = st
-    if elapsed > 0.5:
-        deltas = [max(0, cur[p][0] - _res_prev["pids"][p][0])
-                  for p in cur if p in _res_prev["pids"]]
-        cpu_pct = sum(deltas) / _CLK_TCK / elapsed * 100.0
-    else:
-        cpu_pct = 0.0                 # 采样间隔太近(同一次页面双请求)不计
-    _res_prev.update({"t": now, "pids": cur})
+    cpu_pct = 0.0
+    for pid, (jif, _start) in cur.items():
+        prev = _res_prev["pids"].get(pid)
+        if not prev:
+            continue                       # 首次见到: 无前值, 不计
+        elapsed = now - prev[2]
+        if elapsed > 0.5:                  # 同请求内重复出现/极短间隔不计
+            cpu_pct += max(0, jif - prev[0]) / _CLK_TCK / elapsed * 100.0
+    merged = dict(_res_prev["pids"])
+    for pid, (jif, start) in cur.items():
+        merged[pid] = (jif, start, now)
+    for p in list(merged):                 # 淘汰已消失的 pid
+        if p not in cur and not os.path.exists(f"/proc/{p}"):
+            del merged[p]
+    _res_prev["pids"] = merged
     mem = sum(_read_proc_rss(p) for p in cur)
-    start = min((v[1] for v in cur.values()), default=None)
-    up_sec = int(now - (_BOOT_TIME + start / _CLK_TCK)) if start else 0
+    start2 = min((v[1] for v in cur.values()), default=None)
+    up_sec = int(now - (_BOOT_TIME + start2 / _CLK_TCK)) if start2 else 0
     return {"cpu": round(cpu_pct, 1), "mem_mb": round(mem / 1048576.0, 1),
             "up_sec": max(0, up_sec)}
 def gather():

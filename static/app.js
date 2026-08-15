@@ -18,7 +18,8 @@ function esHtml(ico, title) {
          `<span class="es-title">${escHtml(title)}</span>` +
          `<span class="es-sub">${t("es_sub")}</span></div>`;
 }
-let autoOn = false;          // 自动刷新总开关(刷新按钮长按锁定时强制 false)
+let autoOn = true;           // 自动刷新总开关(旧版遗留: false 且无处置 true, 整条轮询链路死代码;
+                              // 首页资源磁贴需要活数据 → 默认开。桌面 10s/移动 30s/后台停/长按锁定停)
 let autoLocked = false;      // 长按锁定: true = 30s 自动刷新完全停止
 let filter = "user"; // 默认只显示用户服务, 隐藏系统服务
 let services = [];
@@ -538,29 +539,39 @@ function svBtn(e) {
   const paused = !!e.svcctl_paused;
   return `<span class='svctl-btn' data-svcp='${e.port}' data-svca='${paused ? "resume" : "pause"}' role='button' tabindex='0'>${icon(paused ? "play" : "pause", 12)} ${paused ? t("ctl_resume") : t("ctl_pause")}</span>`;
 }
+// 通用结果 toast(成功/失败反馈, 首页迷你按钮用)
+function uiToast(msg, ico) {
+  const d = document.createElement("div");
+  d.className = "copy-toast";
+  d.innerHTML = icon(ico || "ok", 13) + " " + escHtml(msg || "");
+  document.body.appendChild(d);
+  setTimeout(() => { d.style.opacity = "0"; setTimeout(() => d.remove(), 350); }, 1400);
+}
 async function doSvcCtl(btn) {
+  const mini = btn.dataset.svmini === "1";
   const port = +btn.dataset.svcp, action = btn.dataset.svca;
   const name = btn.dataset.svcn || (":" + port);
   if (action === "pause" && !await uiConfirm(t("sc_confirm_pause", { name, port }))) return;
   btn.setAttribute("aria-disabled", "true");
-  btn.textContent = t("m_doing");
+  if (!mini) btn.textContent = t("m_doing");
   try {
     const r = await fetch("/api/svcctl", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ port, action }),
     });
     const d = await r.json();
-    btn.innerHTML = icon(d.ok ? "ok" : "err", 13) + " " + escHtml(d.msg || "");
-    btn.title = d.msg || "";
+    if (mini) uiToast(d.msg || (d.ok ? "OK" : "FAIL"), d.ok ? "ok" : "err");
+    else { btn.innerHTML = icon(d.ok ? "ok" : "err", 13) + " " + escHtml(d.msg || ""); btn.title = d.msg || ""; }
     setTimeout(() => load(true), 800);
   } catch (e) {
-    btn.innerHTML = icon("err", 13);
-    btn.title = e.message;
+    if (mini) uiToast(e.message, "err"); else { btn.innerHTML = icon("err", 13); btn.title = e.message; }
   }
 }
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest(".svctl-btn");
-  if (b && b.getAttribute("aria-disabled") !== "true") doSvcCtl(b);
+  if (!b) return;
+  ev.preventDefault(); ev.stopPropagation();   // 迷你按钮嵌在 <a> 磁贴内: 拦截导航
+  if (b.getAttribute("aria-disabled") !== "true") doSvcCtl(b);
 });
 
 function manageCard(u, st, result) {
@@ -847,9 +858,22 @@ function renderHomeTiles(services) {
   el.innerHTML = uniq.length ? uniq.map(e => {
     const link = `http://${linkHost(location.hostname)}:${e.port}/`;
     const id = svcIdentity(e);
-    return `<a class="hp-tile" href="${escAttr(link)}" target="_blank" rel="noopener" title="${escAttr(id.tip)}">`
+    const svp = !!e.svcctl_paused;
+    const btn = (e.manageable && !e.is_self)
+      ? `<span class="svctl-btn hp-sv${svp ? " paused" : ""}" data-svmini="1" data-svcp="${e.port}" data-svca="${svp ? "resume" : "pause"}" data-svcn="${escAttr(id.main)}" role="button" tabindex="-1" title="${svp ? t("ctl_resume") : t("ctl_pause")}">${icon(svp ? "play" : "pause", 11)}</span>` : "";
+    // 资源行: 一眼看出大户 —— cpu≥80%/mem≥1G 红, ≥30%/≥300M 橙
+    const r = e.res;
+    let resLine = "";
+    if (r) {
+      const hot = r.cpu >= 30 || r.mem_mb >= 300, crit = r.cpu >= 80 || r.mem_mb >= 1024;
+      resLine = `<span class="hp-tile-res${crit ? " crit" : hot ? " hot" : ""}">`
+        + `${r.cpu.toFixed(1)}% · ${r.mem_mb >= 1024 ? (r.mem_mb / 1024).toFixed(1) + "G" : Math.round(r.mem_mb) + "M"} · ${fmtUp(r.up_sec)}</span>`;
+    }
+    const tip = [id.tip, r ? `${t("svc_res_title")}: ${r.cpu.toFixed(1)}% · ${Math.round(r.mem_mb)}M · ${fmtUp(r.up_sec)}` : ""].filter(Boolean).join("\n");
+    return `<a class="hp-tile${svp ? " sv-paused" : ""}" href="${escAttr(link)}" target="_blank" rel="noopener" title="${escAttr(tip)}">`
       + `<span class="hp-tile-main"><span class="hp-tile-name">${escHtml(id.main)}</span>`
-      + `<span class="hp-tile-port">:${e.port}</span></span>`
+      + `<span class="hp-tile-main-r"><span class="hp-tile-port">:${e.port}</span>${btn}</span></span>`
+      + resLine
       + `<span class="hp-tile-sub">${escHtml(id.sub)}</span></a>`;
   }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
 }
