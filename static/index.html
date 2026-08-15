@@ -6,13 +6,12 @@
 <meta name="theme-color" content="#0a0a0a">
 <script>/* 主题预置: 在 CSS 生效前落 data-theme, 防浅色偏好下闪深色(FOUC) */
 try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")document.documentElement.setAttribute("data-theme",_tm)}catch(e){}</script>
-<title>{{T:title}} · {{HOSTNAME}}</title>
-<link rel="icon" href="data:,">
-<link rel="stylesheet" href="/static/app.css?v=6cc10359">
+<title>Mikata · {{HOSTNAME}}</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="%23141519"/><path d="M9 16C12.2 11.2 19.8 11.2 23 16M9 16C12.2 20.8 19.8 20.8 23 16" stroke="%23F4F0E6" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="16" cy="16" r="3" fill="%23E2604C"/></svg>'>
+<link rel="stylesheet" href="/static/app.css?v=c3d0324e">
 <header>
-  <!-- topbar 重设计: 左=服务器名(HOSTNAME), 右=刷新按钮(点击刷新/长按锁定自动刷新)。
-       原 meta 行与自动刷新开关已并入按钮; updated/count 保留为隐藏节点供 JS 写入。 -->
-  <h1 title="{{T:title}}"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</h1>
+  <!-- topbar: 左=品牌 Mikata(守护之眼纹 logo) · 服务器名(绿点=在线), 右=分类条+刷新。 -->
+  <h1 title="Mikata · {{T:title}}"><span class="h-logo" aria-hidden="true">{{ICO:mikata:23}}</span><span class="h-brand">Mikata</span><span class="h-sep" aria-hidden="true">·</span><span class="h-host"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</span></h1>
   <span class="meta" id="meta-line" hidden>
     <span id="updated">{{UPDATED}}</span> <span id="count">{{COUNT}}</span>
   </span>
@@ -289,6 +288,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 
 <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
-<script src="/static/app.js?v=bddf57cb" defer></script>
+<script src="/static/app.js?v=c2fb7ec4" defer></script>
 </body>
 </html>
