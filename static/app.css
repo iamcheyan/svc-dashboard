@@ -1145,17 +1145,19 @@
   }
   /* 桌面端分类条(右上角): 移动端隐藏(有底部页签); 选中态复用 --nav-pill+--accent */
   #catbar { display: none; gap: 6px; align-items: center; }
-  /* 连接信息条(顶栏): 桌面常显, 移动端隐藏(首页 sysbar 已有IP卡片) */
-  .connbar { display: none; gap: 6px; align-items: center; }
-  .connbar .btn { font-size: 11px; padding: 4px 10px; gap: 3px; white-space: nowrap; }
-  .connbar .btn b { font-family: ui-monospace, monospace; font-weight: 600; font-size: 11px; }
+  /* 连接信息面板(首页): 等宽网格卡, 点击复制 ssh/IP */
+  .conn-panel .conn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+  .conn-panel .btn { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+                     font-size: 12px; padding: 9px 12px; white-space: nowrap; overflow: hidden; }
+  .conn-panel .btn b { font-family: ui-monospace, monospace; font-weight: 600; font-size: 12px; }
+  .conn-panel .conn-k { color: var(--text-faint); flex: none; }
   #catbar .cat { appearance: none; border: 1px solid var(--chip-border); background: var(--chip-bg);
       color: var(--text-mid); border-radius: 999px; padding: 7px 15px; font-size: 12.5px;
       cursor: pointer; transition: background .18s ease, color .18s ease; }
   #catbar .cat:hover { color: var(--text-hi); }
   #catbar .cat.active { background: var(--nav-pill); border-color: transparent; color: var(--accent); font-weight: 600; }
   .cat-off { display: none !important; }   /* 分类过滤: 仅桌面 JS 加, 断点切回移动时移除 */
-  @media (min-width: 769px) { #catbar { display: flex; } .connbar { display: flex; } }
+  @media (min-width: 769px) { #catbar { display: flex; } }
   /* "全部"模式预览折叠: 分区限高渐隐 + 右下"查看更多"跳对应分类 */
 
 /* ===== Agent 运行时总览 (rt-*) ===== */

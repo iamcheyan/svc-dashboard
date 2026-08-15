@@ -1262,7 +1262,7 @@ const gesture = { claimed: null };
 // 移动端把各分区装进 6 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
+  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#conn-panel", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   ["#logpage"],
   ["#goals"],
   ["#filters", "#tasks", "#svc"],
@@ -2073,16 +2073,17 @@ function renderHealth(h) {
       `${x.up ? "●" : "○"} :${x.port} ${escHtml(x.name)}`).join("\n")}</div>` : "");
 }
 
-// --- 连接信息条(顶栏 connbar): ssh/IP 点击复制, 数据来自 TL_CONF(不写死) ---
+// --- 连接信息(首页 conn-panel): ssh/IP 点击复制, 数据来自 TL_CONF(不写死) ---
 function renderConnbar() {
-  const bar = $("connbar");
-  if (!bar) return;
+  const grid = $("conn-grid");
+  if (!grid) return;
   const hosts = TL_CONF.hosts || {};
   const ts = hosts.tailscale || "", lan = hosts.lan || "";
   const user = (hosts.ssh_user || "tetsuya");
-  bar.innerHTML =
-    (ts ? `<span class="btn gcopy" data-copy="ssh ${user}@${ts}" role="button" tabindex="0" title="ssh">${escHtml(t("tl_copy_ssh"))} <b>${escHtml(ts)}</b></span>` : "") +
-    (lan ? `<span class="btn gcopy" data-copy="${escAttr(lan)}" role="button" tabindex="0" title="LAN">${escHtml(t("tl_copy_lan"))} <b>${escHtml(lan)}</b></span>` : "");
+  grid.innerHTML =
+    (ts ? `<span class="btn gcopy" data-copy="ssh ${user}@${ts}" role="button" tabindex="0" title="ssh"><span class="conn-k">${escHtml(t("tl_copy_ssh"))}</span><b>${escHtml(ts)}</b></span>` : "") +
+    (lan ? `<span class="btn gcopy" data-copy="${escAttr(lan)}" role="button" tabindex="0" title="LAN"><span class="conn-k">${escHtml(t("tl_copy_lan"))}</span><b>${escHtml(lan)}</b></span>` : "") +
+    `<span class="btn gcopy" data-copy="${escAttr(ts || lan)}" role="button" tabindex="0" title="TS"><span class="conn-k">${escHtml(t("tl_copy_ts"))}</span><b>${escHtml(ts || "—")}</b></span>`;
 }
 
 // --- F1 文件浏览: 独立全屏页(home 起点), 移动单栏 / 桌面≥1024 双栏 ---
@@ -2674,7 +2675,7 @@ const CATS = [   // [id, i18n key]; 顺序 = 展示顺序, 与移动端 6 页签
   ["svc", "tab_svc"], ["agent", "tab_agent"], ["tools", "tab_tools"],
 ];
 const CAT_SELS = {   // 桌面可见分区 → 分类(与移动端 PAGE_GROUPS 一一对应)
-  home: ["#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
+  home: ["#hp-grid", "#conn-panel", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   log: ["#logpage"],
   goal: ["#goals"],
   svc: ["#filters", "#tasks", "#svc-panel"],
