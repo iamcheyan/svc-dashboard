@@ -344,7 +344,10 @@
   .gcard .grow { display: flex; justify-content: space-between; gap: 10px;
                  font-size: 12.5px; color: var(--text-soft); padding: 3px 0 0; }
   /* 桌面首页网格: Web磁贴(左 2fr) / Goal摘要(右 1fr); 最近活动/仓库在下方全宽 */
-  .hp-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .hp-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: var(--gap-panel); }
+  .hp-grid .gpanel { margin-bottom: 0; }
+  /* 磁贴最小宽 200px, 放不下自动换行(auto-fill) */
+  .hp-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
   .hp-tile { display: flex; flex-direction: column; align-items: stretch; gap: 3px;
              background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
              padding: 10px 12px; text-decoration: none; color: var(--text-hi); font-weight: 600; font-size: 13px; }
