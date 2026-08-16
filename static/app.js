@@ -43,8 +43,8 @@ function row(e, mobile) {
   if (e.is_self) { text = t("badge_self"); badge[1] = "badge-self"; }
   else if (svPaused) { text = t("badge_paused"); badge[1] = "badge-paused"; }
   else if (e.docker_proxy) { text = t("badge_proxy"); }
-  else if (e.type === "docker" && e.container_id) detail = `<span class='detail' title='${t("detail_cid")}'>${e.container_id}</span>`;
-  else if (e.type === "systemd" && e.unit) detail = `<span class='detail' title='${t("detail_unit")}'>${e.unit}</span>`;
+  else if (e.type === "docker" && e.container_id) detail = `<span class='detail' title='${t("detail_cid")}'>${escHtml(e.container_id)}</span>`;
+  else if (e.type === "systemd" && e.unit) detail = `<span class='detail' title='${t("detail_unit")}'>${escHtml(e.unit)}</span>`;
   const ip = e.ip;
   const loopback = ip.startsWith("127.") || ip === "::1" || ip.startsWith("::ffff:127.");
   const link = loopback ? `http://127.0.0.1:${e.port}/` : `http://${linkHost(location.hostname)}:${e.port}/`;
@@ -453,6 +453,7 @@ function ansiToHtml(s) {
   const st2css = (st) => [st.fg && "color:" + st.fg, st.bg && "background:" + st.bg,
                            st.bold && "font-weight:600", st.dim && "opacity:.62"].filter(Boolean).join(";");
   let out = "";
+  let open = null;   // 显式声明: 原隐式全局与 window.open 相撞, 首段多 </span> 且跨行着色丢失
   for (const line of String(s).split("\n")) {
     const segs = [];
     const st = { fg: "", bg: "", bold: false, dim: false };
@@ -477,7 +478,7 @@ function ansiToHtml(s) {
       if (css !== open) { if (open) out += "</span>"; if (css) out += '<span style="' + css + '">'; open = css || null; }
       out += escHtml(sg.text);
     }
-    if (open) out += "</span>";
+    if (open) { out += "</span>"; open = null; }
     out += "\n";
   }
   return out.replace(/\n$/, "");
@@ -629,10 +630,14 @@ async function fillSvcDots() {
   });
 }
 
-// 服务表行尾的 暂停/继续 按钮: 查状态填充文案,点击执行动作。
+let _fillCtlAt = 0, _fillCtlPromise = null;
 async function fillCtl() {
+  const now = Date.now();
+  if (_fillCtlPromise) return _fillCtlPromise;
+  if (now - _fillCtlAt < 15000) return;
+  _fillCtlAt = now;
   const btns = document.querySelectorAll(".ctl-btn");
-  await Promise.all([...btns].map(async (b) => {
+  _fillCtlPromise = Promise.all([...btns].map(async (b) => {
     const uid = b.dataset.ctl;
     b.setAttribute("aria-disabled", "true");
     try {
@@ -642,15 +647,12 @@ async function fillCtl() {
       b.textContent = running ? t("ctl_pause") : t("ctl_resume");
       b.dataset.action = running ? "stop" : "start";
       b.setAttribute("aria-disabled", "false");
-    } catch (e) {
-      b.innerHTML = icon("err", 13);
-      b.title = e.message;
-    }
-  }));
-  document.querySelectorAll(".ctl-btn").forEach(b =>
-    b.addEventListener("click", () => doCtl(b)));
+    } catch (e) { b.innerHTML = icon("err", 13); b.title = e.message; }
+  })).finally(() => { _fillCtlPromise = null; });
+  return _fillCtlPromise;
 }
 
+  document.querySelectorAll(".ctl-btn").forEach(b => b.addEventListener("click", () => doCtl(b)));
 function uiConfirm(message) {
   const modal = $("ui-modal"), msg = $("ui-dialog-msg"), ok = $("ui-ok"), cancel = $("ui-cancel");
   if (!modal || !msg || !ok || !cancel) return Promise.resolve(false);
@@ -1164,7 +1166,11 @@ if (statuslineEl) statuslineEl.addEventListener("click", () => {
   if (m) m.scrollTo({ top: 0 });
 });
 const rcMore = document.querySelector(".rc-more");
-if (rcMore) rcMore.addEventListener("click", () => setPage(1));
+const hpMore = document.querySelector(".hp-more");
+if (hpMore) hpMore.addEventListener("click", () => {   // 首页 Goal 摘要 "Goal 页 →" 原是死按钮
+  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(2);
+  else setCat("goal");
+});
 $("recent-body").addEventListener("click", () => setPage(1));
 document.addEventListener("click", (e) => {
   const it = e.target.closest(".alert-item");
@@ -1794,8 +1800,8 @@ function rtBindModels(el, d) {
   }));
 }
 function rtPollModels() {   // 有测试在跑: 2.5s 轮询直到全部完成再整页重渲染
-  if (rtModelTimer) return;
   rtModelTimer = setInterval(async () => {
+    if (document.hidden) return;
     try {
       const m = await tlGet("/api/models");
       const running = (m.providers || []).some(p => p.models.some(x => x.test && x.test.status === "running"));
@@ -1820,6 +1826,7 @@ function rtPollQuota() {   // 额度后台刷新中: 6s 后重查重渲染(仍�
 function rtPollCtl() {
   if (rtTimer) return;
   rtTimer = setInterval(async () => {
+    if (document.hidden) return;
     try {
       const s = await tlGet("/api/agentctl");
       if (!s || !s.running) { clearInterval(rtTimer); rtTimer = null; refreshAgentsPage(); }
@@ -1849,9 +1856,9 @@ function goalDetailHtml(d) {
     <div class="g-detail-grid">
     <section class="g-detail-section"><h3>${t("g_status_detail")}</h3><div class="g-detail-kv">` +
       kv(t("g_field_status"), g.light) + kv(t("g_field_idle"), g.idle_sec == null ? "—" : t("g_seconds", { n: g.idle_sec })) +
-      kv("Context", g.ctx_raw) + kv("Retry", g.retry) + kv("进度", (g.progress || []).join("\n")) + `</div></section>` +
+      kv("Context", g.ctx_raw) + kv("Retry", g.retry) + kv(t("gd_progress"), (g.progress || []).join("\n")) + `</div></section>` +
     `<section class="g-detail-section"><h3>${t("g_runtime_detail")}</h3><div class="g-detail-kv">` +
-      kv("Goal ID", g.gid || w.gid) + kv("Session", w.session) + kv("PID / Pane", `${p.pid || "—"} / ${p.pane || "—"}`) + kv("工作目录", w.workdir) + kv("JSONL", w.jsonl) + `</div></section>
+      kv("Goal ID", g.gid || w.gid) + kv("Session", w.session) + kv("PID / Pane", `${p.pid || "—"} / ${p.pane || "—"}`) + kv(t("gd_workdir"), w.workdir) + kv("JSONL", w.jsonl) + `</div></section>
     </div>` +
     (capture ? `<section class="g-detail-section"><h3>${t("g_terminal_detail")}</h3><pre class="g-detail-log">${ansiToHtml(capture)}</pre></section>` : "") +
     `<div class="g-detail-grid">
@@ -2278,7 +2285,7 @@ function renderHealth(h) {
   rows.push(row(sw.percent >= 90 ? "bad" : sw.percent >= 50 ? "warn" : "", t("tl_h_swap"), sw.total ? `<b>${sw.percent}%</b> · ${fmtB(sw.used)}/${fmtB(sw.total)}` : "—"));
   const dk = s.disk || {};
   rows.push(row(dk.percent >= 90 ? "bad" : dk.percent >= 80 ? "warn" : "", t("tl_h_disk"),
-    `<b>${dk.percent}%</b> · ${fmtB(dk.free)} ${t("tl_fs_dl") === "下载" ? "可用" : "free"}`));
+    `<b>${dk.percent}%</b> · ${fmtB(dk.free)} ${t("tl_h_free")}`));
   if (h.temp) rows.push(row(h.temp.c >= 80 ? "bad" : h.temp.c >= 65 ? "warn" : "",
     `${t("tl_h_temp")} (${escHtml(h.temp.type)})`, `<b>${h.temp.c}°C</b>`));
   const dt = h.disk_trend || {};
@@ -2595,7 +2602,7 @@ function fsvStatus() {
   const d = fsvState.data;
   $("fsv-sub").textContent = `${fmtB(d.size)} · ${d.encoding || "?"}`;
   $("fsv-status").innerHTML =
-    `${fsvState.lines.length.toLocaleString()} 行<span class='dot'>·</span>${fmtB(d.size)}` +
+    `${fsvState.lines.length.toLocaleString()} ${t("fsv_lines")}<span class='dot'>·</span>${fmtB(d.size)}` +
     `<span class='dot'>·</span>${escHtml(d.encoding || "?")}` +
     `${d.alt_enc ? ` <span class='btn' id='fsv-reenc2' role='button' tabindex='0' style='min-height:22px;padding:2px 8px;font-size:11px'>${t("fsv_gb")}</span>` : ""}` +
     `<span class='dot'>·</span>${new Date(d.mtime * 1000).toLocaleString()}`;
@@ -2737,16 +2744,15 @@ async function aiRefresh() {
                   : st.status === "error" ? "✗ error" : "✓ done";
   chip.className = "aiclean-st " + st.status;
   const rerun = $("aiclean-modal-rerun");
-  if (rerun) rerun.hidden = st.status === "running";
   clearTimeout(_aiTimer);
-  if (st.status === "running") _aiTimer = setTimeout(aiRefresh, 2000);   // 运行中 2s 高频刷
+  if (st.status === "running") _aiTimer = setTimeout(aiRefresh, document.hidden ? 5000 : 2000);   // 后台标签降频
   else aiStatusChip();
 }
 async function aiStatusChip() {   // 首页面板按钮/状态行
   const el = $("hp-aiclean-status"); if (!el) return;
   const st = await _aiPoll();
   el.textContent = st.status === "running" ? `${t("tl_aiclean_running")} ${st.elapsed_s ?? 0}s`
-                : st.status === "error" ? "✗ 上次出错 (点开看日志)" : "✓ 空闲";
+                : st.status === "error" ? "✗ " + t("tl_aiclean_lasterr") : "✓ " + t("tl_aiclean_idle");
   el.className = "hp-aiclean-st " + st.status;
   const btn = $("hp-aiclean-run");
   if (btn) btn.textContent = st.status === "running" ? t("tl_aiclean_running") : t("tl_aiclean_run");
