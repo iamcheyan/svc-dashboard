@@ -1375,7 +1375,7 @@ const gesture = { claimed: null };
 // 移动端把各分区装进 6 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
+  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#hp-aiclean", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   ["#logpage"],
   ["#goals"],
   ["#filters", "#tasks", "#svc-panel"],
@@ -2956,7 +2956,7 @@ const CATS = [   // [id, i18n key]; 顺序 = 展示顺序, 与移动端 6 页签
   ["svc", "tab_svc"], ["agent", "tab_agent"], ["tools", "tab_tools"],
 ];
 const CAT_SELS = {   // 桌面可见分区 → 分类(与移动端 PAGE_GROUPS 一一对应)
-  home: ["#hp-grid", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
+  home: ["#hp-grid", "#hp-aiclean", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
   log: ["#logpage"],
   goal: ["#goals"],
   svc: ["#filters", "#tasks", "#svc-panel"],
