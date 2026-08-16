@@ -345,8 +345,10 @@ def scan_goals():
         if not (alive or recent):
             continue
         covered.add(g.get("session"))
-        cards.append(build(g.get("label") or g.get("session"), g.get("session"),
-                           gid, jsonl, g.get("label"), g.get("workdir")))
+        label = g.get("label") or ""
+        # 有中文任务名的 goal 直接用; 无 label 的归档行/临时登记退化为 tmux 会话名 → 标注来源
+        cards.append(build(label or f"tmux:{g.get('session')}", g.get("session"),
+                           gid, jsonl, label, g.get("workdir")))
 
     # 2) 现存 tmux 里的 omp 会话(watchdog 未登记的临时 goal,含 dashboard 自己)
     for p in panes:
@@ -371,7 +373,8 @@ def scan_goals():
             base = os.path.basename(jsonl)
             m2 = re.search(r"_([0-9a-f-]{36})\.jsonl$", base)
             gid = m2.group(1) if m2 else ""
-        cards.append(build(p["session"], p["session"], gid, jsonl, "", p["cwd"]))
+        # watchdog 未登记的临时 omp 会话: 名字就是 tmux 会话名, 标注来源便于区分
+        cards.append(build(f"tmux:{p['session']}", p["session"], gid, jsonl, "", p["cwd"]))
 
     order = {"active": 0, "retry": 1, "paused": 2, "done": 3, "lost": 4}
     cards.sort(key=lambda c: (order.get(c["light"], 9), c["idle_sec"] or 0))
