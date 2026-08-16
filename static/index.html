@@ -8,7 +8,7 @@
 try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")document.documentElement.setAttribute("data-theme",_tm)}catch(e){}</script>
 <title>Mikata · {{HOSTNAME}}</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="%23141519"/><path d="M9 16C12.2 11.2 19.8 11.2 23 16M9 16C12.2 20.8 19.8 20.8 23 16" stroke="%23F4F0E6" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="16" cy="16" r="3" fill="%23E2604C"/></svg>'>
-<link rel="stylesheet" href="/static/app.css?v=bf64cbee">
+<link rel="stylesheet" href="/static/app.css?v=0364f57f">
 <header>
   <!-- topbar: 左=品牌 Mikata(守护之眼纹 logo) · 服务器名(绿点=在线), 右=分类条+刷新。 -->
   <h1 title="Mikata · {{T:title}}"><span class="h-logo" aria-hidden="true">{{ICO:mikata:23}}</span><span class="h-brand">Mikata</span><span class="h-sep" aria-hidden="true">·</span><span class="h-host"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</span></h1>
@@ -62,7 +62,13 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <div id="recent-body"></div>
   </div>
 </div>
-{{SYSBAR}}
+<div class="gpanel hp-aiclean">
+  <h2>{{T:tl_aiclean_title}} <span class="ghint">{{T:tl_aiclean_hint_short}}</span></h2>
+  <div class="hp-aiclean-body">
+    <span class="btn tl-run" id="hp-aiclean-run" role="button" tabindex="0">{{T:tl_aiclean_run}}</span>
+    <span id="hp-aiclean-status" class="hp-aiclean-st"></span>
+  </div>
+</div>
 <div class="gpanel" id="repos">
   <h2>{{T:rp_title}} <span class="ghint">{{T:rp_hint}}</span>
     <span class="rp-refresh" id="rp-refresh" role="button" tabindex="0" title="{{T:rp_refresh}}" aria-label="{{T:rp_refresh}}">{{ICO:refresh:14}}</span></h2>
@@ -176,6 +182,16 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       <div id="tl-clean-body" hidden></div>
     </div>
 
+    <!-- F3b AI 一键清理(调 omp agent 按描述词智能分析, 护住 goal/基础服务) -->
+    <div class="tl-sec" id="tl-aiclean">
+      <div class="tl-sechead">
+        <h3>{{T:tl_aiclean_title}}</h3>
+        <span class="btn tl-run" id="tl-aiclean-run" role="button" tabindex="0">{{T:tl_aiclean_run}}</span>
+      </div>
+      <div class="hint" style="padding:0 12px 6px">{{T:tl_aiclean_hint}}</div>
+      <pre id="tl-aiclean-body" class="tl-docker-pre" hidden></pre>
+    </div>
+
     <!-- G2 用户级服务重启(I-KNOW 护栏, 默认锁; 逻辑不许放松) -->
     <div class="tl-sec" id="tl-usvc">
       <div class="tl-sechead">
@@ -227,6 +243,17 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   </div>
 </div>
 <div class="ui-notice" id="ui-notice" hidden role="status"></div>
+<!-- AI 一键清理日志弹层: 实时滚动 agent 输出 -->
+<div class="ui-modal aiclean-modal" id="aiclean-modal" hidden role="presentation">
+  <div class="aiclean-dialog" role="dialog" aria-modal="true">
+    <div class="aiclean-title">{{ICO:trash:17}} <span>{{T:tl_aiclean_title}}</span>
+      <span class="aiclean-st" id="aiclean-modal-st"></span>
+      <span class="spacer"></span>
+      <span class="ui-action" id="aiclean-modal-close" role="button" tabindex="0">✕</span></div>
+    <pre class="aiclean-log" id="aiclean-modal-log">…</pre>
+    <div class="aiclean-actions"><span class="ui-action primary" id="aiclean-modal-rerun" role="button" tabindex="0" hidden>{{T:tl_aiclean_rerun}}</span></div>
+  </div>
+</div>
 <!-- 文件浏览全屏页(body 直接子级): 左=浏览主体(推入列表), 右=文本/图片预览; 桌面双栏并列 -->
 <div class="fs-sheet" id="fs-app" hidden>
   <div class="fs-left">
@@ -284,6 +311,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 
 <div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
-<script src="/static/app.js?v=c50f6632" defer></script>
+<script src="/static/app.js?v=0364f57f" defer></script>
 </body>
 </html>

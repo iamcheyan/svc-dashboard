@@ -255,8 +255,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, runtimes.scan_runtimes())
         elif path == "/api/agentctl":
             self._send_json(200, runtimes.agentctl_status())
+        elif path == "/api/models":
+            self._send_json(200, runtimes.scan_models())
         elif path == "/api/toolports":
             self._send_json(200, tools.tool_ports_alive())
+        elif path == "/api/aicleanup":
+            from . import aicleanup
+            self._send_json(200, aicleanup.aicleanup_status())
         elif path == "/api/uservice":
             self._send_json(200, {"ok": True, "units": tools.user_services()})
         else:
@@ -306,7 +311,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/manage", "/api/cleanup", "/api/uservice", "/api/svcctl", "/api/runtimes"):
+        if path not in ("/api/manage", "/api/cleanup", "/api/aicleanup", "/api/uservice", "/api/svcctl", "/api/runtimes", "/api/models"):
             self.send_error(404)
             return
         try:
@@ -340,6 +345,14 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json(200, tools.cleanup_run(items))
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/aicleanup":
+            from . import aicleanup
+            self.log_message("aicleanup %s", body)
+            try:
+                ok, msg = aicleanup.aicleanup_start()
+                self._send_json(200, {"ok": ok, "msg": msg})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
         elif path == "/api/uservice":
             unit = str(body.get("unit") or "")
             action = str(body.get("action") or "")
@@ -354,6 +367,15 @@ class Handler(BaseHTTPRequestHandler):
             self.log_message("svcctl %s %s", action, port)
             try:
                 self._send_json(200, svcctl.svcctl_action(port, action, lang))
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/models":
+            provider = str(body.get("provider") or "")
+            model = str(body.get("model") or "")
+            self.log_message("modeltest %s %s", provider, model)
+            try:
+                ok, msg = runtimes.model_test_start(provider, model)
+                self._send_json(200, {"ok": ok, "msg": msg})
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
         elif path == "/api/runtimes":

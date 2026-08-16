@@ -1294,3 +1294,19 @@
 .rt-mst.testing { color: var(--text-ghost); animation: rtPulse 1.4s ease-in-out infinite; }
 .rt-macts .rt-btn { font-size: 10.5px; padding: 2px 9px; }
 @media (max-width: 768px) { .rt-mgrid { grid-template-columns: 1fr; } }
+
+/* ---- AI 一键清理: 首页面板 + 日志弹层 ---- */
+.hp-aiclean-body { display: flex; align-items: center; gap: 12px; padding: 4px 0 10px; }
+.hp-aiclean-st { font-size: 12px; color: var(--text-ghost); }
+.hp-aiclean-st.running { color: var(--c-green); animation: rtPulse 1.4s ease-in-out infinite; }
+.hp-aiclean-st.error { color: var(--c-red); }
+.aiclean-dialog { width: min(860px, calc(100vw - 48px)); height: min(78vh, 720px); display: flex; flex-direction: column;
+  padding: 18px 20px; border: 1px solid var(--glass-bd); border-radius: 22px; background: var(--glass-bg);
+  color: var(--text-title); box-shadow: 0 18px 60px rgba(0,0,0,.32); backdrop-filter: blur(22px); }
+.aiclean-title { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; padding-bottom: 10px; }
+.aiclean-st { font-size: 12px; font-weight: 400; color: var(--text-ghost); }
+.aiclean-st.running { color: var(--c-green); animation: rtPulse 1.4s ease-in-out infinite; }
+.aiclean-st.error { color: var(--c-red); }
+.aiclean-log { flex: 1; overflow: auto; margin: 0; padding: 12px 14px; border-radius: 12px; font: 11.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(0,0,0,.28); color: var(--text-body, #d8d4cc); white-space: pre-wrap; word-break: break-all; }
+.aiclean-actions { display: flex; justify-content: center; padding-top: 10px; }

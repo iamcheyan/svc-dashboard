@@ -2704,6 +2704,65 @@ async function cleanExec() {
   btn.hidden = true;
 }
 
+// --- F3b AI 一键清理 (首页面板 + 全屏日志弹层) ---
+let _aiTimer = null;
+const _aiPoll = async () => {
+  try { return await tlGet("/api/aicleanup"); } catch (e) { return { status: "unknown", log_tail: "" }; }
+};
+async function aiOpenModal() {
+  const modal = $("aiclean-modal");
+  modal.hidden = false;
+  document.body.classList.add("modal-open");
+  aiRefresh();          // 立即拉一次并进入轮询
+}
+function aiCloseModal() {
+  $("aiclean-modal").hidden = true;
+  document.body.classList.remove("modal-open");
+  clearTimeout(_aiTimer);
+  aiStatusChip();       // 首页 chip 同步一次
+}
+async function aiRefresh() {
+  const st = await _aiPoll();
+  const log = $("aiclean-modal-log"), chip = $("aiclean-modal-st");
+  // 展示最近一次运行的完整日志 (从 ===== 分隔符起), 无则提示
+  const tail = st.log_tail || "";
+  const lastRun = tail.lastIndexOf("===== aiclean start");
+  log.textContent = lastRun >= 0 ? tail.slice(lastRun) : (tail || t("tl_aiclean_running"));
+  log.scrollTop = log.scrollHeight;
+  chip.textContent = st.status === "running" ? `${t("tl_aiclean_running")} ${st.elapsed_s ?? 0}s`
+                  : st.status === "error" ? "✗ error" : "✓ done";
+  chip.className = "aiclean-st " + st.status;
+  const rerun = $("aiclean-modal-rerun");
+  if (rerun) rerun.hidden = st.status === "running";
+  clearTimeout(_aiTimer);
+  if (st.status === "running") _aiTimer = setTimeout(aiRefresh, 2000);   // 运行中 2s 高频刷
+  else aiStatusChip();
+}
+async function aiStatusChip() {   // 首页面板按钮/状态行
+  const el = $("hp-aiclean-status"); if (!el) return;
+  const st = await _aiPoll();
+  el.textContent = st.status === "running" ? `${t("tl_aiclean_running")} ${st.elapsed_s ?? 0}s`
+                : st.status === "error" ? "✗ 上次出错 (点开看日志)" : "✓ 空闲";
+  el.className = "hp-aiclean-st " + st.status;
+  const btn = $("hp-aiclean-run");
+  if (btn) btn.textContent = st.status === "running" ? t("tl_aiclean_running") : t("tl_aiclean_run");
+}
+async function aiRerun() {
+  if (!await uiConfirm(t("tl_aiclean_confirm"))) return;
+  const r = await tlPost("/api/aicleanup", {});
+  if (!r.ok) { uiNotice(r.msg || "failed"); return; }
+  aiRefresh();
+}
+async function aiCleanHome() {
+  const st = await _aiPoll();
+  if (st.status === "running") { aiOpenModal(); return; }        // 在跑: 直接看日志
+  if (st.status === "idle" && (st.log_tail || "").includes("清理报告")) { aiOpenModal(); return; }  // 有上次报告: 先看
+  if (!await uiConfirm(t("tl_aiclean_confirm"))) return;
+  const r = await tlPost("/api/aicleanup", {});
+  if (!r.ok) { uiNotice(r.msg || "failed"); return; }
+  aiOpenModal();
+}
+
 // --- G3 网络速测 ---
 async function netRun() {
   const btn = $("tl-net-run"), body = $("tl-net-body");
@@ -2786,6 +2845,7 @@ function initToolsPage() {
     $("tl-health-run").addEventListener("click", runHealth);
     $("tl-clean-scan").addEventListener("click", cleanScan);
     $("tl-clean-exec").addEventListener("click", cleanExec);
+    $("tl-aiclean-run").addEventListener("click", aiCleanHome);
     $("tl-net-run").addEventListener("click", netRun);
     $("tl-usvc-unlock").addEventListener("click", usvcUnlock);
     $("tl-usvc-showlock").addEventListener("click", () => {
@@ -2980,4 +3040,10 @@ if (isMobile()) {
 initLogAgentPicker();   // 延后到这里: escHtml 等 const 已初始化(避免 TDZ 崩整页)
 load(true);
 renderConnbar();   // 顶栏连接信息(ssh/IP)随首屏渲染, 不等进工具页
+// AI 清理: 首页面板按钮 + 弹层关闭(独立于工具页惰性初始化, 首页直达)
+$("hp-aiclean-run").addEventListener("click", aiCleanHome);
+$("aiclean-modal-close").addEventListener("click", aiCloseModal);
+$("aiclean-modal").addEventListener("click", e => { if (e.target.id === "aiclean-modal") aiCloseModal(); });
+$("aiclean-modal-rerun").addEventListener("click", aiRerun);
+aiStatusChip();
 hydrateFragments();
