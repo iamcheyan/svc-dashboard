@@ -323,7 +323,11 @@ def scan_goals():
             card["light"] = "active"
         if gid:
             card["resume_cmd"] = f"{OMP_BIN} --resume {gid} --auto-approve"
-        card["stalled"] = card["idle_sec"] is not None and card["idle_sec"] > GOAL_STALLED_SEC
+        # 卡顿告警只对未完成的 goal 有意义: completed 的旧会话 idle 55h 属预期,
+        # 标 "maybe STALLED" 是误报(2026-08-16 用户实测 zircon 卡)
+        card["stalled"] = (card["idle_sec"] is not None
+                           and card["idle_sec"] > GOAL_STALLED_SEC
+                           and card["light"] not in ("done", "lost"))
         return card
 
     # 1) watchdog 登记的 goal: tmux 会话还在,或 jsonl 半小时内还有活动
