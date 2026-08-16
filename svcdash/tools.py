@@ -14,17 +14,20 @@ HOME_DIR = "/home/tetsuya"   # svc-dashboard 以 root 运行(systemd 系统级),
 # 红线: 根白名单 = home 全树 + /tmp; realpath 越界一律 404; 只读(无上传/删除/改名)。
 FS_HOME = HOME_DIR
 FS_ROOTS = [HOME_DIR, "/tmp"]
-# 敏感文件名: .env* / *key* / *secret* / id_rsa* / *.pem / credentials* / known_hosts / .git
+# 敏感文件名: .env* / *key* / *secret* / id_(rsa|ed25519|ecdsa|dsa) / *.pem / *.ppk / credentials* /
+#            known_hosts / authorized_keys / ssh config / .git / .ssh(整目录, 与 .git 同待遇)
 # 列表直接不显示 + 访问 404(与历史实现一致: 隐藏而非仅拦截)。
-_FS_SENSITIVE = re.compile(r"\.env|key|secret|^id_rsa|\.pem$|^credentials|known_hosts", re.I)
+_FS_SENSITIVE = re.compile(
+    r"\.env|key|secret|^id_(rsa|ed25519|ecdsa|dsa)|\.pem$|\.ppk$|^credentials|known_hosts|^authorized_keys",
+    re.I)
 _FS_IMAGE = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 # 文本预览上限: 超过只服务前 2MB 并标记 truncated(前端提示"仅预览前 2MB")
 _FS_TEXT_MAX = 2 << 20
 
 
 def fs_sensitive(name):
-    """.git 按路径组件整目录拒绝(config/hooks 等全部不可见)。"""
-    return name == ".git" or bool(_FS_SENSITIVE.search(name))
+    """.git/.ssh 按路径组件整目录拒绝(私钥/known_hosts/config 等全部不可见)。"""
+    return name in (".git", ".ssh") or bool(_FS_SENSITIVE.search(name))
 
 
 def fs_resolve(path_param):

@@ -15,28 +15,38 @@ _STATIC_CACHE = {}   # relpath -> (raw_bytes, gz_bytes, etag)
 
 
 def _load_static(relpath):
-    """读静态文件并预压缩; 返回 (raw, gz, etag) 或 None(不存在/越界)。"""
-    ent = _STATIC_CACHE.get(relpath)
-    if ent:
-        return ent
+    """读静态文件并预压缩; mtime 变化自动重载(开发免重启); 返回 (raw, gz, etag) 或 None(不存在/越界)。"""
     safe = os.path.normpath(relpath)
     if safe.startswith("..") or os.path.isabs(safe) or ".." in safe.split(os.sep):
         return None
     full = os.path.join(_STATIC_DIR, safe)
-    if not os.path.isfile(full) or os.path.realpath(full) != full:
-        # realpath 等价校验: 防越界(符号链接)
-        if not os.path.isfile(full):
-            return None
-        if os.path.realpath(full) != full:
-            return None
+    try:
+        mtime = os.stat(full).st_mtime
+    except OSError:
+        return None
+    if os.path.realpath(full) != full:   # 防符号链接越界
+        return None
+    ent = _STATIC_CACHE.get(relpath)
+    if ent and ent[3] == mtime:
+        return ent
     with open(full, "rb") as f:
         raw = f.read()
     gz = gzip.compress(raw, 6)
     etag = '"' + hashlib.sha1(raw).hexdigest()[:16] + '"'
-    ent = (raw, gz, etag)
+    ent = (raw, gz, etag, mtime)
     _STATIC_CACHE[relpath] = ent
     return ent
 
+
+def _stamp_asset_versions(body):
+    """把壳里 app.js/app.css 的 ?v= 替换为文件内容 sha1 前 8 位(与 ETag 同源)。
+    静态资源 immutable 缓存因此只在内容真变时换 URL —— 手动维护 v= 的失步缺口根治。"""
+    for name in ("app.js", "app.css"):
+        ent = _load_static(name)
+        if ent:
+            h = ent[2].strip('"')[:8]
+            body = re.sub(rf"({re.escape(name)}\?v=)[0-9a-zA-Z]*", rf"\g<1>{h}", body)
+    return body
 
 class Handler(BaseHTTPRequestHandler):
     server_version = f"svc-dashboard/{SERVER_VER}"
@@ -114,7 +124,7 @@ class Handler(BaseHTTPRequestHandler):
         if not ent:
             self.send_error(404)
             return
-        raw, gz, etag = ent
+        raw, gz, etag, _mtime = ent
         inm = self.headers.get("If-None-Match")
         if inm and etag in inm:
             self.send_response(304)
@@ -157,6 +167,7 @@ class Handler(BaseHTTPRequestHandler):
             ts_mode = self._is_tailscale_client()
             body = render.render_html(self._host(), [], time.time(), lang,
                                        sysdata={}, ts_mode=ts_mode)
+            body = _stamp_asset_versions(body)   # ?v= 注入静态内容哈希, 根治手动维护失步
             etag = '"' + hashlib.sha1(
                 (lang + "\x00" + str(ts_mode) + "\x00" + body).encode()).hexdigest()[:16] + '"'
             self._send_html(body, etag=etag)
@@ -309,15 +320,38 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, BrokenPipeError) as ex:
             self.log_message("fs/file stream error: %s", ex)
 
+    def _origin_ok(self):
+        """浏览器跨站 POST 防护(CSRF): Origin/Referer 任一存在时, 其 host 必须与
+        本次请求 Host 一致(即页面由本服务正常下发)。无两者(curl/监控脚本)放行,
+        浏览器跨站表单必带 Origin → 拒绝。挡住恶意页面驱动 root 动作端点。"""
+        host = (self.headers.get("Host") or "").lower()
+        for h in ("Origin", "Referer"):
+            v = self.headers.get(h)
+            if not v:
+                continue
+            origin_host = urlparse(v).netloc.lower()
+            if origin_host and origin_host != host:
+                self.log_message("blocked cross-site POST: %s=%s host=%s", h, v, host)
+                return False
+        return True
+
     def do_POST(self):
         path = urlparse(self.path).path
         if path not in ("/api/manage", "/api/cleanup", "/api/aicleanup", "/api/uservice", "/api/svcctl", "/api/runtimes", "/api/models"):
             self.send_error(404)
             return
+        if not self._origin_ok():
+            self._send_json(403, {"ok": False, "msg": "cross-site POST rejected"})
+            return
         try:
             ln = int(self.headers.get("Content-Length") or 0)
+            if ln < 0 or ln > (1 << 20):
+                self._send_json(400, {"ok": False, "msg": "bad content-length"})
+                return
             raw = self.rfile.read(ln) if ln else b""
             body = json.loads(raw.decode("utf-8") or "{}")
+            if not isinstance(body, dict):
+                raise ValueError("body must be a JSON object")
         except Exception as e:
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             self._send_json(400, {"ok": False, "msg": t(lang, "m_badreq", e=str(e))})

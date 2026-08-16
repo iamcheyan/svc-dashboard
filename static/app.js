@@ -843,7 +843,11 @@ function applyFragment(part, selector, html) {
   box.innerHTML = html.trim();
   const next = box.content.querySelector(selector);
   const old = document.querySelector(selector);
-  if (next && old) old.replaceWith(next);
+  if (next && old) {
+    old.replaceWith(next);
+    const i = pagesHomeOrder ? pagesHomeOrder.indexOf(old) : -1;   // P1: replaceWith 后同步引用, 防跨断点回桌面把旧骨架放回
+    if (i >= 0) pagesHomeOrder[i] = next;
+  }
   else if (part === "toolchips" && next) document.querySelector("#filters")?.before(next);
   else return false;
   return true;

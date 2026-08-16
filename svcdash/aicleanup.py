@@ -6,7 +6,7 @@
 #
 # API:
 #   aicleanup_start()  -> (ok, msg)  幂等: 已在跑则拒绝
-#   aicleanup_status() -> {status, started, pid, log_path, result}
+#   aicleanup_status() -> {status, started, pid, elapsed_s, log_tail}
 #
 # 实现: ThreadingHTTPServer 是多线程的, 直接 threading.Thread + subprocess
 # 跑 `omp -p --no-session`, 输出落 /tmp/svcdash-aiclean.log, 状态存模块级。
@@ -56,8 +56,18 @@ PROMPT = """你是本机(NAS 服务器, Debian 13)的清理管家, 由 svc-dashb
 """
 
 
+def _rotate_log_if_big():
+    """清理工具不能自己造垃圾: 日志 >5MB 轮转(留 .1 一代), 防月级数百 MB。"""
+    try:
+        if os.path.getsize(_LOG) > 5 * 1024 * 1024:
+            os.replace(_LOG, _LOG + ".1")
+    except OSError:
+        pass
+
+
 def _work():
     os.makedirs(os.path.dirname(_LOG), exist_ok=True)
+    _rotate_log_if_big()
     with open(_LOG, "ab") as f:
         f.write(f"\n===== aiclean start {time.strftime('%F %T')} =====\n".encode())
         f.flush()
@@ -70,10 +80,19 @@ def _work():
                      "PATH": "/home/tetsuya/.bun/bin:" + os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")})
             with _LOCK:
                 _STATE["pid"] = p.pid
-            p.wait(timeout=MAX_RUN_S)
-            rc = p.returncode
+            rc = p.wait(timeout=MAX_RUN_S)
         except subprocess.TimeoutExpired:
-            p.kill()
+            # start_new_session 下 p.kill() 只杀 leader, bun/node 子树会活着继续烧:
+            # killpg 整组杀 + wait 回收, 防"清理器自己变孤儿制造机"
+            try:
+                os.killpg(p.pid, 9)
+            except (ProcessLookupError, PermissionError):
+                pass
+            try:
+                p.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
+            f.write("[aiclean] timeout, killed process group\n".encode())
             rc = -9
         except Exception as e:
             f.write(f"[aiclean] spawn failed: {e}\n".encode())

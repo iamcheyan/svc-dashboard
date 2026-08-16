@@ -1,4 +1,5 @@
 import os, re, signal, socket, subprocess, time
+from svcdash.config import DEFAULT_PORT
 from svcdash.i18n import t, DEFAULT_LANG
 from svcdash.procscan import _kill_tree, listen_sockets, inode_to_pid
 # ---------------- 服务管理 (systemd 单元 + 手动进程服务) ----------------
