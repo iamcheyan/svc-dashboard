@@ -62,6 +62,8 @@ def _wd_event_kind(msg):
     含 'completed' 子串,先判 complete 会把清理行误标成完成。
     resumed/recovered = 恢复; relaunch/recreate = 进程死亡后重启。"""
     low = msg.lower()
+    if "reclaimed" in low:
+        return "reclaim"    # 须在 complete 前: 'reclaimed ... completed-and-archived' 含 complete 子串
     if "cleanup" in low:
         return "cleanup"
     if "commit" in low:
@@ -80,10 +82,12 @@ def _wd_event_kind(msg):
 
 
 _COMPL_RE = re.compile(
-    r"\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\] goal=([\w-]+) label=(.*?) status=(\w+)[ \t]*\n"
+    r"\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\] goal=([\w-]+) label=([^\n]*?) status=(\w+)[ \t]*\n"
     r"\s*transcript=(\S+)[ \t]*\n"
     r"\s*workdir=(\S+)[ \t]*\n"
     r"\s*resume_cmd:\s*(.+?)[ \t]*\n", re.S)
+# label 限定单行([^\n]*?): re.S 下 (.*?) 会在块缺 resume_cmd 时跨块吞噬后续
+# 完整块(2026-08-16 实测 01a00412 块吞掉 1039 字符吃掉 E6 新块起点)。
 
 
 def parse_completed_goals(limit=50):
@@ -119,7 +123,9 @@ def parse_watchdog_events(limit=20):
     """goal-watchdog.log 尾部 -> 事件列表(时间倒序);不匹配的行跳过。"""
     wd = watchdog_goals()
     out = []
-    for line in _tail_lines(WATCHDOG_LOG, limit=96 * 1024):
+    # 倒序遍历(最新先收)再截断: 修复文件 < 96KB 时 limit*3 的 break 留下的是
+    # 最旧事件的既有 bug —— 事件面板会一直显示远古日志而非最新。
+    for line in reversed(_tail_lines(WATCHDOG_LOG, limit=96 * 1024)):
         m = _WD_LINE_RE.match(line)
         if not m:
             continue
@@ -137,7 +143,7 @@ def parse_watchdog_events(limit=20):
                     "kind": _wd_event_kind(msg), "text": msg})
         if len(out) >= limit * 3:  # 只需尾部,再多就停
             break
-    out = out[-limit:]
+    out = out[:limit]
     out.sort(key=lambda x: -x["ts"])
     return out
 
