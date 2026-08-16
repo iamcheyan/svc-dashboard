@@ -56,10 +56,15 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get("Host") or f"localhost:{self.server.server_address[1]}"
 
     def _client_ip(self):
-        xff = self.headers.get("X-Forwarded-For")
-        if xff:
-            return xff.split(",")[0].strip()
-        return self.client_address[0] if self.client_address else ""
+        # 仅信任来自 Tailscale 直连 peer 的 XFF; LAN 客户端可伪造 XFF 但不能改变模式/将来鉴权。
+        peer = self.client_address[0] if self.client_address else ""
+        if self.headers.get("X-Forwarded-For"):
+            try:
+                if ipaddress.ip_address(peer) in ipaddress.ip_network("100.64.0.0/10"):
+                    return self.headers["X-Forwarded-For"].split(",")[0].strip()
+            except ValueError:
+                pass
+        return peer
 
     def _is_tailscale_client(self):
         try:

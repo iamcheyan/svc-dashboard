@@ -116,7 +116,8 @@ def svcctl_action(port, action, lang=DEFAULT_LANG):
         return {"ok": False, "msg": "bad port"}
     if action not in ("pause", "resume"):
         return {"ok": False, "msg": "bad action"}
-    return pause(port, lang) if action == "pause" else resume(port, lang)
+    self_port = int(os.environ.get("SVC_PORT", "80"))
+    return pause(port, lang, self_port=self_port) if action == "pause" else resume(port, lang)
 
 
 def pause(port, lang=DEFAULT_LANG, self_port=None):
