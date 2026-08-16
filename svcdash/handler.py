@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """svcdash HTTP 处理器: HTTP/1.1 keep-alive + gzip + 静态 ETag/304 + 壳 ETag。
 路由与旧版逐端点对齐(golden diff 校验)。"""
-import gzip, hashlib, ipaddress, json, os, re, socket, time
+import gzip, hashlib, hmac, ipaddress, json, os, re, secrets, socket, time
 from html import escape
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, quote, urlparse
@@ -12,6 +12,50 @@ from svcdash.config import SERVER_VER
 
 _STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
 _STATIC_CACHE = {}   # relpath -> (raw_bytes, gz_bytes, etag)
+
+# ---------------- POST 令牌: 管理动作鉴权 ----------------
+# token 文件 root:0600(/etc/svc-dashboard/token), 普通用户跑(dev --port)回落家目录。
+# 页面不内嵌 token: GET 首页的匿名访客拿不到, 只有持有文件内容的调用者能 POST。
+# mtime 缓存 → 改文件即轮换, 免重启。
+_TOKEN_PATHS = ("/etc/svc-dashboard/token",
+                os.path.expanduser("~/.omp/svc-dashboard/token"))
+_token_cache = {"mtime": None, "val": ""}
+
+
+def _token_file():
+    """可用 token 路径: 已存在者优先; 否则第一个可写位置(自动生成)。"""
+    for p in _TOKEN_PATHS:
+        if os.path.isfile(p):
+            return p
+    base = os.path.dirname(_TOKEN_PATHS[0])
+    if os.access(os.path.dirname(base), os.W_OK):
+        return _TOKEN_PATHS[0]
+    return _TOKEN_PATHS[1]
+
+
+def _svc_token():
+    """读(或首次生成)POST 令牌; 读不到返回空串(空串 => POST 全拒, fail-closed)。"""
+    p = _token_file()
+    try:
+        st = os.stat(p)
+        if _token_cache["mtime"] == st.st_mtime_ns:
+            return _token_cache["val"]
+        with open(p, encoding="ascii") as f:
+            val = f.read().strip()
+    except OSError:
+        try:
+            os.makedirs(os.path.dirname(p), mode=0o755, exist_ok=True)
+            val = secrets.token_urlsafe(24)
+            fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="ascii") as f:
+                f.write(val + "\n")
+        except OSError as e:
+            print(f"[warn] 无法创建 POST 令牌 {p}: {e}", flush=True)
+            _token_cache.update(mtime=None, val="")
+            return ""
+        st = os.stat(p)
+    _token_cache.update(mtime=st.st_mtime_ns, val=val)
+    return val
 
 
 def _load_static(relpath):
@@ -340,20 +384,46 @@ class Handler(BaseHTTPRequestHandler):
                 return False
         return True
 
+    def _token_ok(self):
+        """POST 令牌鉴权: X-Svc-Token 须与 token 文件内容一致(常数时间比较)。
+        token 不随页面下发 → 匿名 GET / 拿不到, CSRF 页面/未授权调用者一律 403。"""
+        expect = _svc_token()
+        if not expect:
+            self.log_message("POST auth unavailable: token file unreadable")
+            return False
+        got = self.headers.get("X-Svc-Token") or ""
+        return hmac.compare_digest(got.encode("utf-8", "replace"),
+                                   expect.encode("utf-8", "replace"))
+
     def do_POST(self):
         path = urlparse(self.path).path
         if path not in ("/api/manage", "/api/cleanup", "/api/aicleanup", "/api/uservice", "/api/svcctl", "/api/runtimes", "/api/models"):
             self.send_error(404)
             return
-        if not self._origin_ok():
-            self._send_json(403, {"ok": False, "msg": "cross-site POST rejected"})
-            return
+        # 先消费请求体再鉴权: 403(跨站/无token)提前返回时若 body 残留在
+        # keep-alive 连接里, 下一个请求会拼成 '{"dry_run":true}GET /' → 501
+        # (2026-08-16 实测用户浏览器因此看到 Error response 501 页)。
         try:
             ln = int(self.headers.get("Content-Length") or 0)
             if ln < 0 or ln > (1 << 20):
+                self.close_connection = True
                 self._send_json(400, {"ok": False, "msg": "bad content-length"})
                 return
-            raw = self.rfile.read(ln) if ln else b""
+            if ln:
+                raw = self.rfile.read(ln)
+            else:
+                raw = b""
+        except Exception as e:
+            self._send_json(400, {"ok": False, "msg": f"bad request: {e}"})
+            return
+        if not self._origin_ok():
+            self._send_json(403, {"ok": False, "msg": "cross-site POST rejected"})
+            return
+        if not self._token_ok():
+            self._send_json(403, {"ok": False, "needToken": True,
+                                  "msg": "invalid or missing X-Svc-Token"})
+            return
+        try:
             body = json.loads(raw.decode("utf-8") or "{}")
             if not isinstance(body, dict):
                 raise ValueError("body must be a JSON object")

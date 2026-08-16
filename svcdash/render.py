@@ -20,6 +20,7 @@ KIND_META = {
     "restart": ("retry", "t-red", "evk_restart"),
     "nudge": ("bell", "t-warn", "evk_nudge"),
     "pause": ("pause", "t-warn", "evk_pause"),
+    "reclaim": ("trash", "t-green", "evk_reclaim"),
     "cleanup": ("trash", "t-green", "evk_cleanup"),
     "commit": ("branch", "t-green", "evk_commit"),
 }
@@ -174,11 +175,10 @@ def render_events(events, lang=DEFAULT_LANG):
     body = "".join(rows) if rows else f'<div class="gempty">{t(lang, "ev_none")}</div>'
     return (f'<div class="gpanel" id="events"><h2>{t(lang, "ev_title")} '
             f'<span class="ghint">{t(lang, "ev_hint")}</span></h2>{body}</div>')
-_page_cache = {"t": 0.0, "body": None, "lang": None}
-PAGE_CACHE_SEC = 5.0
-_page_cache_lock = threading.Lock()
-_frag_cache = {}
-_frag_lock = threading.Lock()
+_frag_cache = {}                 # (frag, lang) -> (ts, html); 只在锁内读写
+PAGE_CACHE_SEC = 5               # fragment 缓存 TTL(原字面量抽常量; 重构时漏定义致 NameError)
+_frag_locks = {}                 # (frag, lang) -> per-key Lock: 渲染不占全局锁
+_frag_lock = threading.Lock()    # 仅保护上面两个 dict 本身
 
 _SHELL_TPL = None
 _SHELL_TPL_LOCK = threading.Lock()
@@ -315,23 +315,31 @@ def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=Non
 
 
 def render_fragment(frag, lang, host_header, ts_mode=False):
-    """?p=goals|events|toolchips -> HTML 片段(5s 缓存); 未知返回 None。"""
+    """?p=goals|events|toolchips -> HTML 片段(5s 缓存); 未知返回 None。
+    锁策略: 缓存命中只碰全局锁(快); 未命中按 key 取专属锁渲染——重渲染
+    (scan_goals/gather 可达秒级)不再阻塞其他 frag/lang 的并发请求。"""
     key = (frag, lang)
     with _frag_lock:
         ent = _frag_cache.get(key)
-        now = time.time()
-        if ent and now - ent[0] < PAGE_CACHE_SEC:
-            html = ent[1]
+        klock = _frag_locks.setdefault(key, threading.Lock())
+    now = time.time()
+    if ent and now - ent[0] < PAGE_CACHE_SEC:
+        return ent[1]
+    with klock:   # 同 key 并发只渲染一次; 不同 key 完全并行
+        with _frag_lock:
+            ent = _frag_cache.get(key)
+        if ent and time.time() - ent[0] < PAGE_CACHE_SEC:
+            return ent[1]
+        if frag == "goals":
+            html = render_goal_cards(scan_goals(), lang)
+        elif frag == "events":
+            html = render_events(merge_events(
+                parse_watchdog_events(), parse_completed_goals(),
+                parse_repo_commits()), lang)
+        elif frag == "toolchips":
+            html = render_toolchips(gather(), host_header, lang)
         else:
-            if frag == "goals":
-                html = render_goal_cards(scan_goals(), lang)
-            elif frag == "events":
-                html = render_events(merge_events(
-                    parse_watchdog_events(), parse_completed_goals(),
-                    parse_repo_commits()), lang)
-            elif frag == "toolchips":
-                html = render_toolchips(gather(), host_header, lang)
-            else:
-                return None
-            _frag_cache[key] = (now, html)
+            return None
+        with _frag_lock:
+            _frag_cache[key] = (time.time(), html)
     return html

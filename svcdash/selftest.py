@@ -24,6 +24,34 @@ def selftest():
             self.assertEqual(ctx_level(801), "warn")
             self.assertEqual(ctx_level(1201), "stop")
 
+        def test_post_token(self):
+            # 令牌: 生成→缓存命中→mtime 轮换; 全程不碰真实路径
+            import importlib, os, tempfile
+            h = importlib.import_module("svcdash.handler")
+            with tempfile.TemporaryDirectory() as td:
+                p = os.path.join(td, "token")
+                h._TOKEN_PATHS = (p, p)
+                h._token_cache.update(mtime=None, val="")
+                tok1 = h._svc_token()
+                self.assertGreaterEqual(len(tok1), 24)
+                self.assertEqual(h._svc_token(), tok1)          # mtime 缓存
+                with open(p, "w") as f:
+                    f.write("rotated-token\n")
+                os.utime(p, (0, 0))                              # 强制 mtime 变化
+                self.assertEqual(h._svc_token(), "rotated-token")
+                self.assertEqual(os.stat(p).st_mode & 0o777, 0o600)
+            h._TOKEN_PATHS = ("/etc/svc-dashboard/token",
+                              os.path.expanduser("~/.omp/svc-dashboard/token"))
+
+        def test_fragment_cache(self):
+            # 未知片段 None; 已知片段 5s 内二次调用命中同一缓存对象
+            from svcdash import render
+            self.assertIsNone(render.render_fragment("nope", "zh", "localhost:80"))
+            a = render.render_fragment("goals", "zh", "localhost:80")
+            b = render.render_fragment("goals", "zh", "localhost:80")
+            self.assertIs(a, b)
+            self.assertTrue(a)
+
         def test_fs_security(self):
             self.assertIsNone(fs_resolve("/etc"))
             self.assertIsNone(fs_resolve("/root"))

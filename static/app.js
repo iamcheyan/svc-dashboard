@@ -6,6 +6,25 @@ const TS_HOST = "100.76.219.104";
 const linkHost = (h) => (TS_MODE && (h === "192.168.3.82")) ? TS_HOST : h;  // 来源为 tailscale(100.64.0.0/10) 时链接主机改用 tailscale IP
 const T = BOOT.t;
 const t = (k, p) => { let s = T[k] ?? k; if (p !== undefined) { for (const [a, b] of Object.entries(p)) s = s.split("{" + a + "}").join(b); } return s; };
+// --- POST 令牌: 管理动作需 X-Svc-Token(服务器 /etc/svc-dashboard/token 内容)。
+// 页面不内嵌 token(匿名访客拿不到); 首次动作弹输入框, 存 sessionStorage(标签页会话级)。 ---
+let svcTok = sessionStorage.getItem("svcTok") || "";
+async function apiPost(url, body) {
+  const send = () => fetch(url, { method: "POST",
+    headers: { "Content-Type": "application/json", "X-Svc-Token": svcTok },
+    body: JSON.stringify(body), cache: "no-store" });
+  let r = await send();
+  if (r.status === 403) {
+    const d = await r.clone().json().catch(() => ({}));
+    if (d.needToken) {                       // 令牌缺失/失效 → 问一次, 重试一次
+      const tok = (window.prompt(t("tok_prompt")) || "").trim();
+      if (!tok) return r;
+      svcTok = tok; sessionStorage.setItem("svcTok", tok);
+      r = await send();
+    }
+  }
+  return r;
+}
 // --- 内联 SVG 图标(与 Python 端 ICONS 同一份 path 表, stroke=currentColor) ---
 const ICONS = BOOT.icons;
 function icon(name, size = 16, cls = "ic") {
@@ -65,7 +84,11 @@ function row(e, mobile) {
   const svBtnNamed = svctl ? svctl.replace("data-svcp=", `data-svcn='${esc(e.name.replace(/ \(docker\)| \(paused\)$/g, ""))}' data-svcp=`) : "";
   const res = fmtRes(e);
   const detailBtn = (payload) => `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(payload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
-  const dpayload = { name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids, res: e.res || null, unit: e.unit || null, cid: e.container_id || null };
+  // res 数值按展示粒度取整(cpu 整数%/mem 整数MB/up 分钟)——行 HTML 在轮询间稳定,
+  // 增量渲染才能复用未变行; 详情弹层显示同粒度, 不损失可读信息。
+  const rres = e.res ? { cpu: Math.round(e.res.cpu), mem_mb: Math.round(e.res.mem_mb),
+                         up_sec: Math.floor(e.res.up_sec / 60) * 60 } : null;
+  const dpayload = { name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids, res: rres, unit: e.unit || null, cid: e.container_id || null };
   if (mobile) {
     // 手机卡片(合法表格结构): 头行右侧显式 44px 圆形 复制/打开 按钮(无滑扫手势)
     const kv = (k, v) => `<div class='kv'><span class='k'>${k}</span><span class='v'>${v}</span></div>`;
@@ -96,6 +119,41 @@ function row(e, mobile) {
   </tr>`;
 }
 
+// --- 服务表增量渲染: 轮询(桌面10s/移动30s)不再整表 innerHTML 重建 ---
+// key=ip:port(一个监听一行), sig=整行 HTML: 内容没变的行 <tr> 节点原地保留,
+// 悬停/按钮态/长按上下文不闪; 变化的行单独 replaceWith; 顺序按数据序插入。
+const svcRows = new Map();   // key -> {html, node}
+function renderSvcRows(tbody, shown, mobile) {
+  if (!shown.length) {
+    if (!tbody.querySelector("td.empty"))
+      tbody.innerHTML = '<tr><td class="empty" colspan="6">' + t("no_match") + '</td></tr>';
+    svcRows.clear();
+    return;
+  }
+  const want = new Set();
+  let prev = null;
+  shown.forEach((e, i) => {
+    let key = (e.ip || "?") + ":" + e.port;
+    if (want.has(key)) key += "#" + i;        // ip:port 撞车兜底
+    want.add(key);
+    const html = row(e, mobile);
+    let ent = svcRows.get(key);
+    if (!ent || ent.html !== html) {
+      if (tbody.querySelector("td.empty")) tbody.innerHTML = "";
+      const tpl = document.createElement("template");
+      tpl.innerHTML = html.trim();
+      const node = tpl.content.firstElementChild;
+      if (ent) ent.node.replaceWith(node);
+      ent = { html, node };
+      svcRows.set(key, ent);
+    }
+    if (ent.node.parentElement !== tbody || ent.node.previousElementSibling !== prev)
+      tbody.insertBefore(ent.node, prev ? prev.nextSibling : tbody.firstChild);
+    prev = ent.node;
+  });
+  for (const [k, ent] of svcRows)
+    if (!want.has(k)) { ent.node.remove(); svcRows.delete(k); }
+}
 function applyFilter() {
   const shown = FILTERS[filter] ? services.filter(FILTERS[filter]) : [];
   ["user", "web", "docker", "system", "all"].forEach(f =>
@@ -135,8 +193,7 @@ function applyFilter() {
   $("svc").style.display = "";
   $("tasks").hidden = true;
   const tbody = $("svc").querySelector("tbody");
-  tbody.innerHTML = shown.length ? shown.map(e => row(e, isMobile())).join("") :
-    '<tr><td class="empty" colspan="6">' + t("no_match") + '</td></tr>';
+  renderSvcRows(tbody, shown, isMobile());
   $("count").textContent = shown.length;
   fillCtl(); // 服务表行尾 暂停/继续 按钮状态
   fillSvcDots(); // P0-6: 行首状态点按受管单元状态上色
@@ -682,10 +739,8 @@ async function doCtl(btn) {
   btn.setAttribute("aria-disabled", "true");
   btn.textContent = t("m_doing");
   try {
-    const r = await fetch("/api/manage?lang=" + encodeURIComponent(LANG), {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ unit: uid, action }),
-    });
+    const r = await apiPost("/api/manage?lang=" + encodeURIComponent(LANG),
+      { unit: uid, action });
     const d = await r.json();
     btn.innerHTML = icon(d.ok ? "ok" : "err", 13) + " " + escHtml(d.msg || "");
     btn.title = d.msg || "";
@@ -705,7 +760,8 @@ function fmtUp(sec) {
 function fmtRes(e) {
   const r = e.res;
   if (!r) return "";
-  return `<span class='svc-res' title='${t("svc_res_title")}'>${r.cpu.toFixed(1)}% · ${r.mem_mb >= 1024 ? (r.mem_mb / 1024).toFixed(1) + "G" : Math.round(r.mem_mb) + "M"} · ${fmtUp(r.up_sec)}</span>`;
+  // cpu 取整与 dpayload 同粒度: 轮询间行 HTML 稳定, 增量渲染可复用未变行
+  return `<span class='svc-res' title='${t("svc_res_title")}'>${Math.round(r.cpu)}% · ${r.mem_mb >= 1024 ? (r.mem_mb / 1024).toFixed(1) + "G" : Math.round(r.mem_mb) + "M"} · ${fmtUp(r.up_sec)}</span>`;
 }
 function svBtn(e) {
   if (!e.manageable || e.is_self) return "";
@@ -728,10 +784,7 @@ async function doSvcCtl(btn) {
   btn.setAttribute("aria-disabled", "true");
   if (!mini) btn.textContent = t("m_doing");
   try {
-    const r = await fetch("/api/svcctl", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ port, action }),
-    });
+    const r = await apiPost("/api/svcctl", { port, action });
     const d = await r.json();
     if (mini) uiToast(d.msg || (d.ok ? "OK" : "FAIL"), d.ok ? "ok" : "err");
     else { btn.innerHTML = icon(d.ok ? "ok" : "err", 13) + " " + escHtml(d.msg || ""); btn.title = d.msg || ""; }
@@ -814,10 +867,8 @@ async function doManage(btn) {
   const res = btn.closest(".mcard").querySelector(".mresult");
   res.textContent = t("m_doing");
   try {
-    const r = await fetch("/api/manage?lang=" + encodeURIComponent(LANG), {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ unit, action }),
-    });
+    const r = await apiPost("/api/manage?lang=" + encodeURIComponent(LANG),
+      { unit, action });
     const d = await r.json();
     res.innerHTML = icon(d.ok ? "ok" : "err", 13) + " " + escHtml(d.msg || "");
     res.style.color = d.ok ? "var(--c-green)" : "var(--c-red)";
@@ -967,6 +1018,7 @@ const EV_META = {
   restart:  { ico: "retry", grp: "fail", key: "evk_restart" },
   nudge:    { ico: "bell", grp: "warn", key: "evk_nudge" },
   pause:    { ico: "⏸", grp: "warn", key: "evk_pause" },
+  reclaim: { ico: "trash", grp: "ok", key: "evk_reclaim" },
   cleanup:  { ico: "trash", grp: "ok", key: "evk_cleanup" },
   commit:   { ico: "branch", grp: "ok", key: "evk_commit" },
   other:    { ico: "·", grp: "ok", key: "evk_other" },
@@ -2248,8 +2300,7 @@ async function tlGet(url) {
   return d;
 }
 async function tlPost(url, body) {
-  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body), cache: "no-store" });
+  const r = await apiPost(url, body);
   return r.json().catch(() => ({ ok: false, msg: "bad json" }));
 }
 
