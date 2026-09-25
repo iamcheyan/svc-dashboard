@@ -163,7 +163,21 @@ def sanitize_runtimes_for_public(data):
                     if i < len(target)]
         return target
 
-    return restore_quota(data, clean)
+    clean = restore_quota(data, clean)
+
+    def hide_account_identity(value):
+        if isinstance(value, dict):
+            for key, item in list(value.items()):
+                if str(key).lower() in {"account", "email", "email_address", "username"} and item:
+                    value[key] = "[账号已隐藏]"
+                else:
+                    hide_account_identity(item)
+        elif isinstance(value, list):
+            for item in value:
+                hide_account_identity(item)
+
+    hide_account_identity(clean)
+    return clean
 
 
 def sanitize_tmux_for_public(tmux_data: dict) -> dict:

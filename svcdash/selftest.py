@@ -74,6 +74,7 @@ def selftest():
 
         def test_static_runtime_quota_is_visible_without_account_identity(self):
             data = {"agents": [{"id": "codex", "name": "Codex", "bin": "/home/alice/bin/codex",
+                "meta": {"account": "alice@example.com"},
                 "tasks": [{"title": "private task", "cwd": "/home/alice/project"}],
                 "quota": {"ok": True, "account": "alice@example.com", "plan": "Pro",
                     "buckets": [{"label": "Weekly · primary", "remaining_pct": 72,
