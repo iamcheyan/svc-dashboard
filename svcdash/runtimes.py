@@ -17,6 +17,8 @@ import os
 import re
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 import threading
 import time
 
@@ -24,7 +26,10 @@ from svcdash import agents
 
 HOME = "/home/tetsuya"
 DOTFILES_AGENT = HOME + "/dotfiles/agent"
-QUOTA_SCRIPT = DOTFILES_AGENT + "/agent-quota.sh"
+# 私有 chezmoi 部署的额度查询脚本；公开 dotfiles 路径仅作旧安装回退。
+QUOTA_SCRIPT = HOME + "/.config/agent/tools/agent-quota.sh"
+if not os.path.isfile(QUOTA_SCRIPT):
+    QUOTA_SCRIPT = DOTFILES_AGENT + "/agent-quota.sh"
 LEDGER_DIR = HOME + "/.omp/svc-dashboard"
 LEDGER_FILE = LEDGER_DIR + "/agentctl.json"
 _CLK_TCK = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") else 100
@@ -197,6 +202,56 @@ def _grok_tasks():
                 for s in sess if isinstance(s, dict) and _pid_alive(s.get("pid") or -1)]
     except (OSError, ValueError):
         return []
+
+
+def _activity_text(value, limit=100):
+    """Short, redacted activity label; never put credentials into the dashboard."""
+    text = " ".join(str(value or "").split())
+    text = re.sub(r"(?:sk-|xai-|AIza|ghp_|github_pat_)[A-Za-z0-9_\-\.]+", "[redacted]", text, flags=re.I)
+    return text[:limit] + ("…" if len(text) > limit else "")
+
+
+def _agy_tasks():
+    """Gemini/Antigravity CLI recent conversations from its lightweight history."""
+    rows = []
+    paths = [HOME + "/.gemini/antigravity-cli/history.jsonl"]
+    paths.extend(__import__("glob").glob(HOME + "/.gemini/tmp/*/logs.json"))
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = [json.loads(line) for line in f] if path.endswith(".jsonl") else json.load(f)
+        except (OSError, ValueError, TypeError):
+            continue
+        if isinstance(data, dict):
+            data = data.get("history") or data.get("entries") or []
+        for x in data if isinstance(data, list) else []:
+            if not isinstance(x, dict):
+                continue
+            ts = x.get("timestamp")
+            try:
+                ts = float(ts) / (1000 if float(ts) > 10**11 else 1)
+            except (TypeError, ValueError):
+                continue
+            age = max(0, int(time.time() - ts))
+            if age > 7 * 86400:
+                continue
+            rows.append({"kind": "session", "id": str(x.get("sessionId") or x.get("conversationId") or ""),
+                         "cwd": str(x.get("workspace") or "—"),
+                         "title": _activity_text(x.get("display") or x.get("message") or "Gemini activity"),
+                         "age_sec": age, "health": "running" if age < 900 else "idle"})
+    seen, out = set(), []
+    for x in sorted(rows, key=lambda r: r["age_sec"]):
+        key = (x["id"], x["cwd"], x["title"])
+        if key not in seen:
+            seen.add(key)
+            out.append(x)
+    return out[:8]
+
+
+def _process_tasks(agent_id, plist):
+    return [{"kind": "process", "agent": agent_id, "pid": p["pid"], "cwd": p.get("cwd") or "—",
+             "cmd": p.get("cmd") or "—", "age_sec": p.get("elapsed_sec", 0), "health": "running"}
+            for p in plist[:4]]
 
 
 def _recent_files(root, hours=24, limit=3):
@@ -422,6 +477,156 @@ def quota_snapshot():
                 "running": _quota["running"], "err": _quota["err"]}
 
 
+# ---------------- 模型 provider / 模型可用性测试 ----------------
+# 数据源: ~/.config/opencode/opencode.json (provider+baseURL+模型表) + ~/.env (密钥存在性)
+# + omp 自身: ZAI_API_KEY + ZAI_PREVIEW_MODEL。密钥只读不外传, 响应绝不含 key。
+OPENCODE_CONFIG = HOME + "/.config/opencode/opencode.json"
+ENV_FILE = HOME + "/.env"
+# opencode provider id → ~/.env 密钥变量名
+MODEL_ENV_MAP = {
+    "DS": "DEEPSEEK_API_KEY", "evomap": "EVOMAP_API_KEY",
+    "opencode-go": "OPENCODE_GO_API_KEY", "ollama": "OLLAMA_API_KEY",
+    "ollama-BAK": "OLLAMA_BAK_API_KEY", "zai": "ZAI_API_KEY",
+}
+CHAT_DISABLED = {"evomap"}   # 预充值网关: 只 GET /models 探活, 禁发 chat
+ZAI_BASE = "https://api.z.ai/api/palette/v1"
+_model_tests = {}            # "provider|model" -> {status, ok, ms, http, detail, t}
+_model_lock = threading.Lock()
+
+
+def _load_env():
+    env = {}
+    try:
+        with open(ENV_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    val = v.strip()
+                    if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+                        val = val[1:-1]
+                    env[k.strip()] = val
+    except OSError:
+        pass
+    return env
+
+
+def scan_models():
+    """provider/模型清单 + 各自密钥状态 + 最近测试结果(不含密钥值)。"""
+    env = _load_env()
+    providers = []
+    try:
+        with open(OPENCODE_CONFIG) as f:
+            cfg = json.load(f)
+        for pid, p in (cfg.get("provider") or {}).items():
+            opts = p.get("options") or {}
+            base = str(opts.get("baseURL") or "").rstrip("/")
+            if not base:
+                continue
+            env_key = MODEL_ENV_MAP.get(pid, "")
+            has_key = bool(env.get(env_key) or opts.get("apiKey"))
+            providers.append({
+                "id": pid, "name": p.get("name") or pid, "base": base,
+                "chat_allowed": pid not in CHAT_DISABLED,
+                "has_key": has_key,
+                "models": [{"id": m.get("id") or mid, "name": m.get("name") or mid}
+                           for mid, m in (p.get("models") or {}).items()],
+            })
+    except (OSError, ValueError):
+        pass
+    # omp 自身模型: zai (ZAI_PREVIEW_MODEL)
+    zmodel = env.get("ZAI_PREVIEW_MODEL") or ""
+    if env.get("ZAI_API_KEY") and zmodel:
+        providers.append({"id": "zai", "name": "Z.AI (omp)", "base": ZAI_BASE,
+                          "chat_allowed": True, "has_key": True,
+                          "models": [{"id": zmodel, "name": zmodel}]})
+    out = []
+    with _model_lock:
+        for p in providers:
+            for m in p["models"]:
+                r = _model_tests.get(p["id"] + "|" + m["id"])
+                if r:
+                    m["test"] = {k: r[k] for k in ("status", "ok", "ms", "http", "detail", "t")
+                                 if k in r}
+        out = providers
+    return {"providers": out}
+
+
+def _http_json(url, key, payload=None, timeout=20):
+    """GET/POST JSON; 返回 (ok, ms, http_status, detail)。不发密钥到日志。"""
+    req = urllib.request.Request(url, method="GET" if payload is None else "POST")
+    req.add_header("Authorization", "Bearer " + key)
+    if payload is not None:
+        req.add_header("Content-Type", "application/json")
+        req.data = json.dumps(payload).encode()
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read(2048)
+            return True, int((time.time() - t0) * 1000), resp.status, ""
+    except urllib.error.HTTPError as e:
+        return False, int((time.time() - t0) * 1000), e.code, (e.read(200) or b"").decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        return False, int((time.time() - t0) * 1000), 0, str(e)[:120]
+
+
+def model_test_start(provider_id, model_id):
+    """后台线程测一个模型: chat_allowed → 1-token chat; 否则 GET /models 探活。"""
+    env = _load_env()
+    try:
+        with open(OPENCODE_CONFIG) as f:
+            cfg = json.load(f)
+    except (OSError, ValueError):
+        cfg = {}
+    p = (cfg.get("provider") or {}).get(provider_id)
+    base, key = "", ""
+    if p:
+        base = str((p.get("options") or {}).get("baseURL") or "").rstrip("/")
+        key = env.get(MODEL_ENV_MAP.get(provider_id, "")) or str((p.get("options") or {}).get("apiKey") or "")
+    if provider_id == "zai":
+        base, key = ZAI_BASE, env.get("ZAI_API_KEY") or ""
+    if not base or not key:
+        return False, "no base url or key"
+
+    def _work():
+        with _model_lock:
+            _model_tests[provider_id + "|" + model_id] = {"status": "running", "t": time.time()}
+        try:
+            _run_model_test(provider_id, model_id, base, key)
+        except Exception as e:   # 线程内兜底: 异常也要落终态, 不永久卡 running
+            with _model_lock:
+                _model_tests[provider_id + "|" + model_id] = {
+                    "status": "done", "ok": False, "ms": 0, "http": 0,
+                    "detail": str(e)[:120], "t": time.time()}
+
+    threading.Thread(target=_work, daemon=True).start()
+    return True, "test started"
+
+
+def _run_model_test(provider_id, model_id, base, key):
+        if provider_id in CHAT_DISABLED:
+            ok, ms, code, detail = _http_json(base + "/models", key)
+            with _model_lock:
+                _model_tests[provider_id + "|" + model_id] = {
+                    "status": "done", "ok": ok, "ms": ms, "http": code,
+                    "detail": ("probe /models " + str(code)) if not ok else "probe /models",
+                    "t": time.time()}
+        else:
+            ok, ms, code, detail = _http_json(
+                base + "/chat/completions", key,
+                {"model": model_id, "messages": [{"role": "user", "content": "hi"}],
+                 "max_tokens": 1, "stream": False})
+            with _model_lock:
+                _model_tests[provider_id + "|" + model_id] = {
+                    "status": "done", "ok": ok, "ms": ms, "http": code,
+                    "detail": "" if ok else detail, "t": time.time()}
+
+
+def model_test_status():
+    with _model_lock:
+        return {k: dict(v) for k, v in _model_tests.items()}
+
+
 # ---------------- 安装 / 卸载 (后台线程 + 台账) ----------------
 
 def _ledger_read():
@@ -564,19 +769,34 @@ def scan_runtimes():
                                "idle_seconds": s["idle_seconds"], "tool": s["tool"],
                                "tmux": s["tmux"]} for s in omp_active[:6]]
             entry["meta"]["sessions_total"] = len(omp_sessions)
+        elif aid == "agy":
+            entry["tasks"] = _agy_tasks()
         elif aid == "grok":
             entry["tasks"] = [{"kind": "grok", **t} for t in _grok_tasks()]
-        elif aid in ("codex", "claude"):
-            root = (HOME + "/.codex/sessions") if aid == "codex" else (HOME + "/.claude/projects")
+        elif aid == "codex":
+            entry["tasks"] = [{"kind": "codex", "id": s["session_id"], "cwd": s["cwd"],
+                               "title": s.get("title") or "Codex session", "health": s["health"],
+                               "idle_seconds": s["idle_seconds"], "tool": s.get("last_event") or "—"}
+                              for s in agents.scan_codex()[:12]]
+            root = HOME + "/.codex/sessions"
+            n, recent = _recent_files(root)
+            entry["meta"]["sessions_24h"] = n
+        elif aid == "claude":
+            root = HOME + "/.claude/projects"
             n, recent = _recent_files(root)
             entry["meta"]["sessions_24h"] = n
             entry["tasks"] = [{"kind": "file", "file": r["file"], "age_sec": r["age_sec"]}
                               for r in recent]
+        if not entry["tasks"] and plist:
+            entry["tasks"] = _process_tasks(aid, plist)
         if a.get("quota"):
-            entry["quota"] = qs["providers"].get(a["quota"]) or {"ok": False, "buckets": []}
+            quota = qs["providers"].get(a["quota"])
+            # 无法真实查询或没有有效 bucket 的 provider 不进入响应，前端自然隐藏。
+            if quota and quota.get("ok") and quota.get("buckets"):
+                entry["quota"] = quota
         entry["task_count"] = len(entry["tasks"])
         result.append(entry)
-    data = {"updated": now, "agents": result,
+    data = {"updated": now, "agents": result, "models": scan_models(),
             "total_installed": sum(1 for a in REGISTRY if find_bin(a["bins"])),
             "total_running": sum(len(v) for v in procs.values()),
             "quota": qs, "ctl": ctl}
