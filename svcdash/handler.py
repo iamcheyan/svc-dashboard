@@ -308,9 +308,9 @@ class Handler(BaseHTTPRequestHandler):
             if not agent_id:
                 self._send_json(400, {"ok": False, "msg": "agent required"})
             else:
-                # Agent 详情可能包含机器路径、进程参数和账户标识；即使走实时
-                # dashboard，也统一使用安全视图，避免页面/截图泄露本机细节。
-                self._send_json(200, runtimes.inspect_agent_detail(agent_id, for_public=True))
+                # 实时在线版是私有运维界面，保留本机完整详情；公开静态导出
+                # 在 export.py 中单独使用 for_public=True 做严格脱敏。
+                self._send_json(200, runtimes.inspect_agent_detail(agent_id, for_public=False))
         elif path == "/api/runtimes":
             # 额度后台刷新(过期 5 分钟且无任务在跑时触发), 本响应返回缓存快照
             if not runtimes.quota_snapshot()["running"]:
