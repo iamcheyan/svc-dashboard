@@ -3408,6 +3408,31 @@ function closeAgentDetail() {
   document.documentElement.classList.remove("traj-noscroll");
 }
 
+// 把正文顶边对准页签底边。高度交给 top/bottom，不再写 height。
+function revealAgentSheetBody() {
+  const sheet = $("agent-detail-sheet");
+  const nav = $("agent-sheet-nav");
+  const body = $("agent-sheet-body");
+  if (!sheet || !body || sheet.hidden) return;
+  const apply = () => {
+    if (sheet.hidden) return;
+    const sheetTop = sheet.getBoundingClientRect().top;
+    const navBottom = nav ? nav.getBoundingClientRect().bottom : sheetTop + 132;
+    const top = Math.max(0, Math.round(navBottom - sheetTop));
+    body.style.top = top + "px";
+    body.style.height = "";
+    body.style.minHeight = "";
+  };
+  apply();
+  requestAnimationFrame(apply);
+  setTimeout(apply, 60);
+}
+if (!window._agentSheetRevealBound) {
+  window._agentSheetRevealBound = true;
+  window.addEventListener("resize", revealAgentSheetBody);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", revealAgentSheetBody);
+}
+
 async function openAgentDetail(agentId) {
   const sheet = $("agent-detail-sheet");
   const title = $("agent-sheet-title");
@@ -3441,6 +3466,7 @@ async function openAgentDetail(agentId) {
       chip.classList.add("active");
       curAgentDetailTab = chip.dataset.adtab;
       body.innerHTML = renderAgentDetailContent(curAgentDetail, curAgentDetailTab);
+      revealAgentSheetBody();
     });
   }
 
@@ -3478,8 +3504,10 @@ async function openAgentDetail(agentId) {
     if (cCnt) cCnt.textContent = (d.cron && d.cron.length) ? `(${d.cron.length})` : "";
 
     body.innerHTML = renderAgentDetailContent(d, curAgentDetailTab);
+    revealAgentSheetBody();
   } catch (err) {
     body.innerHTML = `<div class="gempty">${escHtml(t("a_fail", { e: err.message }))}</div>`;
+    revealAgentSheetBody();
   }
 }
 

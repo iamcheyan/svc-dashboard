@@ -198,15 +198,82 @@ def sanitize_agent_detail_for_public(detail: dict) -> dict:
     """对 Agent 详细信息进行公网安全脱敏。
     保护:
     - 个人记忆/人设完全脱敏（公网视图只保留条数与脱敏占位）
-    - 路径脱敏 (/home/tetsuya -> ~)
+    - 二进制路径、进程命令与 PID、MCP 命令等运行环境细节隐藏
     - 平台状态与账号脱敏（隐藏 Telegram chat_id、user_id、真实邮箱与凭据）
-    - 定时任务提示词中的私有细节脱敏
+    - 技能描述、定时任务名称/提示词等私有内容脱敏
     - 抹除内网与 Tailscale IP、密钥
     """
     if not isinstance(detail, dict):
         return {}
 
     clean = deep_sanitize(detail, mask_ips=True, mask_paths=True)
+
+    # 二次遍历详情对象：deep_sanitize 负责已知 token/IP/路径特征，
+    # 这里按字段语义隐藏可识别机器、账号或可复现操作的信息。
+    private_keys = {
+        "pid", "writer_pid", "writer_start_time", "chat_id", "user_id",
+        "email", "email_address", "username", "user_name", "phone", "account",
+        "account_id", "account_name", "chat_name", "display_name", "first_name",
+        "last_name", "authorization", "cookie", "client_secret",
+        "auth", "api_key", "access_key", "refresh_token",
+    }
+    command_keys = {"cmd", "cmdline", "command", "resume_cmd", "attach_cmd"}
+    path_keys = {"bin", "cwd", "workdir", "path", "working_directory"}
+
+    def scrub(value):
+        if isinstance(value, dict):
+            result = {}
+            for key, item in value.items():
+                key_norm = str(key).lower().replace("-", "_")
+                if (key_norm in private_keys or key_norm == "id" or "auth" in key_norm
+                        or key_norm.endswith("_id")
+                        or key_norm.endswith("_path")
+                        or any(part in key_norm for part in ("token", "password", "secret", "private_key"))):
+                    result[key] = "[已隐藏]"
+                elif key_norm in command_keys or "command" in key_norm or key_norm.startswith("cmd_"):
+                    result[key] = "[命令已隐藏]"
+                elif key_norm in path_keys or key_norm.endswith("_path"):
+                    result[key] = "[路径已隐藏]" if item else ""
+                else:
+                    result[key] = scrub(item)
+            return result
+        if isinstance(value, list):
+            return [scrub(item) for item in value]
+        if isinstance(value, str):
+            return sanitize_public_payload(value)
+        return value
+
+    # 顶层 Agent id/name 是 UI 必需的产品标签，不是机器或账户标识。
+    top_id, top_name = clean.get("id"), clean.get("name")
+    clean = scrub(clean)
+    if top_id is not None:
+        clean["id"] = top_id
+    if top_name is not None:
+        clean["name"] = top_name
+    if detail.get("bin"):
+        clean["bin"] = "[路径已隐藏]"
+
+    # 私人技能名/描述、MCP 服务名/命令和定时任务标题可能包含项目或用户信息；
+    # 保留数量、状态与调度数据，避免详情页完全失去运行概况。
+    if isinstance(clean.get("skills"), list):
+        for i, skill in enumerate(clean["skills"], 1):
+            if isinstance(skill, dict):
+                skill["name"] = f"Skill {i}"
+                skill["category"] = "custom"
+                if skill.get("description"):
+                    skill["description"] = "[技能描述已脱敏]"
+    if isinstance(clean.get("mcp_servers"), list):
+        for i, server in enumerate(clean["mcp_servers"], 1):
+            if isinstance(server, dict):
+                server["name"] = f"MCP Server {i}"
+                if server.get("command"):
+                    server["command"] = "[命令已隐藏]"
+
+    if isinstance(clean.get("cron"), list):
+        for i, job in enumerate(clean["cron"], 1):
+            if isinstance(job, dict):
+                job["id"] = f"job-{i}"
+                job["name"] = f"Scheduled task {i}"
 
     # 记忆与人设安全处理
     if "memories" in clean and isinstance(clean["memories"], dict):

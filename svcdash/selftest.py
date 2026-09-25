@@ -10,6 +10,7 @@ from svcdash.sysinfo import sys_info, load_zone
 from svcdash.repos import agent_repos, repo_stats, parse_repo_commits
 from svcdash.procscan import gather
 from svcdash.render import render_html, TOOL_LINKS
+from svcdash.privacy import sanitize_agent_detail_for_public
 
 
 def selftest():
@@ -41,6 +42,35 @@ def selftest():
                 self.assertEqual(os.stat(p).st_mode & 0o777, 0o600)
             h._TOKEN_PATHS = ("/etc/svc-dashboard/token",
                               os.path.expanduser("~/.omp/svc-dashboard/token"))
+
+        def test_agent_detail_public_redaction(self):
+            detail = {
+                "ok": True, "id": "codex", "name": "Codex CLI",
+                "bin": "/home/alice/.local/bin/codex",
+                "version": "1.2.3", "installed": True,
+                "procs": [{"pid": 4321, "cmd": "codex --api-key=very-secret-value",
+                           "cwd": "/home/alice/private/project", "cpu_pct": 4.5,
+                           "mem_mb": 120, "up_sec": 12}],
+                "skills": [{"name": "private-project-workflow", "category": "client",
+                            "description": "Internal customer workflow"}],
+                "mcp_servers": [{"name": "private-drive", "command": "node /home/alice/mcp.js"}],
+                "platforms": {"telegram": {"state": "connected", "chat_id": "12345678",
+                                             "username": "alice", "writer_pid": 9876}},
+                "cron": [{"id": "private-job-id", "name": "Confidential task",
+                          "prompt": "Do secret internal work", "schedule": "0 * * * *",
+                          "origin": {"user_id": "87654321", "platform": "telegram"}}],
+            }
+            clean = sanitize_agent_detail_for_public(detail)
+            rendered = __import__("json").dumps(clean, ensure_ascii=False)
+            for private in ("/home/alice", "very-secret-value", "private-project-workflow",
+                            "Internal customer workflow", "private-drive", "mcp.js",
+                            "12345678", "alice", "9876", "private-job-id",
+                            "Confidential task", "Do secret internal work", "87654321"):
+                self.assertNotIn(private, rendered)
+            self.assertEqual(clean["id"], "codex")
+            self.assertEqual(clean["name"], "Codex CLI")
+            self.assertEqual(clean["procs"][0]["cpu_pct"], 4.5)
+            self.assertEqual(clean["cron"][0]["schedule"], "0 * * * *")
 
         def test_fragment_cache(self):
             # 未知片段 None; 已知片段 5s 内二次调用命中同一缓存对象

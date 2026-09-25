@@ -2711,21 +2711,23 @@
 /* Agent 详情全屏滑层 / 面板 (风格同 traj-sheet，体验流畅，无任何 popup 弹窗困扰) */
 .agent-sheet {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 70;
   background: var(--bg, #0d1117);
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
 }
 .agent-sheet[hidden] {
   display: none !important;
 }
 .agent-sheet.opening {
-  animation: agentSheetSlideIn .2s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: agentSheetFade .2s ease;
 }
-@keyframes agentSheetSlideIn {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes agentSheetFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .agent-sheet-top {
   display: flex;
@@ -2774,13 +2776,17 @@
   user-select: none;
 }
 .agent-sheet-body {
-  padding: 16px 20px calc(32px + env(safe-area-inset-bottom));
+  /* 绝对定位钉在页签下方到屏幕底。不要用 height:0 + flex 撑开，
+     那个组合在开着开发者工具时会保持 0 高，正文被裁成一片黑。 */
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 132px;
+  bottom: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  padding: 16px 20px calc(32px + env(safe-area-inset-bottom));
 }
 
 /* 详情分区样式 */

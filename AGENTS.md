@@ -144,6 +144,7 @@ HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）�
 - 公开仓库的提交评论、文件变更路径和仓库轨迹按用户要求保留；Goal/Agent 对话、Tmux 标题/路径/终端输出仍脱敏。
 - 静态服务页不提供详情弹窗；启动命令显示为 `[命令已隐藏]`，防止公开命令参数和工作目录。
 - 静态 Agent 页的模型“测试”不执行真实请求，显示为静态快照提示；真实模型测试只能在需要登录/令牌的私有 dashboard 上执行。
+- Agent 详情同样走安全视图：二进制路径、进程 PID/命令、MCP 命令、个人技能/任务名称、提示词和平台账户标识会隐藏或泛化；版本、模型、资源占用、连接状态与调度状态保留。实时 `/api/agentdetail` 与静态 `BOOT.agentDetails` 使用同一脱敏器。
 - 活动页事件分两类处理：`kind=commit` 的 Git 提交事件属于公开仓库信号，保留提交说明、文件路径、作者和 Diff 入口；Goal/watchdog 的 `complete`、`cleanup`、`recover`、`nudge` 等事件只保留 Goal ID、事件类型和时间，正文统一显示 `[内容已脱敏]`。
 - 因此活动页出现“部分正常、部分 `[内容已脱敏]`”是预期行为，不是导出失败：前者是公开 Git 活动，后者是 Agent/Goal 内部日志。
 - 自动发布器产生的 `svc-dashboard` / `Update sanitized static snapshot ...` 维护提交只保留最新一条作为运行状态，其余历史在首页和活动页折叠；活动页可展开全部自动发布历史。匹配仅针对提交说明以 `Update sanitized static snapshot` 开头的自动构建提交，其他 `svc-dashboard` Git 提交照常显示。
