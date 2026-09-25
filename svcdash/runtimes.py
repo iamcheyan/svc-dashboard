@@ -47,6 +47,9 @@ REGISTRY = [
      "names": {"omp"}, "extra_re": r"__omp_worker|/\.bun/bin/omp",
      "wrapper": DOTFILES_AGENT + "/omp.sh",
      "rm_bins": [HOME + "/.local/bin/omp", HOME + "/.bun/bin/omp"]},
+    {"id": "dim", "name": "dim", "bins": ["/usr/bin/dim", HOME + "/.local/bin/dim"],
+     "names": {"dim"}, "extra_re": r"/dimcode(?:\s|$)|/bin/dim(?:\s|$)",
+     "wrapper": None, "quota": "dim"},
     {"id": "codex", "name": "Codex CLI",
      "bins": ["codex", HOME + "/.fnm/node-versions/*/installation/bin/codex"],
      "names": {"codex"},
@@ -403,9 +406,32 @@ def _parse_cursor_quota(d):
             "detail": ""}
 
 
+def _parse_dim_quota(d):
+    """dim usage --json 的 Credits 汇总，转换为 dashboard 通用 bucket。"""
+    if not isinstance(d, dict) or not d.get("ok"):
+        return {"ok": False, "account": "", "plan": "", "buckets": [],
+                "detail": str((d or {}).get("error") or "unavailable")[:120]}
+    c = d.get("credits") or {}
+    try:
+        total = float(c.get("total_units") or 0)
+        remaining = float(c.get("remaining_units") or 0)
+        used = float(c.get("used_units") or 0)
+    except (TypeError, ValueError):
+        total = remaining = used = 0
+    if total <= 0:
+        return {"ok": False, "account": "", "plan": "", "buckets": [],
+                "detail": "no Credits bucket"}
+    reset = str(d.get("term_end") or "")[:19].replace("T", " ")
+    pct = max(0, min(100, round(remaining / total * 100)))
+    detail = f"{int(used)}/{int(total)} Credits remaining {int(remaining)}"
+    return {"ok": True, "account": "", "plan": "", "buckets": [{
+        "label": "Credits", "remaining_pct": pct, "reset": reset, "detail": detail
+    }], "detail": detail}
+
+
 QUOTA_PARSERS = {"codex": _parse_codex_quota, "agy": _parse_agy_quota,
                  "grok": _parse_grok_quota, "kiro": _parse_kiro_quota,
-                 "cursor": _parse_cursor_quota}
+                 "cursor": _parse_cursor_quota, "dim": _parse_dim_quota}
 
 
 def _runuser_tetsuya(cmd, timeout=300):

@@ -1666,6 +1666,7 @@ function rtQuotaHtml(a) {
     return `<div class="rt-q ${cls}">
       <div class="rt-q-top"><span>${escHtml(b.label)}</span><b>${p}%</b></div>
       <div class="rt-q-track"><i style="width:${Math.max(p, 1.5)}%"></i></div>
+      ${b.detail ? `<div class="rt-q-sub">${escHtml(b.detail)}</div>` : ""}
       ${b.reset ? `<div class="rt-q-sub">${dead ? t("rt_exhausted") : t("rt_reset")} ${escHtml(b.reset)}</div>` : ""}
     </div>`;
   }).join("");
