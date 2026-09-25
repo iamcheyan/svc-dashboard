@@ -10,7 +10,7 @@ from svcdash.sysinfo import sys_info, load_zone
 from svcdash.repos import agent_repos, repo_stats, parse_repo_commits
 from svcdash.procscan import gather
 from svcdash.render import render_html, TOOL_LINKS
-from svcdash.privacy import sanitize_agent_detail_for_public
+from svcdash.privacy import sanitize_agent_detail_for_public, sanitize_runtimes_for_public
 
 
 def selftest():
@@ -71,6 +71,21 @@ def selftest():
             self.assertEqual(clean["name"], "Codex CLI")
             self.assertEqual(clean["procs"][0]["cpu_pct"], 4.5)
             self.assertEqual(clean["cron"][0]["schedule"], "0 * * * *")
+
+        def test_static_runtime_quota_is_visible_without_account_identity(self):
+            data = {"agents": [{"id": "codex", "name": "Codex", "bin": "/home/alice/bin/codex",
+                "tasks": [{"title": "private task", "cwd": "/home/alice/project"}],
+                "quota": {"ok": True, "account": "alice@example.com", "plan": "Pro",
+                    "buckets": [{"label": "Weekly · primary", "remaining_pct": 72,
+                                 "reset": "2026-09-27 12:00", "detail": "28/100 used"}]}}]}
+            clean = sanitize_runtimes_for_public(data)
+            agent = clean["agents"][0]
+            self.assertEqual(agent["quota"]["buckets"][0]["label"], "Weekly · primary")
+            self.assertEqual(agent["quota"]["buckets"][0]["remaining_pct"], 72)
+            self.assertEqual(agent["quota"]["buckets"][0]["reset"], "2026-09-27 12:00")
+            self.assertNotIn("alice@example.com", __import__("json").dumps(clean))
+            self.assertNotIn("private task", __import__("json").dumps(clean))
+            self.assertNotIn("/home/alice", __import__("json").dumps(clean))
 
         def test_fragment_cache(self):
             # 未知片段 None; 已知片段 5s 内二次调用命中同一缓存对象

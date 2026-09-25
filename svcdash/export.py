@@ -93,8 +93,16 @@ def _collect_static_snapshot():
     # Agent 智能体状态脱敏与详情收集
     clean_agent_details = {}
     try:
-        from svcdash.runtimes import scan_runtimes, REGISTRY, inspect_agent_detail
-        clean_runtimes = deep_sanitize(scan_runtimes(), mask_ips=True, mask_paths=True)
+        from svcdash.runtimes import (scan_runtimes, REGISTRY, inspect_agent_detail,
+                                      refresh_quota, quota_snapshot)
+        from svcdash.privacy import sanitize_runtimes_for_public
+        # 发布器是独立进程，没有在线 dashboard 的内存缓存；主动采集一次，
+        # 否则静态页即使保留 quota 字段也会一直没有额度水位。
+        refresh_quota()
+        quota_deadline = time.monotonic() + 110
+        while quota_snapshot().get("running") and time.monotonic() < quota_deadline:
+            time.sleep(0.25)
+        clean_runtimes = sanitize_runtimes_for_public(scan_runtimes())
         for a in REGISTRY:
             aid = a["id"]
             clean_agent_details[aid] = inspect_agent_detail(aid, for_public=True)
@@ -180,7 +188,9 @@ def gather_static_payload(lang=DEFAULT_LANG, snapshot=None):
         "reposData": deep_sanitize(repos_data, mask_ips=True, mask_paths=True),
         "tasksData": sanitize_public_payload(tasks_data),
         "tmuxData": sanitize_public_payload(clean_tmux),
-        "runtimesData": sanitize_public_payload(clean_runtimes),
+        # clean_runtimes 已由 sanitize_runtimes_for_public 处理；不要再次套用
+        # 通用内容规则，否则 quota.bucket.label 会被误判为私密文本。
+        "runtimesData": clean_runtimes,
         "agentDetails": snapshot.get("clean_agent_details", {}),
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
     }

@@ -122,6 +122,50 @@ def deep_sanitize(data, mask_ips: bool = True, mask_paths: bool = True):
     return data
 
 
+def sanitize_runtimes_for_public(data):
+    """静态 Agent 总览保留可公开的额度水位，其他内容仍按通用规则脱敏。
+
+    额度名称/百分比/重置时间/用量是用户明确需要的状态；账号邮箱不导出。
+    """
+    clean = sanitize_public_payload(data)
+
+    def quota_view(quota):
+        out = {}
+        for key in ("ok", "plan"):
+            if key in quota:
+                out[key] = quota[key] if not isinstance(quota[key], str) else sanitize_text(
+                    quota[key], mask_ips=True, mask_paths=True)
+        if "detail" in quota:
+            out["detail"] = sanitize_text(str(quota.get("detail") or ""),
+                                          mask_ips=True, mask_paths=True)
+        out["buckets"] = []
+        for bucket in quota.get("buckets") or []:
+            if not isinstance(bucket, dict):
+                continue
+            item = {}
+            for key in ("label", "reset", "detail"):
+                if key in bucket:
+                    item[key] = sanitize_text(str(bucket.get(key) or ""),
+                                              mask_ips=True, mask_paths=True)
+            if "remaining_pct" in bucket:
+                item["remaining_pct"] = bucket["remaining_pct"]
+            out["buckets"].append(item)
+        return out
+
+    def restore_quota(original, target):
+        if isinstance(original, dict) and isinstance(target, dict):
+            if "buckets" in original and "ok" in original and isinstance(original.get("buckets"), list):
+                return quota_view(original)
+            return {key: restore_quota(value, target.get(key)) for key, value in original.items()
+                    if key in target}
+        if isinstance(original, list) and isinstance(target, list):
+            return [restore_quota(value, target[i]) for i, value in enumerate(original)
+                    if i < len(target)]
+        return target
+
+    return restore_quota(data, clean)
+
+
 def sanitize_tmux_for_public(tmux_data: dict) -> dict:
     """对 Tmux 会话数据进行公网安全脱敏。
     核心安全红线：彻底清除/屏蔽实际终端输出 (preview)，防止命令回显与对话敏感信息泄露！

@@ -462,9 +462,13 @@ def refresh_quota(force=False):
         _quota["running"] = True
     def _work():
         try:
+            quota_cmd = ["bash", QUOTA_SCRIPT, "--json"]
+            # 在线 dashboard 以 root 运行时降权到数据所有者；静态发布器本来
+            # 就以该用户运行，直接执行即可（runuser 切换到同 UID 会失败）。
+            if os.geteuid() != os.stat(HOME).st_uid:
+                quota_cmd = ["/usr/sbin/runuser", "-u", "tetsuya", "--", *quota_cmd]
             out = subprocess.run(
-                ["/usr/sbin/runuser", "-u", "tetsuya", "--", "bash",
-                 QUOTA_SCRIPT, "--json"],
+                quota_cmd,
                 capture_output=True, text=True, timeout=120)
             rc, txt = out.returncode, (out.stdout or "").strip()
         except subprocess.TimeoutExpired:
