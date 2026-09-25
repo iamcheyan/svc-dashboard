@@ -1731,7 +1731,10 @@ function renderRuntimes(d) {
   const el = $("agents-page");
   if (!el || !d || !d.agents) return;
   if (!rtFilter) { try { rtFilter = localStorage.getItem("svc-rtf") || "all"; } catch (e) { rtFilter = "all"; } }
-  const all = d.agents;
+  const allAgents = d.agents || [];
+  const rtHasContent = a => (a.procs || 0) > 0 || rtHasTasks(a) || rtHasQuota(a) ||
+    !!(a.meta && ((a.meta.sessions_24h || 0) > 0 || (a.meta.sessions_total || 0) > 0));
+  const all = allAgents.filter(rtHasContent);
   const run = all.filter(a => rtState(a) === "run");
   const idle = all.filter(a => rtState(a) === "idle");
   const none = all.filter(a => rtState(a) === "none");
