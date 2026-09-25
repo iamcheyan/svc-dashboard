@@ -1143,22 +1143,29 @@ function renderAlerts(alerts) {
 
 const IMG_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i;
 
-// 自动发布器产生的固定维护提交保留在数据中，但默认不占用公开活动流。
+// 自动发布器产生的固定维护提交只折叠历史，始终保留最新一条作为发布状态。
 function isStaticPublishCommit(e) {
   if (!e || e.kind !== "commit" || e.repo !== "svc-dashboard") return false;
   const subject = String(e.subject || e.text || "").split("\n", 1)[0].trim();
   return /^Update sanitized static snapshot(?:\s|$)/i.test(subject);
 }
 
-function withoutStaticPublishCommits(events) {
-  return (events || []).filter(e => !isStaticPublishCommit(e));
+function withLatestStaticPublishCommit(events) {
+  const list = events || [];
+  let latestIndex = -1, latestTs = -Infinity;
+  list.forEach((e, i) => {
+    if (!isStaticPublishCommit(e)) return;
+    const ts = Number(e.ts) || 0;
+    if (ts > latestTs) { latestTs = ts; latestIndex = i; }
+  });
+  return list.filter((e, i) => !isStaticPublishCommit(e) || i === latestIndex);
 }
 
 function renderPortalActivity(events) {
   const body = $("hp-body-activity"), badge = $("hp-badge-activity");
   if (!body) return;
   const evts = events || [];
-  const commits = withoutStaticPublishCommits(evts).filter(e => e.kind === "commit");
+  const commits = withLatestStaticPublishCommit(evts).filter(e => e.kind === "commit");
   if (badge) badge.textContent = commits.length ? t("hp_recent_count", { n: commits.length }) : "";
   const recent = commits.slice(0, 4);
   if (!recent.length) {
@@ -1638,7 +1645,7 @@ async function renderActivityPage() {
   if (!container) return;
   const d = await fetchGoalsData();
   const events = (d && d.events) || [];
-  const activityEvents = showStaticPublishCommits ? events : withoutStaticPublishCommits(events);
+  const activityEvents = showStaticPublishCommits ? events : withLatestStaticPublishCommit(events);
   if (!activityEvents.length) {
     container.innerHTML = `<div class="gempty">${escHtml(t("act_empty"))}</div>`;
     return;
@@ -1724,7 +1731,7 @@ async function renderActivityPage() {
   const autoToggle = $("act-auto-publish-toggle");
   if (autoToggle) {
     autoToggle.classList.toggle("active", showStaticPublishCommits);
-    const hiddenCount = events.length - activityEvents.length;
+    const hiddenCount = Math.max(0, events.filter(isStaticPublishCommit).length - 1);
     autoToggle.textContent = `${t(showStaticPublishCommits ? "act_hide_auto" : "act_show_auto")}${hiddenCount && !showStaticPublishCommits ? ` (${hiddenCount})` : ""}`;
   }
 
