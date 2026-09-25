@@ -121,3 +121,73 @@ HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）�
   goal 终态自动 kill+回收 tmux 并记 `~/.omp/logs/goal-completed.log`（含 resume_cmd
   可复活）——**会话自动消失是正常回收不是故障**。
 - 手动停 goal：kill omp 进程 + touch off 文件 + 删 GOALS 行，三步缺一不可。
+
+## 八、静态公网看板自动发布
+
+公网地址：`https://svc.iamcheyan.com`。静态版不是实时 API，而是本机定期生成的脱敏快照。
+自动发布使用本机 systemd **用户级** timer，不依赖 GitHub Actions 访问本机的 tmux、Goal、进程和日志。
+
+### 发布逻辑
+
+```text
+本机数据源 → export_static() → Goal/Agent/Tmux/命令/路径二次脱敏
+           → 生成 cache-busting CSS/JS 版本
+           → 计算整站 hash
+           → 与上次已发布 hash 相同则跳过
+           → 有变化才 force-push origin/gh-pages
+```
+
+- 默认每 10 分钟运行一次；首次启动后约 3 分钟执行。
+- `flock` 防止上一次收集或推送未完成时重入。
+- 状态 hash 位于 `~/.cache/svc-dashboard-static/last-published.sha256`。
+- 默认自定义域名为 `svc.iamcheyan.com`，可用 `SVC_DASHBOARD_CNAME` 覆盖。
+- 公开仓库的提交评论、文件变更路径和仓库轨迹按用户要求保留；Goal/Agent 对话、Tmux 标题/路径/终端输出仍脱敏。
+- 静态服务页不提供详情弹窗；启动命令显示为 `[命令已隐藏]`，防止公开命令参数和工作目录。
+- 静态 Agent 页的模型“测试”不执行真实请求，显示为静态快照提示；真实模型测试只能在需要登录/令牌的私有 dashboard 上执行。
+- 活动页事件分两类处理：`kind=commit` 的 Git 提交事件属于公开仓库信号，保留提交说明、文件路径、作者和 Diff 入口；Goal/watchdog 的 `complete`、`cleanup`、`recover`、`nudge` 等事件只保留 Goal ID、事件类型和时间，正文统一显示 `[内容已脱敏]`。
+- 因此活动页出现“部分正常、部分 `[内容已脱敏]`”是预期行为，不是导出失败：前者是公开 Git 活动，后者是 Agent/Goal 内部日志。
+- 自动发布器产生的 `svc-dashboard` / `Update sanitized static snapshot ...` 维护提交默认从首页、活动页和日志活动流排除，避免周期性发布刷屏；活动页筛选条中的“显示自动发布”可手动恢复查看。其他真实的 `svc-dashboard` Git 提交仍正常显示。
+- 只读静态快照顶部的“在线版”入口用于切回实时 dashboard：从内网地址打开时回到当前内网主机，从 Tailscale 地址打开时回到当前 Tailscale 主机，从公网 GitHub Pages 打开时默认回到本机 Tailscale 地址 `100.76.219.104`。该入口只在静态只读版显示。
+- 静态快照的负载/CPU 图不依赖访客浏览器的 `localStorage`：发布器把每次快照的系统采样保存到 `~/.cache/svc-dashboard-static/chart.json`，导出最多 24 个点并注入 `BOOT.chartData`；首次发布用当前采样填满窗口，后续定时发布逐步形成真实趋势。在线版仍使用浏览器实时采样。
+- 界面语言支持中文、英文、日文：在线版默认遵从浏览器 `Accept-Language`，也可用 `?lang=zh|en|ja` 指定；顶部语言菜单可以选择“自动”或固定语言，选择保存在浏览器 `localStorage` 的 `svc-lang`。静态版同时发布 `index.html`、`index-en.html`、`index-ja.html`，首次打开按浏览器语言自动跳到对应版本；菜单选择在三个静态文件之间切换，并保留当前页面锚点。切回“自动”会重新使用系统/浏览器语言。
+- GitHub Pages 的传统分支发布有每小时 10 次构建软上限，因此不要改成每 5 分钟；10 分钟最多 6 次/小时。
+- Pages 从推送到公网可见还可能有缓存/构建延迟；静态版适合趋势和状态查看，不适合实时控制。
+
+### 首次安装与启用
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp systemd/svc-dashboard-static-publish.service ~/.config/systemd/user/
+cp systemd/svc-dashboard-static-publish.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now svc-dashboard-static-publish.timer
+systemctl --user status svc-dashboard-static-publish.timer
+```
+
+用户服务要在没有登录 SSH 时继续运行，可启用 linger（需要管理员权限）：
+
+```bash
+loginctl enable-linger "$USER"
+```
+
+### 手动运行、查看和停用
+
+```bash
+# 立即执行一次（不等待 timer）
+systemctl --user start svc-dashboard-static-publish.service
+
+# 查看最近日志
+journalctl --user -u svc-dashboard-static-publish.service -n 100 --no-pager
+
+# 查看下次执行时间
+systemctl --user list-timers svc-dashboard-static-publish.timer
+
+# 强制重新推送，即使 hash 没变化
+SVC_DASHBOARD_FORCE=1 scripts/publish_static_snapshot.sh
+
+# 停用自动发布
+systemctl --user disable --now svc-dashboard-static-publish.timer
+```
+
+脚本要求当前用户已有 `origin` 的 Git 推送凭据；自动任务不会调用 sudo，也不会修改主服务
+`svc-dashboard.service`。如果推送失败，hash 不会写入，下一次 timer 会自动重试。

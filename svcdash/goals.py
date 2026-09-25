@@ -157,7 +157,8 @@ def merge_events(wd_events, completed, commits=None, limit=24):
     for c in completed:
         merged.append({"ts": c["ts"], "time": c["time"], "gid": c["gid"],
                        "name": c["label"] or c["gid"][:8], "kind": "complete",
-                       "text": c["transcript"], "src": "done"})
+                       "text": c["transcript"], "src": "done",
+                       "resume_cmd": c.get("resume_cmd", "")})
     merged.extend(commits or [])
     merged.sort(key=lambda x: -x["ts"])
     return merged[:limit]

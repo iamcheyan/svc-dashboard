@@ -1,0 +1,12 @@
+[Unit]
+Description=Publish svc-dashboard static snapshot every 10 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=svc-dashboard-static-publish.service
+
+[Install]
+WantedBy=timers.target

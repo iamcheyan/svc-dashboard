@@ -1,0 +1,9 @@
+[Unit]
+Description=Publish sanitized svc-dashboard static snapshot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/tetsuya/development/svc-dashboard
+ExecStart=/home/tetsuya/development/svc-dashboard/scripts/publish_static_snapshot.sh

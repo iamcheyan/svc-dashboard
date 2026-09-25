@@ -1,16 +1,19 @@
 <!DOCTYPE html>
 <html lang="{{LANG}}">
 <head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a0a0a">
 <script>/* 主题预置: 在 CSS 生效前落 data-theme, 防浅色偏好下闪深色(FOUC) */
 try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")document.documentElement.setAttribute("data-theme",_tm)}catch(e){}</script>
+<script>/* 语言默认跟随系统；手动选择保存在本机。静态快照用并列语言页切换。 */
+(()=>{try{const langs=["zh","en","ja"],base=x=>String(x||"").toLowerCase().split("-")[0],valid=x=>langs.includes(x),q=new URLSearchParams(location.search),query=base(q.get("lang")),saved=localStorage.getItem("svc-lang"),device=base((navigator.languages&&navigator.languages[0])||navigator.language)||"zh",target=valid(query)?query:(valid(saved)?saved:(valid(device)?device:"zh"));if(document.documentElement.classList.contains("is-readonly")){const file=target==="zh"?"index.html":`index-${target}.html`,dir=location.pathname.endsWith("/")?location.pathname:location.pathname.slice(0,location.pathname.lastIndexOf("/")+1),path=dir+file;if(location.pathname!==path)location.replace(path+location.search+location.hash)}else if(!query&&valid(saved)){q.set("lang",saved);location.replace(location.pathname+"?"+q.toString()+location.hash)}}catch(e){}})();</script>
 <title>Mikata · {{HOSTNAME}}</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="%23141519"/><path d="M9 16C12.2 11.2 19.8 11.2 23 16M9 16C12.2 20.8 19.8 20.8 23 16" stroke="%23F4F0E6" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="16" cy="16" r="3" fill="%23E2604C"/></svg>'>
-<link rel="stylesheet" href="/static/app.css?v=7c4f1a2d">
+<link rel="stylesheet" href="/static/app.css?v=297cb5b4b059">
 <header>
   <!-- topbar: 左=品牌 Mikata(守护之眼纹 logo) · 服务器名(绿点=在线), 右=分类条+刷新。 -->
-  <h1 title="Mikata · {{T:title}}"><span class="h-logo" aria-hidden="true">{{ICO:mikata:23}}</span><span class="h-brand">Mikata</span><span class="h-sep" aria-hidden="true">·</span><span class="h-host"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</span></h1>
+  <h1 title="Mikata · {{T:title}}"><a class="h-home-link" href="./" aria-label="返回首页"><span class="h-logo" aria-hidden="true">{{ICO:mikata:23}}</span><span class="h-brand">Mikata</span></a><span class="h-sep" aria-hidden="true">·</span><span class="h-host"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</span></h1>
   <span class="h-conn" id="conn-grid"></span>
   <span class="meta" id="meta-line" hidden>
     <span id="updated">{{UPDATED}}</span> <span id="count">{{COUNT}}</span>
@@ -18,6 +21,20 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <span class="spacer"></span>
   <!-- 桌面端分类条(右上角): 概览/服务/Goal/管理; 移动端使用底部页签 -->
   <nav id="catbar" aria-label="category"></nav>
+
+  <div class="lang-switch" id="lang-switch">
+    <button class="lang-trigger" id="lang-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="{{T:lang_label}}" title="{{T:lang_label}}">
+      <svg class="lang-globe" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6.4"></circle><path d="M1.9 8h12.2M8 1.6c1.7 1.8 2.5 3.9 2.5 6.4s-.8 4.6-2.5 6.4C6.3 12.6 5.5 10.5 5.5 8s.8-4.6 2.5-6.4Z"></path></svg>
+      <span id="lang-current">AUTO</span><svg class="lang-chevron" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m3 4.5 3 3 3-3"></path></svg>
+    </button>
+    <div class="lang-menu" id="lang-menu" role="menu" aria-label="{{T:lang_label}}" hidden>
+      <div class="lang-menu-title">{{T:lang_label}}</div>
+      <button class="lang-option" type="button" role="menuitemradio" data-lang-choice="auto"><span class="lang-option-main">{{T:lang_auto}}</span><span class="lang-option-detail">AUTO</span><span class="lang-check" aria-hidden="true">✓</span></button>
+      <button class="lang-option" type="button" role="menuitemradio" data-lang-choice="zh"><span class="lang-option-main">简体中文</span><span class="lang-option-detail">中文</span><span class="lang-check" aria-hidden="true">✓</span></button>
+      <button class="lang-option" type="button" role="menuitemradio" data-lang-choice="en"><span class="lang-option-main">English</span><span class="lang-option-detail">EN</span><span class="lang-check" aria-hidden="true">✓</span></button>
+      <button class="lang-option" type="button" role="menuitemradio" data-lang-choice="ja"><span class="lang-option-main">日本語</span><span class="lang-option-detail">日本語</span><span class="lang-check" aria-hidden="true">✓</span></button>
+    </div>
+  </div>
 
   <span class="btn icon-btn" id="refresh" role="button" tabindex="0"
         title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:17}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
@@ -36,52 +53,100 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     </a></div>
   <div class="sc-sub"><span id="sc-fresh"></span><span class="stale" id="sc-stale" hidden> {{T:st_stale}}</span></div>
 </div>
-<div class="mgrid4">
-  <div class="mcell"><span class="mnum" id="m-svc">—</span><span class="mlabel">{{T:m_svc_ok}}</span></div>
-  <div class="mcell"><span class="mnum" id="m-run">—</span><span class="mlabel">{{T:m_goal_run}}</span></div>
-  <div class="mcell"><span class="mnum" id="m-bad">—</span><span class="mlabel">{{T:m_goal_bad}}</span></div>
-  <div class="mcell"><span class="mnum" id="m-alert">—</span><span class="mlabel">{{T:m_alerts}}</span></div>
-</div>
-<div class="gpanel" id="alerts">
-  <h2>{{T:al_title}}</h2>
-  <div id="alert-body" class="alert-body"><div class="gempty">{{T:st_loading}}</div></div>
-</div>
-<!-- 桌面首页网格: Web磁贴 / Goal摘要 / 最近活动 (移动端沿用原顺序,由 PAGE_GROUPS 分组) -->
-<div class="hp-grid" id="hp-grid">
-  <div class="gpanel hp-web">
-    <h2>{{T:hp_web}} <span class="ghint">{{T:hp_web_hint}}</span></h2>
-    <div class="hp-tiles" id="hp-tiles"><div class="gempty">{{T:st_loading}}</div></div>
-  </div>
-  <div class="gpanel hp-goals">
-    <h2>{{T:hp_goal_sum}} <span class="ghint hp-more" data-go="goal" role="button" tabindex="0">{{T:hp_goal_more}}</span></h2>
-    <div id="hp-goal-body"><div class="gempty">{{T:st_loading}}</div></div>
-  </div>
-  <div class="gpanel" id="recent">
-    <h2>{{T:rc_title}} <span class="ghint rc-more" role="button" tabindex="0">{{T:rc_more}}</span></h2>
-    <div id="recent-body"></div>
-  </div>
-</div>
 {{SYSBAR}}
-<div class="gpanel hp-aiclean" id="hp-aiclean">
-  <h2>{{T:tl_aiclean_title}} <span class="ghint">{{T:tl_aiclean_hint_short}}</span></h2>
-  <div class="hp-aiclean-body">
-    <span class="btn tl-run" id="hp-aiclean-run" role="button" tabindex="0">{{T:tl_aiclean_run}}</span>
-    <span id="hp-aiclean-status" class="hp-aiclean-st"></span>
-  </div>
-</div>
-<div class="gpanel" id="repos">
-  <h2>{{T:rp_title}} <span class="ghint">{{T:rp_hint}}</span>
-    <span class="rp-refresh" id="rp-refresh" role="button" tabindex="0" title="{{T:rp_refresh}}" aria-label="{{T:rp_refresh}}">{{ICO:refresh:14}}</span></h2>
-  <div id="repos-body"><div class="gempty">{{T:a_loading}}</div></div>
-</div>
 <div class="gpanel" id="chart-wrap">
   <h2>{{T:chart_title}} <span class="ghint" id="chart-win"></span></h2>
-  <canvas id="chart" width="640" height="150"></canvas>
+  <canvas id="chart" height="140"></canvas>
   <div id="chart-empty">{{T:chart_empty}}</div>
+</div>
+<div class="hp-portal-grid" id="hp-portal-grid">
+  <!-- 1. 近期动态概览 -->
+  <div class="gpanel hp-portal-card" id="hp-card-activity">
+    <div class="hp-portal-header">
+      <div class="hp-portal-title">
+        <span class="hp-portal-ico" style="color:#f472b6;">{{ICO:git:16}}</span>
+        <h3>{{T:tab_activity}}</h3>
+        <span class="hp-portal-badge" id="hp-badge-activity"></span>
+      </div>
+      <button class="hp-portal-jump" type="button" data-nav="activity">
+        <span>{{T:hp_view_all}}</span> {{ICO:chev:11}}
+      </button>
+    </div>
+    <div class="hp-portal-body" id="hp-body-activity">
+      <div class="gempty">{{T:st_loading}}</div>
+    </div>
+  </div>
+
+  <!-- 2. Tmux 会话概览 -->
+  <div class="gpanel hp-portal-card" id="hp-card-tmux">
+    <div class="hp-portal-header">
+      <div class="hp-portal-title">
+        <span class="hp-portal-ico" style="color:#38bdf8;">{{ICO:terminal:16}}</span>
+        <h3>{{T:tab_tmux}}</h3>
+        <span class="hp-portal-badge" id="hp-badge-tmux"></span>
+      </div>
+      <button class="hp-portal-jump" type="button" data-nav="tmux">
+        <span>{{T:hp_view_all}}</span> {{ICO:chev:11}}
+      </button>
+    </div>
+    <div class="hp-portal-body" id="hp-body-tmux">
+      <div class="gempty">{{T:st_loading}}</div>
+    </div>
+  </div>
+
+  <!-- 3. 服务监控概览 -->
+  <div class="gpanel hp-portal-card" id="hp-card-svc">
+    <div class="hp-portal-header">
+      <div class="hp-portal-title">
+        <span class="hp-portal-ico" style="color:#4ade80;">{{ICO:cpu:16}}</span>
+        <h3>{{T:tab_svc}}</h3>
+        <span class="hp-portal-badge" id="hp-badge-svc"></span>
+      </div>
+      <button class="hp-portal-jump" type="button" data-nav="svc">
+        <span>{{T:hp_view_all}}</span> {{ICO:chev:11}}
+      </button>
+    </div>
+    <div class="hp-portal-body" id="hp-body-svc">
+      <div class="gempty">{{T:st_loading}}</div>
+    </div>
+  </div>
+
+  <!-- 4. Agent 智能体概览 -->
+  <div class="gpanel hp-portal-card" id="hp-card-agent">
+    <div class="hp-portal-header">
+      <div class="hp-portal-title">
+        <span class="hp-portal-ico" style="color:#a78bfa;">{{ICO:bolt:16}}</span>
+        <h3>{{T:tab_agent}}</h3>
+        <span class="hp-portal-badge" id="hp-badge-agent"></span>
+      </div>
+      <button class="hp-portal-jump" type="button" data-nav="agent">
+        <span>{{T:hp_view_all}}</span> {{ICO:chev:11}}
+      </button>
+    </div>
+    <div class="hp-portal-body" id="hp-body-agent">
+      <div class="gempty">{{T:st_loading}}</div>
+    </div>
+  </div>
 </div>
 {{TOOLCHIPS}}
 {{GOALS_PANEL}}
-{{EVENTS_PANEL}}
+<div class="gpanel" id="activity-page" hidden>
+  <div class="act-header">
+    <h2>{{T:act_title}} <span class="ghint">{{T:act_hint}}</span></h2>
+  </div>
+  <div class="act-repos-bar" id="act-repos-bar"></div>
+  <div class="filters act-filters" id="act-filters">
+    <span class="chip active" data-af="all" role="button" tabindex="0">{{T:act_all}} <span id="n-act-all"></span></span>
+    <span class="chip" data-af="commit" role="button" tabindex="0">{{T:act_commits}} <span id="n-act-commit"></span></span>
+    <span class="chip" data-af="img" role="button" tabindex="0">{{ICO:img:13}} {{T:act_filter_img}} <span id="n-act-img"></span></span>
+    <span class="chip" data-af="both" role="button" tabindex="0">{{T:act_synced}} <span id="n-act-both"></span></span>
+    <span class="chip" data-af="local" role="button" tabindex="0">{{T:act_local}} <span id="n-act-local"></span></span>
+    <span class="chip" data-af="done" role="button" tabindex="0">{{T:act_goals}} <span id="n-act-done"></span></span>
+    <span class="chip" data-af="watchdog" role="button" tabindex="0">{{T:act_watchdog}} <span id="n-act-watchdog"></span></span>
+    <span class="chip act-auto-publish-toggle" id="act-auto-publish-toggle" role="button" tabindex="0">{{T:act_show_auto}}</span>
+  </div>
+  <div id="activity-body"><div class="gempty">{{T:a_loading}}</div></div>
+</div>
 <div class="filters" id="filters">
   <span class="chip" data-f="user" role="button" tabindex="0">{{T:chip_user}} <span id="n-user"></span></span>
   <span class="chip" data-f="web" role="button" tabindex="0">{{T:chip_web}} <span id="n-web"></span></span>
@@ -105,119 +170,56 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   </tbody>
 </table>
 </div>
+<div class="gpanel svc-panel" id="cron-panel">
+  <h2>{{T:tl_cron_title}} <span class="ghint" id="cron-count"></span></h2>
+  <table id="cron">
+    <thead><tr>
+      <th>{{T:t_task}}</th><th>{{T:t_cycle}}</th><th>{{T:t_source}}</th>
+    </tr></thead>
+    <tbody id="tl-cron-body"></tbody>
+  </table>
+</div>
 <div class="gpanel" id="agents-page" hidden>
-  <h2>{{T:tab_agent}} <span class="ghint">{{T:chip_omp}}</span></h2>
-</div>
-<div class="gpanel" id="logpage" hidden>
-  <h2>{{T:tab_log}}</h2>
-  <div class="logbar"><div class="ui-select" id="logagent-picker"><span class="ui-select-value" id="logagent-value">{{T:log_pick}}</span><span class="ui-select-chevron">{{ICO:down:14}}</span><div class="ui-select-menu" id="logagent-menu" hidden></div></div><select id="logagent-sel" class="select-model" aria-hidden="true" tabindex="-1"><option value="">{{T:log_pick}}</option></select></div>
-  <div class="filters" id="log-filters">
-    <span class="chip active" data-lf="all" role="button" tabindex="0">{{T:lf_all}}</span>
-    <span class="chip" data-lf="ok" role="button" tabindex="0"><i class="cdot cdot-ok" aria-hidden="true"></i>{{T:lf_success}}</span>
-    <span class="chip" data-lf="warn" role="button" tabindex="0"><i class="cdot cdot-warn" aria-hidden="true"></i>{{T:lf_warn}}</span>
-    <span class="chip" data-lf="fail" role="button" tabindex="0"><i class="cdot cdot-fail" aria-hidden="true"></i>{{T:lf_fail}}</span>
-    <span class="chip" data-lf="recover" role="button" tabindex="0"><i class="cdot cdot-recover" aria-hidden="true"></i>{{T:lf_recover}}</span>
-    <span class="chip active" data-ls="all" role="button" tabindex="0">{{T:lf_wd}}</span>
-    <span class="chip" data-ls="done" role="button" tabindex="0">{{T:lf_done}}</span>
-    <span class="chip" data-ls="commit" role="button" tabindex="0">{{T:lf_commit}}</span>
-    <span class="chip active" data-lt="24" role="button" tabindex="0">24h</span>
-    <span class="chip" data-lt="72" role="button" tabindex="0">{{T:lf_3d}}</span>
-    <span class="chip" data-lt="168" role="button" tabindex="0">{{T:lf_7d}}</span>
-    <span class="chip" data-lt="0" role="button" tabindex="0">{{T:lf_time}}{{T:lf_all}}</span>
-  </div>
-  <div id="logbody"></div>
-</div>
-<div class="gpanel toolspage" id="toolspage" hidden>
-  <h2>{{T:tab_manage}}</h2>
-  <!-- P1-10: 4 分组 巡检→运维→直达→偏好; P1-11: 桌面 2 列(#tlg-insp 左 / #tlg-ops 右, 直达+偏好全宽) -->
-  <div class="tl-group" id="tlg-insp">
-    <div class="tl-grouph">{{T:tl_grp_insp}}</div>
-    <!-- F2 健康检查 -->
-    <div class="tl-sec" id="tl-health">
-      <div class="tl-sechead">
-        <h3>{{T:tl_health_title}}</h3>
-        <span class="btn tl-run" id="tl-health-run" role="button" tabindex="0">{{T:tl_health_run}}</span>
+  <div class="agent-header">
+    <h2>{{T:agent_hub_title}} <span class="ghint">{{T:agent_hub_hint}}</span></h2>
+    <div class="agent-header-actions">
+      <div class="agent-search-wrap">
+        <input type="search" id="agent-search" placeholder="{{T:agent_search_ph}}" autocomplete="off" />
       </div>
-      <div id="tl-health-body"><div class="gempty">{{T:st_loading}}</div></div>
-    </div>
-
-    <!-- G3 网络速测 -->
-    <div class="tl-sec" id="tl-net">
-      <div class="tl-sechead">
-        <h3>{{T:tl_net_title}}</h3>
-        <span class="btn tl-run" id="tl-net-run" role="button" tabindex="0">{{T:tl_net_run}}</span>
-      </div>
-      <div id="tl-net-body"><div class="gempty">—</div></div>
-    </div>
-
-    <!-- G4 计划任务一览(只读) -->
-    <div class="tl-sec" id="tl-cron">
-      <h3>{{T:tl_cron_title}}</h3>
-      <div id="tl-cron-body"><div class="gempty">{{T:st_loading}}</div></div>
+      <button class="btn-agent-top" id="btn-probe-all" title="{{T:agent_test_all}}">
+        {{ICO:bolt:13}} <span>{{T:agent_test_all}}</span>
+      </button>
+      <button class="btn-agent-top" id="btn-refresh-quota" title="{{T:agent_refresh_quota}}">
+        {{ICO:retry:13}} <span>{{T:agent_refresh_quota}}</span>
+      </button>
     </div>
   </div>
-
-  <div class="tl-group" id="tlg-ops">
-    <div class="tl-grouph">{{T:tl_grp_ops}}</div>
-
-    <!-- F3 垃圾清理(dry_run 默认 true, 不许改) -->
-    <div class="tl-sec" id="tl-clean">
-      <div class="tl-sechead">
-        <h3>{{T:tl_clean_title}}</h3>
-        <span class="btn tl-run" id="tl-clean-scan" role="button" tabindex="0">{{T:tl_clean_scan}}</span>
-        <span class="btn tl-run" id="tl-clean-exec" role="button" tabindex="0" hidden>{{T:tl_clean_exec}}</span>
-      </div>
-      <div id="tl-clean-body" hidden></div>
-    </div>
-
-    <!-- F3b AI 一键清理(调 omp agent 按描述词智能分析, 护住 goal/基础服务) -->
-    <div class="tl-sec" id="tl-aiclean">
-      <div class="tl-sechead">
-        <h3>{{T:tl_aiclean_title}}</h3>
-        <span class="btn tl-run" id="tl-aiclean-run" role="button" tabindex="0">{{T:tl_aiclean_run}}</span>
-      </div>
-      <div class="hint" style="padding:0 12px 6px">{{T:tl_aiclean_hint}}</div>
-      <pre id="tl-aiclean-body" class="tl-docker-pre" hidden></pre>
-    </div>
-
-    <!-- G2 用户级服务重启(I-KNOW 护栏, 默认锁; 逻辑不许放松) -->
-    <div class="tl-sec" id="tl-usvc">
-      <div class="tl-sechead">
-        <h3>{{T:tl_usvc_title}}</h3>
-        <span class="tl-usvc-unlock" id="tl-usvc-unlockwrap" hidden>
-          <input type="text" id="tl-usvc-code" placeholder="I-KNOW" autocomplete="off">
-          <span class="btn tl-run" id="tl-usvc-unlock" role="button" tabindex="0">{{T:tl_usvc_unlock}}</span>
-        </span>
-        <span class="btn tl-run" id="tl-usvc-showlock" role="button" tabindex="0" title="{{T:tl_usvc_title}}">{{ICO:lock:14}}</span>
-      </div>
-      <div id="tl-usvc-body"></div>
-    </div>
+  <div class="agent-kpi-grid" id="agent-kpis"></div>
+  <div id="agent-low-quota-wrap" hidden></div>
+  <div class="filters agent-filters" id="agent-filters">
+    <span class="chip active" data-rtf="all" role="button" tabindex="0">{{T:rt_f_all}} <span id="n-rtf-all"></span></span>
+    <span class="chip" data-rtf="run" role="button" tabindex="0"><span class="agent-status-dot on"></span> {{T:rt_f_run}} <span id="n-rtf-run"></span></span>
+    <span class="chip" data-rtf="tasks" role="button" tabindex="0">{{ICO:terminal:13}} {{T:rt_f_tasks}} <span id="n-rtf-tasks"></span></span>
+    <span class="chip" data-rtf="quota" role="button" tabindex="0">{{ICO:gauge:13}} {{T:rt_f_quota}} <span id="n-rtf-quota"></span></span>
+    <span class="chip" data-rtf="none" role="button" tabindex="0">{{T:rt_f_none}} <span id="n-rtf-none"></span></span>
   </div>
-
-  <div class="tl-group" id="tlg-pref">
-    <div class="tl-grouph">{{T:tl_grp_pref}}</div>
-    <!-- 主题三选: 跟随系统 / 深色 / 浅色(localStorage 记住, html[data-theme] 生效) -->
-    <div class="tl-sec" id="tl-theme">
-      <div class="tl-sechead"><h3>{{T:theme_title}}</h3></div>
-      <div class="filters themechips" id="theme-chips">
-        <span class="chip active" data-thm="auto" role="button" tabindex="0">{{T:th_auto}}</span>
-        <span class="chip" data-thm="dark" role="button" tabindex="0">{{T:th_dark}}</span>
-        <span class="chip" data-thm="light" role="button" tabindex="0">{{T:th_light}}</span>
-      </div>
-    </div>
-  </div>
+  <div id="agent-cards-container"><div class="gempty">{{T:a_loading}}</div></div>
+  <div id="agent-models-section"></div>
+  <div id="agent-env-section"></div>
 </div>
 </div>
 </main>
 <nav id="tabbar" aria-label="{{T:title}}">
   <span class="tab" data-p="0" role="button" tabindex="0" aria-label="{{T:tab_home}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8.5 8 3l6 5.5V14H9.5v-4h-5v4H2z"/></svg><span class="tlabel">{{T:tab_home}}</span><span class="tbadge-dot" id="tab-alert-badge" hidden></span></span>
-  <span class="tab" data-p="1" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
+  <span class="tab" data-p="1" role="button" tabindex="0" aria-label="{{T:tab_activity}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.5 8.5h3l2.2-5.5 3 10.5 2-6.5h2.8"/></svg><span class="tlabel">{{T:tab_activity}}</span></span>
+  <span class="tab" data-p="2" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg><span class="tlabel">{{T:tab_svc}}</span></span>
-  <span class="tab" data-p="2" role="button" tabindex="0" aria-label="{{T:tab_goal}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/></svg><span class="tlabel">{{T:tab_goal}}</span></span>
-  <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_manage}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h12M2 8h12M2 11.5h12"/></svg><span class="tlabel">{{T:tab_manage}}</span></span>
+  <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_tmux}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="m5 6.5 2 1.5-2 1.5M9 10h2"/></svg><span class="tlabel">{{T:tab_tmux}}</span></span>
+  <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_agent}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="10" height="9" rx="2"/><circle cx="6" cy="8.5" r="1" fill="currentColor"/><circle cx="10" cy="8.5" r="1" fill="currentColor"/><path d="M8 1.5v2.5M6 1.5h4M5 11h6"/></svg><span class="tlabel">{{T:tab_agent}}</span></span>
 </nav>
 <div class="ui-modal" id="ui-modal" hidden role="presentation">
   <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="ui-dialog-title">
@@ -251,7 +253,31 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <div class="traj-filter" id="traj-filter" hidden></div>
   <div class="traj-body" id="traj-body"></div>
 </div>
+<!-- Agent 详情全屏滑层 / 面板 -->
+<div class="agent-sheet" id="agent-detail-sheet" hidden>
+  <div class="agent-sheet-top">
+    <span class="traj-iconbtn" id="agent-sheet-back" role="button" tabindex="0" aria-label="{{T:m_close}}">{{ICO:back:20}}</span>
+    <div class="agent-sheet-title-wrap">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="agent-status-dot" id="agent-sheet-dot"></span>
+        <h2 class="agent-sheet-title" id="agent-sheet-title">Agent</h2>
+        <span class="agent-pill" id="agent-sheet-pill"></span>
+      </div>
+      <span class="agent-sheet-sub" id="agent-sheet-sub"></span>
+    </div>
+  </div>
+  <div class="agent-sheet-nav" id="agent-sheet-nav">
+    <span class="chip active" data-adtab="basic">{{T:agent_tab_basic}}</span>
+    <span class="chip" data-adtab="skills">{{T:agent_tab_skills}} <span id="ad-skills-count"></span></span>
+    <span class="chip" data-adtab="platforms">{{T:agent_tab_platforms}}</span>
+    <span class="chip" data-adtab="memories">{{T:agent_tab_memories}}</span>
+    <span class="chip" data-adtab="cron">{{T:agent_tab_cron}} <span id="ad-cron-count"></span></span>
+  </div>
+  <div class="agent-sheet-body" id="agent-sheet-body">
+    <div class="gempty">{{T:st_loading}}</div>
+  </div>
+</div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
-<script src="/static/app.js?v=7c4f1a2d" defer></script>
+<script src="/static/app.js?v=297cb5b4b059" defer></script>
 </body>
 </html>

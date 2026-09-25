@@ -770,6 +770,26 @@ def _meta_for(agent_id):
     return meta
 
 
+def _system_ai_env():
+    """获取本机 AI 开发环境关键组件版本。"""
+    versions = {}
+    tools = [
+        ("bun", ["bun", "--version"]),
+        ("node", ["node", "--version"]),
+        ("python", ["python3", "--version"]),
+        ("git", ["git", "--version"])
+    ]
+    for name, cmd in tools:
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=2).stdout.strip()
+            if out:
+                v = out.replace("git version ", "").replace("Python ", "").strip()
+                versions[name] = v
+        except Exception:
+            pass
+    return versions
+
+
 def scan_runtimes():
     now = time.time()
     if _rt_cache["data"] is not None and now - _rt_cache["t"] < 10:
@@ -825,6 +845,225 @@ def scan_runtimes():
     data = {"updated": now, "agents": result, "models": scan_models(),
             "total_installed": sum(1 for a in REGISTRY if find_bin(a["bins"])),
             "total_running": sum(len(v) for v in procs.values()),
+            "env_tools": _system_ai_env(),
             "quota": qs, "ctl": ctl}
     _rt_cache.update({"t": now, "data": data})
     return data
+
+
+# ---------------- 深度 Agent 详情自省 (Skills / MCP / Gateway / 记忆 / 设定) ----------------
+
+def _extract_skills(base_dir):
+    """递归扫描技能目录中的 SKILL.md，提取技能名、分类与描述。"""
+    import glob as _glob
+    skills = []
+    if not base_dir or not os.path.isdir(base_dir):
+        return skills
+    for p in sorted(_glob.glob(os.path.join(base_dir, "**", "SKILL.md"), recursive=True)):
+        dirpath = os.path.dirname(p)
+        name = os.path.basename(dirpath)
+        rel = os.path.relpath(dirpath, base_dir)
+        cat = os.path.dirname(rel) if "/" in rel else ""
+        desc = ""
+        try:
+            with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                head = f.read(1500)
+                if head.startswith("---"):
+                    parts = head.split("---", 2)
+                    if len(parts) >= 3:
+                        import yaml as _yaml
+                        fm = _yaml.safe_load(parts[1])
+                        if isinstance(fm, dict):
+                            desc = str(fm.get("description") or "")
+        except Exception:
+            pass
+        skills.append({
+            "name": name,
+            "category": cat or "general",
+            "description": desc[:180] + ("…" if len(desc) > 180 else "")
+        })
+    return skills
+
+
+def inspect_agent_detail(agent_id: str, for_public: bool = False) -> dict:
+    """深度自省指定 Agent 的配置、运行状态、技能矩阵、MCP、通讯平台与记忆。"""
+    reg = next((r for r in REGISTRY if r["id"] == agent_id), None)
+    if not reg:
+        return {"ok": False, "msg": f"unknown agent: {agent_id}"}
+
+    binpath = find_bin(reg["bins"])
+    ver = agent_version(binpath) if binpath else ""
+    procs = scan_procs().get(agent_id, [])
+
+    detail = {
+        "ok": True,
+        "id": agent_id,
+        "name": reg["name"],
+        "installed": bool(binpath),
+        "bin": binpath or "",
+        "version": ver,
+        "procs": procs,
+        "models": {},
+        "skills": [],
+        "mcp_servers": [],
+        "platforms": {},
+        "gateway": None,
+        "memories": {},
+        "cron": [],
+        "config_summary": {},
+    }
+
+    # 1. Hermes 专项自省
+    if agent_id == "hermes":
+        hermes_home = HOME + "/.hermes"
+        # 1.1 技能
+        detail["skills"] = _extract_skills(os.path.join(hermes_home, "skills"))
+
+        # 1.2 Gateway 状态与平台 (Telegram/Discord等)
+        gw_path = os.path.join(hermes_home, "gateway_state.json")
+        if os.path.isfile(gw_path):
+            try:
+                with open(gw_path, "r", encoding="utf-8") as f:
+                    gw_data = json.load(f)
+                    detail["gateway"] = {
+                        "state": gw_data.get("gateway_state"),
+                        "pid": gw_data.get("pid"),
+                        "version": gw_data.get("code_version"),
+                        "active_agents": gw_data.get("active_agents", 0),
+                        "platforms": gw_data.get("platforms", {}),
+                    }
+                    detail["platforms"] = gw_data.get("platforms", {})
+            except Exception:
+                pass
+
+        # 1.3 核心配置 (Model, Fallbacks, Platform toolsets)
+        cfg_path = os.path.join(hermes_home, "config.yaml")
+        if os.path.isfile(cfg_path):
+            try:
+                import yaml as _yaml
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = _yaml.safe_load(f) or {}
+                m_conf = cfg.get("model") or {}
+                if isinstance(m_conf, dict):
+                    detail["models"] = {
+                        "default": m_conf.get("default", "unknown"),
+                        "provider": m_conf.get("provider", "unknown"),
+                        "context_length": m_conf.get("context_length"),
+                        "fallbacks": [
+                            {"provider": fb.get("provider"), "model": fb.get("model")}
+                            for fb in (cfg.get("fallback_providers") or []) if isinstance(fb, dict)
+                        ]
+                    }
+                pt = cfg.get("platform_toolsets") or {}
+                detail["config_summary"]["platform_toolsets"] = list(pt.keys())
+                detail["config_summary"]["reasoning_effort"] = (cfg.get("agent") or {}).get("reasoning_effort")
+            except Exception:
+                pass
+
+        # 1.4 记忆 (USER.md & MEMORY.md)
+        mem_dir = os.path.join(hermes_home, "memories")
+        if os.path.isdir(mem_dir):
+            for m_file in ["USER.md", "MEMORY.md"]:
+                mp = os.path.join(mem_dir, m_file)
+                if os.path.isfile(mp):
+                    try:
+                        with open(mp, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        lines = [line.strip() for line in content.split("§") if line.strip()]
+                        detail["memories"][m_file] = {
+                            "count": len(lines),
+                            "preview": lines[0][:160] + "…" if lines else "",
+                            "topics": [l[:90].replace("\n", " ") for l in lines[:10]]
+                        }
+                    except Exception:
+                        pass
+
+        # 1.5 定时任务 (Cron)
+        cron_path = os.path.join(hermes_home, "cron", "jobs.json")
+        if os.path.isfile(cron_path):
+            try:
+                with open(cron_path, "r", encoding="utf-8") as f:
+                    cj = json.load(f)
+                jobs = cj.get("jobs") or []
+                clean_jobs = []
+                for j in jobs:
+                    clean_jobs.append({
+                        "id": j.get("id"),
+                        "name": j.get("name"),
+                        "schedule": (j.get("schedule") or {}).get("display", "cron"),
+                        "state": j.get("state"),
+                        "enabled": j.get("enabled"),
+                        "last_status": j.get("last_status"),
+                        "last_run_at": j.get("last_run_at"),
+                        "next_run_at": j.get("next_run_at"),
+                        "prompt": j.get("prompt"),
+                        "origin": j.get("origin")
+                    })
+                detail["cron"] = clean_jobs
+            except Exception:
+                pass
+
+    # 2. Codex 专项自省
+    elif agent_id == "codex":
+        codex_home = HOME + "/.codex"
+        detail["skills"] = _extract_skills(os.path.join(codex_home, "skills"))
+        cfg_path = os.path.join(codex_home, "config.toml")
+        if os.path.isfile(cfg_path):
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    txt = f.read()
+                m_model = re.search(r'model\s*=\s*"([^"]+)"', txt)
+                m_effort = re.search(r'model_reasoning_effort\s*=\s*"([^"]+)"', txt)
+                detail["models"] = {
+                    "default": m_model.group(1) if m_model else "unknown",
+                    "reasoning_effort": m_effort.group(1) if m_effort else "unknown"
+                }
+                plugins = re.findall(r'\[plugins\."([^"]+)"\]', txt)
+                detail["config_summary"]["plugins"] = plugins
+            except Exception:
+                pass
+
+    # 3. Claude Code 专项自省
+    elif agent_id == "claude":
+        claude_home = HOME + "/.claude"
+        detail["skills"] = _extract_skills(os.path.join(claude_home, "skills"))
+        cfg_path = os.path.join(claude_home, "settings.json")
+        if os.path.isfile(cfg_path):
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cdata = json.load(f)
+                env = cdata.get("env") or {}
+                detail["models"] = {
+                    "opus": env.get("OPUS_MODEL", "default"),
+                    "sonnet": env.get("SONNET_MODEL", "default")
+                }
+            except Exception:
+                pass
+
+    # 4. Antigravity (Gemini / agy) 专项自省
+    elif agent_id == "agy":
+        agy_home = HOME + "/.gemini/antigravity-cli"
+        detail["skills"] = _extract_skills(os.path.join(agy_home, "builtin", "skills"))
+
+    # 5. Pi 专项自省
+    elif agent_id == "pi":
+        pi_mcp = HOME + "/.pi/agent/mcp.json"
+        if os.path.isfile(pi_mcp):
+            try:
+                with open(pi_mcp, "r", encoding="utf-8") as f:
+                    m = json.load(f)
+                servers = m.get("mcpServers") or {}
+                detail["mcp_servers"] = [
+                    {"name": sname, "command": sval.get("command", "")}
+                    for sname, sval in servers.items()
+                ]
+            except Exception:
+                pass
+
+    # 深度脱敏与隐私保护过滤
+    from svcdash.privacy import deep_sanitize, sanitize_agent_detail_for_public
+    if for_public:
+        return sanitize_agent_detail_for_public(detail)
+    else:
+        # 本地模式脱敏：仍清洗关键凭证，保留完整记忆结构与配置
+        return deep_sanitize(detail, mask_ips=False, mask_paths=False)

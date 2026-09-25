@@ -1,11 +1,73 @@
 const BOOT = window.__BOOT__ || {};
+if (BOOT.readonly) {
+  document.documentElement.classList.add("is-readonly");
+  if (document.body) document.body.classList.add("is-readonly");
+  else document.addEventListener("DOMContentLoaded", () => document.body.classList.add("is-readonly"));
+}
 const AUTO = BOOT.auto;
 const LANG = BOOT.lang;
 const TS_MODE = BOOT.tsMode;
 const TS_HOST = "100.76.219.104";
+const LAN_HOST = "192.168.3.82";
 const linkHost = (h) => (TS_MODE && (h === "192.168.3.82")) ? TS_HOST : h;  // 来源为 tailscale(100.64.0.0/10) 时链接主机改用 tailscale IP
 const T = BOOT.t;
 const t = (k, p) => { let s = T[k] ?? k; if (p !== undefined) { for (const [a, b] of Object.entries(p)) s = s.split("{" + a + "}").join(b); } return s; };
+const DASH_LANGS = ["zh", "en", "ja"];
+const baseLang = value => String(value || "").toLowerCase().split("-")[0];
+function systemLang() {
+  const candidate = baseLang((navigator.languages && navigator.languages[0]) || navigator.language);
+  return DASH_LANGS.includes(candidate) ? candidate : "zh";
+}
+function langDirectory(url) {
+  return url.pathname.endsWith("/") ? url.pathname : url.pathname.slice(0, url.pathname.lastIndexOf("/") + 1);
+}
+function chooseDashboardLanguage(choice) {
+  const url = new URL(location.href);
+  try { localStorage.setItem("svc-lang", choice); } catch (e) {}
+  if (BOOT.static) {
+    const selected = choice === "auto" ? systemLang() : choice;
+    url.pathname = langDirectory(url) + (selected === "zh" ? "index.html" : `index-${selected}.html`);
+    url.searchParams.delete("lang");
+    if (choice !== "auto") url.searchParams.set("lang", selected);
+  } else if (choice === "auto") {
+    url.searchParams.delete("lang");
+  } else {
+    url.searchParams.set("lang", choice);
+  }
+  location.assign(url.toString());
+}
+function initLanguageMenu() {
+  const wrap = $("lang-switch"), trigger = $("lang-trigger"), menu = $("lang-menu");
+  if (!wrap || !trigger || !menu) return;
+  let preference = "auto";
+  try {
+    const queryLang = baseLang(new URLSearchParams(location.search).get("lang"));
+    const stored = localStorage.getItem("svc-lang");
+    if (DASH_LANGS.includes(queryLang)) preference = queryLang;
+    else if (DASH_LANGS.includes(stored)) preference = stored;
+    else if (stored === "auto") preference = "auto";
+  } catch (e) {}
+  const display = preference === "auto" ? "AUTO" : preference.toUpperCase();
+  const current = $("lang-current");
+  if (current) current.textContent = display;
+  wrap.querySelectorAll("[data-lang-choice]").forEach(option => {
+    option.setAttribute("aria-checked", String(option.dataset.langChoice === preference));
+  });
+  const setOpen = open => {
+    menu.hidden = !open;
+    trigger.setAttribute("aria-expanded", String(open));
+  };
+  trigger.addEventListener("click", () => setOpen(menu.hidden));
+  menu.addEventListener("click", e => {
+    const option = e.target.closest("[data-lang-choice]");
+    if (!option) return;
+    chooseDashboardLanguage(option.dataset.langChoice);
+  });
+  document.addEventListener("click", e => { if (!wrap.contains(e.target)) setOpen(false); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !menu.hidden) { setOpen(false); trigger.focus(); }
+  });
+}
 // --- POST 令牌: 管理动作需 X-Svc-Token(服务器 /etc/svc-dashboard/token 内容)。
 // 页面不内嵌 token(匿名访客拿不到); 首次动作弹输入框, 存 sessionStorage(标签页会话级)。 ---
 let svcTok = sessionStorage.getItem("svcTok") || "";
@@ -82,7 +144,7 @@ function row(e, mobile) {
   const rres = e.res ? { cpu: Math.round(e.res.cpu), mem_mb: Math.round(e.res.mem_mb),
                          up_sec: Math.floor(e.res.up_sec / 60) * 60 } : null;
   const dpayload = { name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids, res: rres, unit: e.unit || null, cid: e.container_id || null };
-  const detailBtn = `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(dpayload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
+  const detailBtn = BOOT.readonly ? "" : `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(dpayload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
   const actions = `${detailBtn}${ctl}${svBtnNamed}`;
   if (mobile) {
     return `<tr><td><div class='td-head'>${svcDot}<span class='svc'>${esc(e.name)}</span>` +
@@ -201,12 +263,18 @@ function renderSys(s) {
   ];
   $("sysbar").innerHTML = cards.map(([k, l, v, cls]) =>
     `<div class='stat' data-k='${k}'><div class='label'><span class='lb-ico'>${icon(SYS_ICONS[k] || "dot", 13)}</span>${l}</div><div class='value${cls}'>${v}</div></div>`).join("");
-  chartSample(s); // 手机端趋势图采样(桌面 no-op)
+  chartSample(s); // 趋势图采样并绘制
 }
 
 // --- 仓库面板: agent/goal 改动过的仓库(/api/repos; 客户端 60s 缓存) ---
 let reposCache = { t: 0, data: null }, reposInflight = false;
 async function loadRepos(force) {
+  if (BOOT.static && BOOT.reposData) {
+    reposCache.data = BOOT.reposData;
+    reposCache.t = Date.now();
+    renderRepos(reposCache.data);
+    return;
+  }
   const now = Date.now();
   if (!force && reposCache.data && now - reposCache.t < 60000) return;
   if (reposInflight && !force) return;          // 冷启动 /api/repos 可达 14s, 防重复并发
@@ -230,30 +298,31 @@ async function loadRepos(force) {
 }
 function renderRepos(d) {
   const el = $("repos-body");
-  if (!el) return;
-  const list = (d && d.repos) || [];
-  if (!list.length) { el.innerHTML = `<div class="gempty">${t("rp_empty")}</div>`; return; }
-  const fmtB = (n) => {
-    if (n == null) return "—";
-    const u = ["B", "KB", "MB", "GB", "TB"];
-    let i = 0;
-    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-    return (i ? n.toFixed(1) : n) + " " + u[i];
-  };
-  // Agent 操作轨迹条: 近14天逐日双行色块(上行=里程碑: 完成/提交/干预/恢复,
-  // 下行=活动健康: 工具调用紫 / 失败高发红); 点击整卡进详情
-  const stripOf = (traj) => (traj || []).map(trajCell).join("");
-  el.innerHTML = list.map(r => {
-    const meta = [t("rp_commits", { n: r.commits ?? "—" }), fmtB(r.size), t("rp_files", { n: r.files ?? "—" })];
-    if (r.dirty) meta.push(`<span class="rp-dirty">${t("rp_dirty", { n: r.dirty })}</span>`);
-    return `<div class="rp-row" role="button" tabindex="0" data-traj="${escAttr(r.name)}">
-      <div class="rp-l1"><span class="rp-name">${escHtml(r.name)}</span><span class="rp-branch">${escHtml(r.branch)}</span>
-        <span class="rp-meta">${meta.join(" · ")}</span></div>
-      ${r.last ? `<div class="rp-last"><span class="rp-hash">${escHtml(r.last.hash)}</span> ${escHtml(r.last.subject)} <span class="rp-ago">· ${escHtml(agoFromTs(r.last.ts))}</span></div>` : ""}
-      ${(r.traj || []).length ? `<div class="rp-traj" title="${escAttr(t("tr_days"))}">${stripOf(r.traj)}</div>` : ""}
-    </div>`;
-
-  }).join("");
+  if (el) {
+    const list = (d && d.repos) || [];
+    if (!list.length) { el.innerHTML = `<div class="gempty">${t("rp_empty")}</div>`; return; }
+    const fmtB = (n) => {
+      if (n == null) return "—";
+      const u = ["B", "KB", "MB", "GB", "TB"];
+      let i = 0;
+      while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+      return (i ? n.toFixed(1) : n) + " " + u[i];
+    };
+    const stripOf = (traj) => (traj || []).map(trajCell).join("");
+    el.innerHTML = list.map(r => {
+      const meta = [t("rp_commits", { n: r.commits ?? "—" }), fmtB(r.size), t("rp_files", { n: r.files ?? "—" })];
+      if (r.dirty) meta.push(`<span class="rp-dirty">${t("rp_dirty", { n: r.dirty })}</span>`);
+      return `<div class="rp-row" role="button" tabindex="0" data-traj="${escAttr(r.name)}">
+        <div class="rp-l1"><span class="rp-name">${escHtml(r.name)}</span><span class="rp-branch">${escHtml(r.branch)}</span>
+          <span class="rp-meta">${meta.join(" · ")}</span></div>
+        ${r.last ? `<div class="rp-last"><span class="rp-hash">${escHtml(r.last.hash)}</span> ${escHtml(r.last.subject)} <span class="rp-ago">· ${escHtml(agoFromTs(r.last.ts))}</span></div>` : ""}
+        ${(r.traj || []).length ? `<div class="rp-traj" title="${escAttr(t("tr_days"))}">${stripOf(r.traj)}</div>` : ""}
+      </div>`;
+    }).join("");
+  }
+  if ($("act-repos-bar")) {
+    renderActivityPage();
+  }
 }
 // --- Agent 操作轨迹详情页(全屏浮层): 大号14天双行条 + 图例 + 类别筛选 + 事件流 ---
 const TR_KEY = { commit: "tr_commit", warn: "tr_warn", good: "tr_good", done: "tr_done",
@@ -412,6 +481,7 @@ function taskRow(x) {
 
 let ompCache = null;
 async function loadAgents() {
+  if (BOOT.static) return { omp: [], codex: [] };
   if (ompCache) return ompCache;
   try {
     const r = await fetch("/api/omp", { cache: "no-store" });
@@ -567,6 +637,11 @@ function toggleAgentLog(a) {
 
 let tmuxCache = null;
 async function loadTmux() {
+  if (BOOT.static && BOOT.tmuxData) {
+    const panes = BOOT.tmuxData.panes || [];
+    tmuxCache = panes;
+    return panes;
+  }
   if (tmuxCache) return tmuxCache;
   try {
     const r = await fetch("/api/tmux", { cache: "no-store" });
@@ -593,6 +668,10 @@ function renderTmuxPanel(panes) {
 let tasksCache = null; // 懒加载缓存
 
 async function loadTasks() {
+  if (BOOT.static && BOOT.tasksData) {
+    tasksCache = BOOT.tasksData.tasks || [];
+    return tasksCache;
+  }
   if (tasksCache) return tasksCache;
   try {
     const r = await fetch("/api/tasks?lang=" + encodeURIComponent(LANG), { cache: "no-store" });
@@ -646,6 +725,7 @@ MANAGE_UNITS.filter(u => u.kind === "systemd").forEach(u => { MANAGE_SVC_BY_UNIT
 // P0-6: 行首状态点按受管单元状态上色(15s 缓存; fillCtl 的按钮查询保持独立实时不受影响)
 const svcDotCache = {};
 async function fillSvcDots() {
+  if (BOOT.static) return;
   const dots = document.querySelectorAll(".svc-dot[data-unit]");
   const uids = [...new Set([...dots].map(d => d.dataset.unit))];
   const now = Date.now();
@@ -670,6 +750,7 @@ async function fillSvcDots() {
 
 let _fillCtlAt = 0, _fillCtlPromise = null;
 async function fillCtl() {
+  if (BOOT.static) return;
   const now = Date.now();
   if (_fillCtlPromise) return _fillCtlPromise;
   if (now - _fillCtlAt < 15000) return;
@@ -878,16 +959,21 @@ function applyFragment(part, selector, html) {
   const next = box.content.querySelector(selector);
   const old = document.querySelector(selector);
   if (next && old) {
+    if (old.classList.contains("cat-off")) next.classList.add("cat-off");
     old.replaceWith(next);
     const i = pagesHomeOrder ? pagesHomeOrder.indexOf(old) : -1;   // P1: replaceWith 后同步引用, 防跨断点回桌面把旧骨架放回
     if (i >= 0) pagesHomeOrder[i] = next;
   }
-  else if (part === "toolchips" && next) document.querySelector("#filters")?.before(next);
+  else if (part === "toolchips" && next) {
+    document.querySelector("#filters")?.before(next);
+    if (!isMobile() && curCat !== "home") next.classList.add("cat-off");
+  }
   else return false;
   return true;
 }
 
 async function hydrateFragments() {
+  if (BOOT.static) return;
   const jobs = [
     ["goals", "#goals"],
     ["events", "#events"],
@@ -925,6 +1011,12 @@ function applyApiData(data) {
 async function load(alsoSys) {
   const btns = [$("refresh"), $("fab-refresh")].filter(Boolean);
   btns.forEach(b => { b.classList.add("spinning"); b.setAttribute("aria-disabled", "true"); });
+  if (BOOT.static) {
+    if (BOOT.apiData) applyApiData(BOOT.apiData);
+    if (alsoSys && BOOT.sysData) renderSys(BOOT.sysData);
+    btns.forEach(b => { b.classList.remove("spinning"); b.setAttribute("aria-disabled", "false"); });
+    return;
+  }
   ompCache = null; tasksCache = null; tmuxCache = null; // 手动刷新清面板缓存,拿到最新 agent/tmux/任务状态
   const snap = snapGet("api");
   if (snap && snap.data) {                 // 快照先行: 不等网络
@@ -959,9 +1051,10 @@ async function load(alsoSys) {
    /api/goals 15s 缓存,概要与日志页共用。 */
 let lastUpdatedTs = Date.now();
 let goalsCache = { t: 0, data: null };
-const LOG_LIMIT = 60;
+const LOG_LIMIT = 120;
 
 async function fetchGoalsData(force) {
+  if (BOOT.static && BOOT.goalsData) return BOOT.goalsData;
   const now = Date.now();
   if (!force && goalsCache.data && now - goalsCache.t < 15000) return goalsCache.data;
   try {
@@ -1048,6 +1141,170 @@ function renderAlerts(alerts) {
     </div>`).join("");
 }
 
+const IMG_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i;
+
+// 自动发布器产生的固定维护提交保留在数据中，但默认不占用公开活动流。
+function isStaticPublishCommit(e) {
+  if (!e || e.kind !== "commit" || e.repo !== "svc-dashboard") return false;
+  const subject = String(e.subject || e.text || "").split("\n", 1)[0].trim();
+  return /^Update sanitized static snapshot(?:\s|$)/i.test(subject);
+}
+
+function withoutStaticPublishCommits(events) {
+  return (events || []).filter(e => !isStaticPublishCommit(e));
+}
+
+function renderPortalActivity(events) {
+  const body = $("hp-body-activity"), badge = $("hp-badge-activity");
+  if (!body) return;
+  const evts = events || [];
+  const commits = withoutStaticPublishCommits(evts).filter(e => e.kind === "commit");
+  if (badge) badge.textContent = commits.length ? t("hp_recent_count", { n: commits.length }) : "";
+  const recent = commits.slice(0, 4);
+  if (!recent.length) {
+    body.innerHTML = `<div class="gempty">${escHtml(t("hp_no_recent_act"))}</div>`;
+    return;
+  }
+  body.innerHTML = recent.map(e => {
+    const th = getRepoTheme(e.repo || "repo");
+    const hasImg = (e.files || []).some(f => IMG_EXT_RE.test(f.path));
+    const imgBadge = hasImg ? `<span title="${escAttr(t("act_image_title"))}" style="color:#f472b6;margin-left:4px;">${icon("img", 11)}</span>` : "";
+    const msg = (e.text || "").split("\n")[0].trim() || (e.short_sha || "commit");
+    const ago = agoFromTs(e.ts);
+    return `<div class="hp-act-row" data-nav="activity">
+      <div class="hp-act-topline">
+        <span class="hp-act-repo" style="--rc-col:${th.color};--rc-bg:${th.bg};--rc-bd:${th.border};">
+          <span class="act-repo-dot"></span>
+          <span>${escHtml(e.repo || "git")}</span>
+        </span>
+        <span class="hp-act-author">${escHtml(e.author ? `by ${e.author}` : "")}</span>
+        ${imgBadge}
+        <span class="hp-act-time">${escHtml(ago)}</span>
+      </div>
+      <div class="hp-act-msg">${escHtml(msg)}</div>
+    </div>`;
+  }).join("");
+}
+
+async function renderPortalTmux() {
+  const body = $("hp-body-tmux"), badge = $("hp-badge-tmux");
+  if (!body) return;
+  try {
+    const data = await fetchTmuxData();
+    const sessions = (data && data.sessions) || [];
+    const sum = (data && data.summary) || {};
+    if (badge) badge.textContent = t("hp_sessions_count", { n: sum.total || sessions.length });
+    if (!sessions.length) {
+      body.innerHTML = `<div class="gempty">${escHtml(t("hp_no_tmux"))}</div>`;
+      return;
+    }
+    const recent = sessions.slice(0, 4);
+    body.innerHTML = recent.map(s => {
+      const winCount = s.windows_count || (s.windows ? s.windows.length : 1);
+      const isAgent = s.is_agent;
+      const firstWin = (s.windows || [])[0] || {};
+      const firstPane = (firstWin.panes || [])[0] || {};
+      const cmd = firstPane.command || firstWin.name || "bash";
+      return `<div class="hp-tmux-row" data-nav="tmux">
+        <div class="hp-tmux-info">
+          <div class="hp-tmux-name">
+            <span class="agent-status-dot on"></span>
+            <b>${escHtml(s.name)}</b>
+          </div>
+          <div class="hp-tmux-sub">${t("hp_windows_count", { n: winCount })} · ${escHtml(cmd)}</div>
+        </div>
+        <span class="hp-tmux-badge">${isAgent ? "Agent" : s.attached ? "attached" : "detached"}</span>
+      </div>`;
+    }).join("");
+  } catch (e) {
+    body.innerHTML = `<div class="gempty">${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderPortalSvc(services) {
+  const body = $("hp-body-svc"), badge = $("hp-badge-svc");
+  if (!body) return;
+  const svcs = services || [];
+  const web = svcs.filter(e => {
+    const ip = e.ip || "";
+    const loop = ip.startsWith("127.") || ip === "::1" || ip.startsWith("::ffff:127.");
+    return e.scope !== "system" && !e.paused && !loop && ![22000, 5355].includes(+e.port);
+  });
+  const seen = new Set(), uniq = [];
+  web.forEach(e => { const k = e.port + ":" + (e.name || ""); if (!seen.has(k)) { seen.add(k); uniq.push(e); } });
+  const activeCount = svcs.filter(s => !s.paused).length;
+  if (badge) badge.textContent = t("hp_services_count", { n: activeCount, total: svcs.length });
+  if (!uniq.length) {
+    body.innerHTML = `<div class="gempty">${escHtml(t("hp_no_svc"))}</div>`;
+    return;
+  }
+  const topSvcs = uniq.slice(0, 6);
+  body.innerHTML = `<div class="hp-svc-grid">` + topSvcs.map(e => {
+    const id = svcIdentity(e);
+    const link = `http://${linkHost(location.hostname)}:${e.port}/`;
+    const r = e.res;
+    const resTxt = r ? `${r.cpu.toFixed(0)}% · ${Math.round(r.mem_mb)}M` : (id.sub || "active");
+    return `<a class="hp-svc-chip" href="${escAttr(link)}" target="_blank" rel="noopener">
+      <div class="hp-svc-head">
+        <span class="hp-svc-name">${escHtml(id.main)}</span>
+        <span class="hp-svc-port">:${e.port}</span>
+      </div>
+      <div class="hp-svc-res">${escHtml(resTxt)}</div>
+    </a>`;
+  }).join("") + `</div>`;
+}
+
+async function renderPortalAgent() {
+  const body = $("hp-body-agent"), badge = $("hp-badge-agent");
+  if (!body) return;
+  try {
+    const d = await loadRuntimes();
+    const agents = (d && d.agents) || [];
+    const low = [];
+    agents.forEach(a => ((a.quota && a.quota.buckets) || []).forEach(b => {
+      if (b.remaining_pct != null && b.remaining_pct < 15) {
+        low.push({ agent: a.name, label: b.label, pct: b.remaining_pct });
+      }
+    }));
+    if (badge) badge.textContent = t("hp_installed_running", { installed: d.total_installed || 0, running: d.total_running || 0 });
+
+    const runningAgents = agents.filter(a => (a.procs || 0) > 0);
+    const procsList = [];
+    runningAgents.forEach(a => {
+      (a.proc_list || []).forEach(p => {
+        procsList.push({ name: a.name, pid: p.pid, mem: p.mem_mb, cpu: p.cpu });
+      });
+    });
+
+    let lowHtml = "";
+    if (low.length > 0) {
+      lowHtml = `<div class="hp-agent-pill warn">${icon("warn", 12)} <span>${escHtml(t("hp_quota_warn", { n: low.length }))}</span></div>`;
+    } else {
+      lowHtml = `<div class="hp-agent-pill green"><span>✓ ${escHtml(t("hp_quota_ok"))}</span></div>`;
+    }
+
+    body.innerHTML = `
+      <div class="hp-agent-summary" data-nav="agent" role="button" tabindex="0">
+        <div class="hp-agent-kpis">
+          <div class="hp-agent-pill"><b>${d.total_installed || 0}</b> <span>${escHtml(t("hp_installed"))}</span></div>
+          <div class="hp-agent-pill ${d.total_running ? 'green' : ''}"><b>${d.total_running || 0}</b> <span>${escHtml(t("hp_running"))}</span></div>
+          ${lowHtml}
+        </div>
+        <div class="hp-agent-procs">
+          ${procsList.length ? procsList.slice(0, 3).map(p => `
+            <div class="hp-agent-proc-row">
+              <span class="hp-agent-proc-name">${escHtml(p.name)}</span>
+              <span class="hp-agent-proc-detail">PID ${p.pid} · ${Math.round(p.mem)}MB · ${p.cpu}%</span>
+            </div>
+          `).join("") : `<div class="gempty" style="padding:10px 0;">${escHtml(t("hp_no_agent_proc"))}</div>`}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    body.innerHTML = `<div class="gempty">${escHtml(e.message)}</div>`;
+  }
+}
+
 let lastSvc = { ok: 0, total: 0 };
 async function renderOverview(apiData) {
   if (apiData && apiData.services) {
@@ -1065,32 +1322,24 @@ async function renderOverview(apiData) {
   const cls = ok ? "ok" : alerts.some(a => a.sev === "bad") ? "bad" : "warn";
   const txt = ok ? t("st_all_ok") : t("st_alert", { n: nAlert });
   const ico = ok ? "ok" : "warn";
-  const sc = $("statuscard"), sl = $("statusline"); // sl 可为 null(已移除)
+  const sc = $("statuscard"), sl = $("statusline");
   if (sc) { sc.className = "statuscard " + cls; $("sc-ico").innerHTML = icon(ico, 28); $("sc-text").textContent = txt; }
   if (sl) { sl.className = "statusline " + cls; const si = $("status-ico"); if (si) si.innerHTML = icon(ico, 16); const st = $("status-text"); if (st) st.textContent = txt; }
-  $("m-svc").textContent = lastSvc.ok + "/" + lastSvc.total;
-  $("m-run").textContent = nRun;
-  $("m-bad").textContent = nBad;
-  $("m-bad").classList.toggle("alert", nBad > 0);
-  $("m-alert").textContent = nAlert;
-  $("m-alert").classList.toggle("alert", nAlert > 0);
+
+  const mSvc = $("m-svc"), mRun = $("m-run"), mBad = $("m-bad"), mAlert = $("m-alert");
+  if (mSvc) mSvc.textContent = lastSvc.ok + "/" + lastSvc.total;
+  if (mRun) mRun.textContent = nRun;
+  if (mBad) { mBad.textContent = nBad; mBad.classList.toggle("alert", nBad > 0); }
+  if (mAlert) { mAlert.textContent = nAlert; mAlert.classList.toggle("alert", nAlert > 0); }
+
   renderAlerts(alerts);
-  // 最近活动: 只显示少量 agent 仓库提交, 点击进管理页日志
-  const recent = events.filter(e => e.kind === "commit").slice(0, 5);
-  const recentPanel = $("recent");
-  if (recentPanel) recentPanel.hidden = !recent.length;
-  $("recent-body").innerHTML = recent.length ? recent.map(e => {
-    const m = EV_META[e.kind] || EV_META.other;
-    return `<div class="rc-row" role="button" tabindex="0"><span class="rc-ico">${icon(m.ico, 14)}</span>` +
-      `<span class="rc-kind">${escHtml(t(m.key))} · <b class="rc-name">${escHtml(e.name)}</b>` +
-      `<span class="rc-sub">${escHtml(e.text)}</span></span>` +
-      `<span class="rc-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
-  }).join("") : "";
-  // Web磁贴 + Goal 摘要: 双端都渲染(移动端 #hp-grid 同样显示, 修复永久"loading…")
-  renderHomeTiles(apiData && apiData.services);
-  renderHomeGoals(goals, nRun, nBad);
   updateBadge(nAlert);
   refreshFreshness();
+
+  // 渲染首页四大中枢概览卡片
+  renderPortalActivity(events);
+  renderPortalSvc(apiData && apiData.services);
+  await Promise.allSettled([renderPortalTmux(), renderPortalAgent()]);
 }
 function renderHomeTiles(services) {
   const el = $("hp-tiles");
@@ -1197,8 +1446,26 @@ const staleHtml = icon("warn", 12) + " " + t("st_stale");
 }
 setInterval(() => { if (!document.hidden) refreshFreshness(); }, 20000);
 
-// 概要页交互: 状态卡→Goal页 / 最近活动→管理页日志 / 告警操作
-$("statuscard").addEventListener("click", (e) => { if (!e.target.closest(".gcopy")) setPage(2); });
+// 概要页交互: 状态卡 / 四大中枢 Portal 跳转
+$("statuscard")?.addEventListener("click", (e) => {
+  if (e.target.closest(".gcopy") || e.target.closest("a")) return;
+  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(2);
+  else setCat("svc");
+});
+
+document.addEventListener("click", (e) => {
+  const jump = e.target.closest("[data-nav]");
+  if (jump) {
+    if (e.target.closest("a[href]") || e.target.closest(".gcopy") || e.target.closest(".svctl-btn")) return;
+    const nav = jump.dataset.nav;
+    if (nav === "activity") { isMobile() ? setPage(1) : setCat("activity"); }
+    else if (nav === "svc") { isMobile() ? setPage(2) : setCat("svc"); }
+    else if (nav === "tmux") { isMobile() ? setPage(3) : setCat("tmux"); }
+    else if (nav === "agent") { isMobile() ? setPage(4) : setCat("agent"); }
+    scrollTo({ top: 0, behavior: "smooth" });
+  }
+});
+
 const statuslineEl = $("statusline");   // header 状态栏已移除(85102dc), 此处判空防崩
 if (statuslineEl) statuslineEl.addEventListener("click", () => {
   setPage(0);
@@ -1206,12 +1473,27 @@ if (statuslineEl) statuslineEl.addEventListener("click", () => {
   if (m) m.scrollTo({ top: 0 });
 });
 const rcMore = document.querySelector(".rc-more");
-const hpMore = document.querySelector(".hp-more");
-if (hpMore) hpMore.addEventListener("click", () => {   // 首页 Goal 摘要 "Goal 页 →" 原是死按钮
-  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(2);
-  else setCat("goal");
+if (rcMore) rcMore.addEventListener("click", () => {
+  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(1);
+  else setCat("activity");
 });
-$("recent-body").addEventListener("click", () => setPage(3));
+const hpMore = document.querySelector(".hp-more");
+if (hpMore) hpMore.addEventListener("click", () => {
+  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(3);
+  else setCat("tmux");
+});
+const recentBodyEl = $("recent-body");
+if (recentBodyEl) {
+  recentBodyEl.addEventListener("click", (evt) => {
+    const row = evt.target.closest(".rc-row");
+    if (row && row.dataset.url) {
+      window.open(row.dataset.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(1);
+    else setCat("activity");
+  });
+}
 document.addEventListener("click", (e) => {
   const it = e.target.closest(".alert-item");
   if (!it) return;
@@ -1222,14 +1504,800 @@ document.addEventListener("click", (e) => {
     renderOverview(null);
     return;
   }
-  if (e.target.closest(".detail")) setPage(2);
+  if (e.target.closest(".detail")) setPage(3);
 });
+
+// --- 活动流 (Activity Stream: Git 提交 + 远程同步 + Goal/Watchdog) ---
+let curActivityFilter = "all";
+let showStaticPublishCommits = false;
+
+function formatDiff(raw) {
+  return raw.split("\n").map(line => {
+    const esc = escHtml(line);
+    if (line.startsWith("+++") || line.startsWith("---")) {
+      return `<span class="diff-line diff-meta">${esc}</span>`;
+    } else if (line.startsWith("+")) {
+      return `<span class="diff-line diff-add">${esc}</span>`;
+    } else if (line.startsWith("-")) {
+      return `<span class="diff-line diff-del">${esc}</span>`;
+    } else if (line.startsWith("@@")) {
+      return `<span class="diff-line diff-hunk">${esc}</span>`;
+    } else if (line.includes(" | ") && (line.includes("+") || line.includes("-"))) {
+      return `<span class="diff-line diff-stat">${esc}</span>`;
+    }
+    return `<span class="diff-line">${esc}</span>`;
+  }).join("");
+}
+
+function formatBroadDate(ts) {
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  const y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+  const todayStr = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+  const yest = new Date(now.getTime() - 86400000);
+  const yestStr = `${yest.getFullYear()}-${yest.getMonth()+1}-${yest.getDate()}`;
+  const curStr = `${y}-${m}-${day}`;
+
+  if (LANG === "en") {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const mStr = months[d.getMonth()];
+    const dt = `${mStr} ${day}, ${y}`;
+    if (curStr === todayStr) return `Commits on ${dt} (Today)`;
+    if (curStr === yestStr) return `Commits on ${dt} (Yesterday)`;
+    return `Commits on ${dt}`;
+  } else if (LANG === "ja") {
+    const dt = `${y}年${m}月${day}日`;
+    if (curStr === todayStr) return `${dt} (今日)`;
+    if (curStr === yestStr) return `${dt} (昨日)`;
+    return dt;
+  } else {
+    // zh
+    const dt = `${y}年${m}月${day}日`;
+    if (curStr === todayStr) return `${dt} · 今天`;
+    if (curStr === yestStr) return `${dt} · 昨天`;
+    return dt;
+  }
+}
+
+const GITHUB_NODE_SVG = `<svg class="act-node-svg" width="24" height="18" viewBox="0 0 24 18" fill="none" aria-hidden="true"><path d="M0 9h7M17 9h7" stroke="var(--border-subtle, rgba(128,128,128,.45))" stroke-width="2"/><circle cx="12" cy="9" r="4.5" fill="var(--bg, #0a0a0a)" stroke="var(--border-subtle, rgba(128,128,128,.7))" stroke-width="2"/><circle cx="12" cy="9" r="1.8" fill="currentColor"/></svg>`;
+
+const CURATED_PALETTE = [
+  "#a371f7", // 紫色 (Mir3-Research)
+  "#388bfd", // 蓝色 (zircon)
+  "#3fb950", // 绿色 (svc-dashboard)
+  "#f0883e", // 暖橙
+  "#22d3ee", // 青蓝
+  "#f43f5e", // 玫红
+  "#eab308", // 黄金
+  "#14b8a6", // 蓝绿
+  "#fb7185", // 珊瑚红
+  "#818cf8", // 靛蓝
+  "#84cc16", // 黄绿
+  "#d946ef", // 洋红
+  "#0ea5e9", // 天蓝
+  "#fb923c", // 杏橙
+  "#2dd4bf", // 薄荷
+  "#e11d48", // 宝石红
+  "#6366f1", // 鸢尾紫
+  "#10b981", // 翡翠绿
+  "#f97316", // 橘红
+  "#06b6d4"  // 深青
+];
+
+function hexToRgba(hex, alpha) {
+  let c = hex.replace("#", "");
+  if (c.length === 3) c = c.split("").map(x => x + x).join("");
+  const num = parseInt(c, 16);
+  return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+}
+
+let repoColorMap = null;
+function getRepoColorMap() {
+  if (repoColorMap) return repoColorMap;
+  try {
+    repoColorMap = JSON.parse(localStorage.getItem("svc_repo_colors") || "{}");
+  } catch (e) {
+    repoColorMap = {};
+  }
+  if (!repoColorMap["Mir3-Research"]) repoColorMap["Mir3-Research"] = "#a371f7";
+  if (!repoColorMap["zircon"]) repoColorMap["zircon"] = "#388bfd";
+  if (!repoColorMap["svc-dashboard"]) repoColorMap["svc-dashboard"] = "#3fb950";
+  return repoColorMap;
+}
+
+function getRepoTheme(repo) {
+  if (!repo) repo = "other";
+  const map = getRepoColorMap();
+  let hex = map[repo];
+  if (!hex) {
+    const used = new Set(Object.values(map));
+    const unused = CURATED_PALETTE.filter(c => !used.has(c));
+    let h = 0;
+    for (let i = 0; i < repo.length; i++) h = (h * 31 + repo.charCodeAt(i)) >>> 0;
+    if (unused.length > 0) {
+      hex = unused[h % unused.length];
+    } else {
+      hex = CURATED_PALETTE[h % CURATED_PALETTE.length];
+    }
+    map[repo] = hex;
+    try { localStorage.setItem("svc_repo_colors", JSON.stringify(map)); } catch (e) {}
+  }
+  return {
+    color: hex,
+    bg: hexToRgba(hex, 0.12),
+    border: hexToRgba(hex, 0.35)
+  };
+}
+
+let curActivityRepo = "all";
+
+async function renderActivityPage() {
+  const ap = $("activity-page");
+  if (ap) ap.hidden = false;
+  const container = $("activity-body");
+  if (!container) return;
+  const d = await fetchGoalsData();
+  const events = (d && d.events) || [];
+  const activityEvents = showStaticPublishCommits ? events : withoutStaticPublishCommits(events);
+  if (!activityEvents.length) {
+    container.innerHTML = `<div class="gempty">${escHtml(t("act_empty"))}</div>`;
+    return;
+  }
+
+  // 渲染顶部仓库胶囊条 (含未提交修改状态与一键筛选)
+  const reposBar = $("act-repos-bar");
+  if (reposBar) {
+    const repoStats = new Map();
+    const reposList = ((reposCache.data && reposCache.data.repos) || []).filter(r => {
+      if (showStaticPublishCommits || r.name !== "svc-dashboard") return true;
+      return activityEvents.some(e => e.kind === "commit" && e.repo === r.name);
+    });
+    reposList.forEach(r => {
+      repoStats.set(r.name, { name: r.name, commits: r.commits || 0, dirty: r.dirty || 0 });
+    });
+    activityEvents.forEach(e => {
+      if (e.kind === "commit" && e.repo && !repoStats.has(e.repo)) {
+        repoStats.set(e.repo, { name: e.repo, commits: 0, dirty: 0 });
+      }
+    });
+
+    const sortedRepos = [...repoStats.values()].sort((a, b) => {
+      if ((b.dirty > 0) !== (a.dirty > 0)) return (b.dirty > 0) ? 1 : -1;
+      return (b.commits || 0) - (a.commits || 0);
+    });
+
+    let chipsHtml = `<span class="act-repo-chip ${curActivityRepo === 'all' ? 'active' : ''}" data-act-repo="all">
+      <span class="act-repo-dot" style="--rc-col:var(--text-soft)"></span>
+      <span>${t("chip_all")}</span>
+    </span>`;
+
+    chipsHtml += sortedRepos.map(r => {
+      const th = getRepoTheme(r.name);
+      const isAct = curActivityRepo === r.name;
+      const dirtyHtml = r.dirty ? `<span class="act-repo-dirty" title="${escAttr(t("act_dirty_count", { n: r.dirty }))}">${escHtml(t("act_dirty_count", { n: r.dirty }))}</span>` : "";
+      const commitTxt = r.commits ? `<span class="act-repo-cnt">${r.commits}</span>` : "";
+      return `<span class="act-repo-chip ${isAct ? 'active' : ''}" style="--rc-col:${th.color};--rc-bg:${th.bg};--rc-bd:${th.border};" data-act-repo="${escAttr(r.name)}">
+        <span class="act-repo-dot"></span>
+        <span class="act-repo-name">${escHtml(r.name)}</span>
+        ${commitTxt}
+        ${dirtyHtml}
+        <span class="act-repo-traj-btn" data-traj="${escAttr(r.name)}" role="button" tabindex="0" title="${escAttr(t("act_repo_traj"))}">${icon("chart", 11)}</span>
+      </span>`;
+    }).join("");
+
+    reposBar.innerHTML = `<button class="act-repos-nav prev" type="button" aria-label="${escAttr(t("act_repo_prev"))}" hidden>‹</button>`
+      + `<div class="act-repos-scroll">${chipsHtml}</div>`
+      + `<button class="act-repos-nav next" type="button" aria-label="${escAttr(t("act_repo_next"))}" hidden>›</button>`;
+    const repoScroll = reposBar.querySelector(".act-repos-scroll");
+    const updateRepoNav = () => {
+      if (!repoScroll) return;
+      const overflowing = repoScroll.scrollWidth > repoScroll.clientWidth + 2;
+      reposBar.classList.toggle("has-overflow", overflowing);
+      const prev = reposBar.querySelector(".act-repos-nav.prev");
+      const next = reposBar.querySelector(".act-repos-nav.next");
+      if (prev) { prev.hidden = !overflowing || repoScroll.scrollLeft <= 2; }
+      if (next) { next.hidden = !overflowing || repoScroll.scrollLeft + repoScroll.clientWidth >= repoScroll.scrollWidth - 2; }
+    };
+    if (repoScroll) {
+      repoScroll.addEventListener("scroll", updateRepoNav, { passive: true });
+      requestAnimationFrame(updateRepoNav);
+    }
+  }
+
+  // 计数更新
+  const nAll = activityEvents.length;
+  const nCommit = activityEvents.filter(e => e.kind === "commit").length;
+  const nImg = activityEvents.filter(e => e.kind === "commit" && (e.files || []).some(f => IMG_EXT_RE.test(f.path))).length;
+  const nBoth = activityEvents.filter(e => e.kind === "commit" && e.origin === "both").length;
+  const nLocal = activityEvents.filter(e => e.kind === "commit" && e.origin === "local").length;
+  const nDone = activityEvents.filter(e => e.src === "done" || e.kind === "complete").length;
+  const nWd = activityEvents.filter(e => e.src === "watchdog").length;
+
+  const setCnt = (id, n) => { const el = $(id); if (el) el.textContent = n ? `(${n})` : ""; };
+  setCnt("n-act-all", nAll);
+  setCnt("n-act-commit", nCommit);
+  setCnt("n-act-img", nImg);
+  setCnt("n-act-both", nBoth);
+  setCnt("n-act-local", nLocal);
+  setCnt("n-act-done", nDone);
+  setCnt("n-act-watchdog", nWd);
+  const autoToggle = $("act-auto-publish-toggle");
+  if (autoToggle) {
+    autoToggle.classList.toggle("active", showStaticPublishCommits);
+    const hiddenCount = events.length - activityEvents.length;
+    autoToggle.textContent = `${t(showStaticPublishCommits ? "act_hide_auto" : "act_show_auto")}${hiddenCount && !showStaticPublishCommits ? ` (${hiddenCount})` : ""}`;
+  }
+
+  // 筛选过滤 (类型筛选 + 仓库筛选)
+  const filtered = activityEvents.filter(e => {
+    if (curActivityFilter === "commit") { if (e.kind !== "commit") return false; }
+    else if (curActivityFilter === "img") { if (e.kind !== "commit" || !(e.files || []).some(f => IMG_EXT_RE.test(f.path))) return false; }
+    else if (curActivityFilter === "both") { if (e.kind !== "commit" || e.origin !== "both") return false; }
+    else if (curActivityFilter === "local") { if (e.kind !== "commit" || e.origin !== "local") return false; }
+    else if (curActivityFilter === "done") { if (e.src !== "done" && e.kind !== "complete") return false; }
+    else if (curActivityFilter === "watchdog") { if (e.src !== "watchdog" && e.kind !== "watchdog") return false; }
+
+    if (curActivityRepo !== "all") {
+      if (e.kind === "commit") {
+        if (e.repo !== curActivityRepo) return false;
+      } else {
+        if (!((e.name || "") + " " + (e.gid || "")).includes(curActivityRepo)) return false;
+      }
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    container.innerHTML = `<div class="gempty">${escHtml(t("act_empty"))}</div>`;
+    return;
+  }
+
+  // 保持时间倒序, 按连续相同日期对条目分组(类似 GitHub Commit Timeline)
+  const dateGroups = [];
+  filtered.forEach(e => {
+    const d = new Date(e.ts * 1000);
+    const dKey = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+    const last = dateGroups[dateGroups.length - 1];
+    if (last && last.key === dKey) {
+      last.items.push(e);
+    } else {
+      dateGroups.push({
+        key: dKey,
+        title: formatBroadDate(e.ts),
+        items: [e]
+      });
+    }
+  });
+
+  const renderCard = (e, pos, theme) => {
+    let spineEl = "";
+    if (pos === "first") {
+      spineEl = `<div class="act-spine spine-bot"></div>`;
+    } else if (pos === "mid") {
+      spineEl = `<div class="act-spine spine-full"></div>`;
+    } else if (pos === "last") {
+      spineEl = `<div class="act-spine spine-top"></div>`;
+    }
+    const nodeEl = `<div class="act-node" data-pos="${pos}"></div>`;
+
+    if (e.kind === "commit") {
+      const repo = e.repo || e.name || "git";
+      const sha = e.short_sha || e.gid || "";
+      const branch = e.branch ? `<span class="act-branch">${icon("branch", 11)} ${escHtml(e.branch)}</span>` : "";
+      let originBadge = "";
+      if (e.origin === "both") {
+        originBadge = `<span class="rc-tag rc-synced">${icon("check", 10)} ${escHtml(t("gh_synced"))}</span>`;
+      } else if (e.origin === "local") {
+        originBadge = `<span class="rc-tag rc-local">${escHtml(t("gh_local"))}</span>`;
+      } else if (e.origin === "github") {
+        originBadge = `<span class="rc-tag rc-gh">${icon("git", 10)} GitHub</span>`;
+      }
+
+      const files = e.files || [];
+      const imgFiles = files.filter(f => IMG_EXT_RE.test(f.path));
+      const hasImg = imgFiles.length > 0;
+      let imgBadge = "";
+      if (hasImg) {
+        imgBadge = `<span class="rc-tag rc-img" title="${escAttr(t("act_image_count", { n: imgFiles.length }))}">${icon("img", 11)} ${escHtml(t("act_has_img"))}${imgFiles.length > 1 ? ` (${imgFiles.length})` : ''}</span>`;
+      }
+
+      let filesHtml = "";
+      if (files.length > 0) {
+        const fileRows = files.slice(0, 8).map(f => {
+          const st = (f.status || "M").toUpperCase();
+          const cls = st === "A" ? "fbadge-a" : (st === "D" ? "fbadge-d" : (st === "R" ? "fbadge-r" : "fbadge-m"));
+          const isImgFile = IMG_EXT_RE.test(f.path);
+          const imgMark = isImgFile ? ` <span class="act-img-dot" title="${escAttr(t("act_image_title"))}">${icon("img", 10)}</span>` : "";
+          return `<div class="act-f-row ${isImgFile ? 'is-img' : ''}"><span class="fbadge ${cls}">${escHtml(st)}</span><span class="act-f-path" title="${escAttr(f.path)}">${escHtml(f.path)}</span>${imgMark}</div>`;
+        }).join("");
+        const moreTxt = files.length > 8 ? `<div class="act-f-row act-f-more" style="color:var(--text-ghost); font-size:10.5px;">... ${t("act_more")} (${files.length - 8})</div>` : "";
+        filesHtml = `<div class="act-files-summary">${icon("diff", 12)} <span>${files.length} ${escHtml(t("act_files_changed"))}</span></div>` +
+                    `<div class="act-files-box">${fileRows}${moreTxt}</div>`;
+      }
+
+      let ghBtn = "";
+      if (e.url) {
+        ghBtn = `<a class="btn-act btn-act-gh" href="${escAttr(e.url)}" target="_blank" rel="noopener">${icon("git", 13)} ${escHtml(t("act_diff_gh"))} ↗</a>`;
+      } else if (sha) {
+        ghBtn = `<a class="btn-act btn-act-gh" href="https://github.com/iamcheyan/${encodeURIComponent(repo)}/commit/${encodeURIComponent(sha)}" target="_blank" rel="noopener">${icon("git", 13)} ${escHtml(t("act_diff_gh"))} ↗</a>`;
+      }
+
+      let diffBtn = "";
+      if (!BOOT.static && sha && e.origin !== "github") {
+        diffBtn = `<button class="btn-act btn-act-diff" data-repo="${escAttr(repo)}" data-sha="${escAttr(sha)}">${icon("diff", 13)} <span class="act-diff-text">${escHtml(t("act_diff_local"))}</span></button>`;
+      }
+
+      const subj = e.subject || e.text || "—";
+      const timeStr = e.time || (e.ts ? new Date(e.ts * 1000).toLocaleString() : '');
+      const author = e.author || "cheyan";
+      const metaRow = `<div class="act-meta-row">
+        <span class="act-time-full">${icon("clock", 11)} ${escHtml(timeStr)}</span>
+        <span class="act-dot-sep">·</span>
+        <span class="act-author">by ${escHtml(author)}</span>
+        <span class="act-dot-sep">·</span>
+        <span class="act-time-ago">${escHtml(agoFromTs(e.ts))}</span>
+      </div>`;
+
+      return `<div class="act-card" data-repo="${escAttr(repo)}" data-sha="${escAttr(sha)}" data-pos="${pos}">
+        ${nodeEl}
+        ${spineEl}
+        <div class="act-top">
+          <span class="act-badge-repo" style="color:${theme.color};background:${theme.bg};border:1px solid ${theme.border};">${escHtml(repo)}</span>
+          ${branch}
+          ${sha ? `<span class="act-sha">${escHtml(sha)}</span>` : ""}
+          ${originBadge}
+          ${imgBadge}
+          <span class="act-time" title="${escAttr(timeStr)}">${escHtml(agoFromTs(e.ts))}</span>
+        </div>
+        <div class="act-body">
+          <div class="act-subj">${escHtml(subj)}</div>
+          ${metaRow}
+          ${filesHtml}
+        </div>
+        <div class="act-actions">
+          ${ghBtn}
+          ${diffBtn}
+        </div>
+        <div class="act-diff-box" hidden><pre class="act-diff-pre"><code></code></pre></div>
+      </div>`;
+    } else {
+      const m = EV_META[e.kind] || EV_META.other;
+      const isDone = e.src === "done" || e.kind === "complete";
+      const ico = isDone ? "ok" : (m.ico || "branch");
+      const kindLabel = t(m.key);
+      const timeStr = e.time || (e.ts ? new Date(e.ts * 1000).toLocaleString() : '');
+      const resumeBtn = e.resume_cmd ? `<button class="btn-act-resume gcopy" data-copy="${escAttr(e.resume_cmd)}" title="${escAttr(t("act_copy_resume"))}">${icon("copy", 11)} <span>${t("g_resume")}</span></button>` : "";
+      return `<div class="act-card act-card-event" data-pos="${pos}">
+        ${nodeEl}
+        ${spineEl}
+        <div class="act-top">
+          <span class="rc-ico" style="display:inline-flex;align-items:center;">${icon(ico, 14)}</span>
+          <span class="act-badge-repo" style="color:${theme.color};background:${theme.bg};border:1px solid ${theme.border};">${escHtml(e.name || e.gid || '')}</span>
+          <span class="rc-tag ${isDone ? 'rc-synced' : 'rc-local'}">${escHtml(kindLabel)}</span>
+          <span class="act-time" title="${escAttr(timeStr)}">${escHtml(agoFromTs(e.ts))}</span>
+        </div>
+        <div class="act-body">
+          <div class="act-subj" style="font-weight: normal; color: var(--text-soft); font-size: 12.5px;">${escHtml(e.text || '—')}</div>
+          <div class="act-meta-row">
+            <span class="act-time-full">${icon("clock", 11)} ${escHtml(timeStr)}</span>
+            ${resumeBtn}
+          </div>
+        </div>
+      </div>`;
+    }
+  };
+
+  container.innerHTML = `<div class="act-timeline">` + dateGroups.map(grp => {
+    // 连续属于同一仓库/目标的事件聚合成一个 cluster (共享小柱子并归入同一卡片)
+    const clusters = [];
+    let curCluster = null;
+    grp.items.forEach(e => {
+      let key = "";
+      let name = "";
+      if (e.kind === "commit") {
+        name = e.repo || e.name || "git";
+        key = "repo:" + name;
+      } else if (e.src === "done" || e.kind === "complete") {
+        name = e.name || e.gid || "goal";
+        key = "goal:" + name;
+      } else {
+        name = e.kind || "event";
+        key = "ev:" + name;
+      }
+
+      if (!curCluster || curCluster.key !== key) {
+        curCluster = { key, name, kind: e.kind, theme: getRepoTheme(name), items: [] };
+        clusters.push(curCluster);
+      }
+      curCluster.items.push(e);
+    });
+
+    const clustersHtml = clusters.map(c => {
+      const count = c.items.length;
+      const cardsHtml = c.items.map((e, idx) => {
+        let pos = "single";
+        if (count > 1) {
+          if (idx === 0) pos = "first";
+          else if (idx === count - 1) pos = "last";
+          else pos = "mid";
+        }
+        return renderCard(e, pos, c.theme);
+      }).join("");
+
+      return `<div class="act-repo-cluster" style="--rc-col:${c.theme.color};--rc-bg:${c.theme.bg};--rc-bd:${c.theme.border};" data-repo="${escAttr(c.name)}" data-count="${count}">
+        <div class="act-group-card">
+          ${cardsHtml}
+        </div>
+      </div>`;
+    }).join("");
+
+    const cntTxt = grp.items.length > 1 ? `<span class="act-date-count">(${t("act_changes_cnt", { n: grp.items.length })})</span>` : "";
+    return `<div class="act-date-group">
+      <div class="act-date-header">
+        <span class="act-node-icon">${GITHUB_NODE_SVG}</span>
+        <span class="act-date-title">${escHtml(grp.title)} ${cntTxt}</span>
+      </div>
+      ${clustersHtml}
+    </div>`;
+  }).join("") + `</div>`;
+  if (typeof applyPagesX === "function" && isMobile()) {
+    requestAnimationFrame(() => applyPagesX(false));
+  }
+}
+
+// 委托监听活动页 Diff 按钮与筛选过滤
+document.addEventListener("click", async (e) => {
+  const repoNav = e.target.closest("#act-repos-bar .act-repos-nav");
+  if (repoNav) {
+    const scroller = document.querySelector("#act-repos-bar .act-repos-scroll");
+    if (scroller) scroller.scrollBy({ left: (repoNav.classList.contains("prev") ? -1 : 1) * Math.max(220, scroller.clientWidth * .72), behavior: "smooth" });
+    return;
+  }
+  const repoChip = e.target.closest("#act-repos-bar .act-repo-chip");
+  if (repoChip) {
+    if (e.target.closest(".act-repo-traj-btn")) return;
+    const r = repoChip.dataset.actRepo;
+    curActivityRepo = (curActivityRepo === r && r !== "all") ? "all" : r;
+    renderActivityPage();
+    return;
+  }
+  const chip = e.target.closest("#act-filters .chip");
+  if (chip) {
+    if (chip.id === "act-auto-publish-toggle") {
+      showStaticPublishCommits = !showStaticPublishCommits;
+      renderActivityPage();
+      return;
+    }
+    document.querySelectorAll("#act-filters .chip").forEach(c => c.classList.toggle("active", c === chip));
+    curActivityFilter = chip.dataset.af;
+    renderActivityPage();
+    return;
+  }
+  const diffBtn = e.target.closest(".btn-act-diff");
+  if (diffBtn) {
+    const card = diffBtn.closest(".act-card");
+    if (!card) return;
+    const diffBox = card.querySelector(".act-diff-box");
+    const textSpan = diffBtn.querySelector(".act-diff-text");
+    if (!diffBox) return;
+
+    if (!diffBox.hidden) {
+      diffBox.hidden = true;
+      diffBtn.classList.remove("active");
+      if (textSpan) textSpan.textContent = t("act_diff_local");
+      return;
+    }
+
+    diffBox.hidden = false;
+    diffBtn.classList.add("active");
+    if (textSpan) textSpan.textContent = t("act_diff_close");
+    const codeEl = diffBox.querySelector("code");
+    if (codeEl && !codeEl.textContent) {
+      codeEl.textContent = t("act_diff_loading");
+      const repo = diffBtn.dataset.repo;
+      const sha = diffBtn.dataset.sha;
+      try {
+        const resp = await fetch(`/api/commitdiff?repo=${encodeURIComponent(repo)}&sha=${encodeURIComponent(sha)}`);
+        const data = await resp.json();
+        if (data && data.ok && data.diff) {
+          codeEl.innerHTML = formatDiff(data.diff);
+        } else {
+          codeEl.textContent = (data && data.error) || "Failed to load diff";
+        }
+      } catch (err) {
+        codeEl.textContent = "Error fetching diff: " + err.message;
+      }
+    }
+    return;
+  }
+});
+
+// ==========================================================================
+// --- Tmux 会话中枢 ---
+// ==========================================================================
+let tmuxHubCache = { t: 0, data: null };
+let curTmuxFilter = "all";
+let curTmuxSearch = "";
+const tmuxActiveWins = {};  // session -> active window index
+const tmuxShowTerm = {};    // session -> boolean (default true)
+
+async function fetchTmuxData(force) {
+  const now = Date.now();
+  if (BOOT.static && BOOT.tmuxData) return BOOT.tmuxData;
+  if (!force && tmuxHubCache.data && now - tmuxHubCache.t < 4000) return tmuxHubCache.data;
+  try {
+    const r = await fetch("/api/tmux", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    tmuxHubCache = { t: now, data: d };
+    snapSet("tmux", d);
+  } catch (err) {
+    console.error("tmux refresh failed", err);
+    if (!tmuxHubCache.data) tmuxHubCache.data = snapGet("tmux");
+  }
+  return tmuxHubCache.data;
+}
+
+async function renderTmuxPage() {
+  const tp = $("tmux-panel");
+  if (!tp) return;
+  const body = $("tmux-body");
+  if (!body) return;
+
+  const data = await fetchTmuxData();
+  if (!data || !data.sessions) {
+    body.innerHTML = `<div class="gempty">${escHtml(t("tmux_empty"))}</div>`;
+    return;
+  }
+
+  const { sessions, summary } = data;
+
+  // 1. 顶部汇总卡片
+  const statsEl = $("tmux-stats");
+  if (statsEl && summary) {
+    const totalWins = sessions.reduce((acc, s) => acc + (s.windows_count || (s.windows ? s.windows.length : 1)), 0);
+    statsEl.innerHTML = `
+      <div class="tmux-stat-card">
+        <div class="tmux-stat-val">${summary.total}</div>
+        <div class="tmux-stat-lbl">${escHtml(t("tmux_total_sessions"))}</div>
+      </div>
+      <div class="tmux-stat-card">
+        <div class="tmux-stat-val" style="color:#38bdf8;">${totalWins}</div>
+        <div class="tmux-stat-lbl">${escHtml(t("tmux_total_windows"))}</div>
+      </div>
+      <div class="tmux-stat-card">
+        <div class="tmux-stat-val" style="color:#a78bfa;">${summary.panes_total || 0}</div>
+        <div class="tmux-stat-lbl">${escHtml(t("tmux_total_panes"))}</div>
+      </div>
+      <div class="tmux-stat-card">
+        <div class="tmux-stat-val" style="color:#4ade80;">${summary.attached} <small>/ ${summary.detached}</small></div>
+        <div class="tmux-stat-lbl">${escHtml(t("tmux_attached"))} / ${escHtml(t("tmux_detached"))}</div>
+      </div>
+      <div class="tmux-stat-card">
+        <div class="tmux-stat-val" style="color:#fbbf24;">${summary.agents}</div>
+        <div class="tmux-stat-lbl">${escHtml(t("tmux_agents"))}</div>
+      </div>
+    `;
+  }
+
+  // 2. 筛选条计数
+  const nAll = $("n-tf-all"), nAgent = $("n-tf-agent"), nAtt = $("n-tf-attached"), nDet = $("n-tf-detached");
+  if (nAll) nAll.textContent = `(${sessions.length})`;
+  if (nAgent) nAgent.textContent = `(${sessions.filter(s => s.is_agent).length})`;
+  if (nAtt) nAtt.textContent = `(${sessions.filter(s => s.attached).length})`;
+  if (nDet) nDet.textContent = `(${sessions.filter(s => !s.attached).length})`;
+
+  // 3. 过滤 sessions
+  const q = curTmuxSearch.toLowerCase().trim();
+  const filtered = sessions.filter(s => {
+    if (curTmuxFilter === "agent" && !s.is_agent) return false;
+    if (curTmuxFilter === "attached" && !s.attached) return false;
+    if (curTmuxFilter === "detached" && s.attached) return false;
+    if (q) {
+      const matchName = (s.name || "").toLowerCase().includes(q);
+      const matchRepo = (s.repo || "").toLowerCase().includes(q);
+      const matchCmd = (s.main_command || "").toLowerCase().includes(q);
+      const matchCwd = (s.main_cwd || "").toLowerCase().includes(q);
+      const matchWins = (s.windows || []).some(w =>
+        (w.name || "").toLowerCase().includes(q) ||
+        (w.panes || []).some(p =>
+          (p.command || "").toLowerCase().includes(q) ||
+          (p.title || "").toLowerCase().includes(q) ||
+          (p.cwd || "").toLowerCase().includes(q)
+        )
+      );
+      if (!matchName && !matchRepo && !matchCmd && !matchCwd && !matchWins) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    body.innerHTML = `<div class="gempty">${escHtml(q ? t("tmux_no_match") : t("tmux_empty"))}</div>`;
+    return;
+  }
+
+  // 4. 渲染会话卡片
+  body.innerHTML = filtered.map(s => {
+    const isAtt = s.attached;
+    const isAgent = s.is_agent;
+    const dotClass = isAtt ? "attached" : (isAgent ? "agent" : "detached");
+    const attBadge = isAtt ?
+      `<span class="tmux-badge tmux-badge-att">${escHtml(t("tmux_attached"))}</span>` :
+      `<span class="tmux-badge tmux-badge-det">${escHtml(t("tmux_detached"))}</span>`;
+    const agentBadge = isAgent ?
+      `<span class="tmux-badge tmux-badge-agent">${icon("bot", 11)} ${escHtml(t("tmux_filter_agent"))}</span>` : "";
+
+    // 仓库颜色胶囊
+    let repoBadge = "";
+    if (s.repo && s.repo !== "—") {
+      const theme = getRepoTheme(s.repo);
+      repoBadge = `<span class="tmux-badge tmux-badge-repo" style="background:${theme.color};">${escHtml(s.repo)}</span>`;
+    }
+
+    // 活跃窗口选择
+    const wins = s.windows || [];
+    let curWinIdx = tmuxActiveWins[s.name];
+    if (curWinIdx === undefined) {
+      const activeWin = wins.find(w => w.active) || wins[0];
+      curWinIdx = activeWin ? activeWin.index : 1;
+      tmuxActiveWins[s.name] = curWinIdx;
+    }
+    const curWin = wins.find(w => w.index === curWinIdx) || wins[0] || { panes: [] };
+
+    // 窗口 Tabs
+    const tabsHtml = wins.length > 0 ? `
+      <div class="tmux-tabs-bar">
+        ${wins.map(w => {
+          const isSelected = w.index === curWinIdx;
+          const star = w.active ? `<span class="tmux-tab-star" title="活跃窗口">*</span>` : "";
+          return `<span class="tmux-tab-chip ${isSelected ? 'active' : ''}" data-sname="${escAttr(s.name)}" data-widx="${w.index}">
+            ${w.index}: ${escHtml(w.name)}${star}
+          </span>`;
+        }).join("")}
+      </div>` : "";
+
+    // 窗格详情
+    const panes = curWin.panes || [];
+    const activePane = panes.find(p => p.active) || panes[0] || {};
+
+    // 窗格行
+    const panesHtml = panes.map(p => {
+      const pcmd = (p.command || "term").toLowerCase();
+      return `
+        <div class="tmux-pane-row">
+          <div class="tmux-pane-left">
+            <span class="tmux-cmd-badge ${escAttr(pcmd)}">${escHtml(p.command || '—')}</span>
+            <span class="tmux-pane-title" title="${escAttr(p.title || '')}">${escHtml(p.title || '—')}</span>
+          </div>
+          <div class="tmux-pane-meta">
+            <span>PID ${escHtml(p.pid || '—')}</span> · <span>${escHtml(p.size || '—')}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    // 终端预览开关与内容
+    const showTerm = tmuxShowTerm[s.name] !== false; // 默认展开
+    const termLines = (activePane.preview || []).slice(-12);
+    const termText = termLines.length ? termLines.join("\n") : "(no terminal output captured)";
+    const termHtml = showTerm ? `
+      <div class="tmux-term-preview">
+        <div class="tmux-term-topbar">
+          <div class="tmux-term-dots"><span></span><span></span><span></span></div>
+          <span>${escHtml(s.name)} : ${curWin.index}.${activePane.index || 1} · ${escHtml(activePane.command || '')}</span>
+          <span>${escHtml(activePane.size || '')}</span>
+        </div>
+        <pre class="tmux-term-pre"><code>${escHtml(termText)}</code></pre>
+      </div>
+    ` : "";
+
+    // 关联 Goal 提示
+    let goalBanner = "";
+    if (s.goal) {
+      const g = s.goal;
+      goalBanner = `
+        <div class="tmux-goal-banner">
+          <div class="tmux-goal-banner-left">
+            ${icon("target", 13)} <b>${escHtml(t("tmux_linked_goal"))}</b>
+            <span class="tmux-goal-banner-obj">${escHtml(g.objective || g.label || g.gid)}</span>
+          </div>
+          ${g.resume_cmd ? `<button class="btn-tmux-act gcopy" data-copy="${escAttr(g.resume_cmd)}">${icon("copy", 11)} <span>Resume</span></button>` : ""}
+        </div>
+      `;
+    }
+
+    const agoStr = s.activity_ago < 60 ? `${s.activity_ago}s ago` : `${Math.floor(s.activity_ago / 60)}m ago`;
+
+    return `
+      <article class="tmux-session-card" data-sname="${escAttr(s.name)}">
+        <div class="tmux-card-top">
+          <div class="tmux-card-title-wrap">
+            <span class="tmux-status-dot ${dotClass}" title="${isAtt ? 'Attached' : 'Detached'}"></span>
+            <span class="tmux-sname">${escHtml(s.name)}</span>
+            ${attBadge}
+            ${agentBadge}
+            ${repoBadge}
+            <span class="tmux-badge tmux-badge-det">${s.windows_count} ${escHtml(t("tmux_total_windows"))}</span>
+          </div>
+          <div class="tmux-card-actions">
+            <button class="btn-tmux-act btn-tmux-term-toggle ${showTerm ? 'active' : ''}" data-sname="${escAttr(s.name)}" title="${escAttr(t('tmux_term_toggle'))}">
+              ${icon("term", 12)} <span>${escHtml(showTerm ? t("tmux_term_hide") : t("tmux_term_toggle"))}</span>
+            </button>
+            <button class="btn-tmux-act btn-tmux-copy-attach gcopy" data-copy="${escAttr(s.attach_cmd)}" title="${escAttr(t('tmux_copy_attach'))}">
+              ${icon("copy", 12)} <span>attach</span>
+            </button>
+          </div>
+        </div>
+        <div class="tmux-meta-bar">
+          <span class="tmux-meta-item">${icon("clock", 12)} <span>${escHtml(s.created_str)} (${agoStr})</span></span>
+          <span class="tmux-meta-item">${icon("folder", 12)} <code>${escHtml(s.main_cwd)}</code></span>
+        </div>
+        ${tabsHtml}
+        ${panesHtml}
+        ${termHtml}
+        ${goalBanner}
+      </article>
+    `;
+  }).join("");
+}
+
+// Tmux Hub 事件监听绑定 (一处绑定)
+(function initTmuxPageEvents() {
+  const tp = $("tmux-panel");
+  if (!tp) return;
+
+  const searchInput = $("tmux-search");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      curTmuxSearch = e.target.value;
+      renderTmuxPage();
+    });
+  }
+
+  const filterWrap = $("tmux-filters");
+  if (filterWrap) {
+    filterWrap.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (!chip || !chip.dataset.tf) return;
+      filterWrap.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      curTmuxFilter = chip.dataset.tf;
+      renderTmuxPage();
+    });
+  }
+
+  tp.addEventListener("click", (e) => {
+    const tabChip = e.target.closest(".tmux-tab-chip");
+    if (tabChip && tabChip.dataset.sname && tabChip.dataset.widx) {
+      tmuxActiveWins[tabChip.dataset.sname] = parseInt(tabChip.dataset.widx, 10);
+      renderTmuxPage();
+      return;
+    }
+
+    const termBtn = e.target.closest(".btn-tmux-term-toggle");
+    if (termBtn && termBtn.dataset.sname) {
+      const sname = termBtn.dataset.sname;
+      tmuxShowTerm[sname] = tmuxShowTerm[sname] === false ? true : false;
+      renderTmuxPage();
+      return;
+    }
+
+    const copyBtn = e.target.closest(".btn-tmux-copy-attach");
+    if (copyBtn && copyBtn.dataset.copy) {
+      const cmd = copyBtn.dataset.copy;
+      copyText(cmd, copyBtn);
+      uiNotice(t("tmux_copied", { cmd }));
+      return;
+    }
+  });
+})();
 
 // --- 日志页: 全局事件时间线(筛选 chips + 同goal循环折叠 + 详情默认折叠) ---
 const logFilter = { st: "all", src: "all", hrs: 24 };
 function filterEvents(evs) {
   const now = Date.now() / 1000;
   return (evs || []).filter(e => {
+    if (isStaticPublishCommit(e)) return false;
     if (logFilter.hrs && e.ts < now - logFilter.hrs * 3600) return false;
     if (logFilter.src === "commit") { if (e.kind !== "commit") return false; }
     else if (logFilter.src !== "all" && e.src !== logFilter.src) return false;
@@ -1419,16 +2487,22 @@ document.addEventListener("keydown", (e) => {
 const TOUCH = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
 const mqMobile = window.matchMedia("(max-width: 768px)");
 const isMobile = () => mqMobile.matches;
-const haptic = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
+const haptic = (ms) => {
+  try {
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+    navigator.vibrate && navigator.vibrate(ms);
+  } catch (e) {}
+};
 // 触摸互斥: 一次触摸只属于一个手势(分页/滑动露按钮/边缘返回)
 const gesture = { claimed: null };
-// 移动端把各分区装进 4 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
+// 移动端把各分区装进 5 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#hp-aiclean", "#sysbar", "#repos", "#chart-wrap", "#recent", "#toolchips"],
-  ["#filters", "#tasks", "#svc-panel"],
-  ["#goals"],
-  ["#logpage", "#agents-page", "#toolspage", "#events"],
+  ["#statuscard", "#sysbar", "#chart-wrap", "#hp-portal-grid"],
+  ["#activity-page"],
+  ["#filters", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
+  ["#tmux-panel"],
+  ["#agents-page"],
 ];
 let pagesHomeOrder = null, pgWrappers = null, trackEl = null, headerHome = null;
 function placeHeader(mobile) {
@@ -1481,16 +2555,16 @@ mqMobile.addEventListener("change", () => {
     document.querySelectorAll(".cat-off").forEach(el => el.classList.remove("cat-off"));
   } else setCat(curCat, false);   // 切回桌面: 恢复选中分类的过滤
 });
-// --- 分页(概览/服务/Goal/管理) ---
+// --- 分页(概览/活动/服务/Tmux/Agent) ---
 const pages = $("pages");
-const N_PAGES = 4;
-const PAGE_W = 100 / N_PAGES;   // 轨道宽 400%, 每页位移 = 轨道的 1/4
+const N_PAGES = 5;
+const PAGE_W = 100 / N_PAGES;   // 轨道宽 500%, 每页位移 = 轨道的 1/5
 var page = 0;   // var: 挂到 window, 便于外部调试/测试读取
-function pageLabels() { return [t("tab_home"), t("tab_svc"), t("tab_goal"), t("tab_manage")]; }
+function pageLabels() { return [t("tab_home"), t("tab_activity"), t("tab_svc"), t("tab_tmux"), t("tab_agent")]; }
 function applyPagesX(withTransition) {
   const tr = trackEl; // 移动端才有轨道
   if (!tr) return;
-  // 轨道宽 600%: 每页位移 = 轨道的 1/6
+  // 轨道宽 500%: 每页位移 = 轨道的 1/5
   tr.style.transform = `translate3d(${-page * PAGE_W}%,0,0)`;
   // 每页各自高度: 轨道高度跟随当前页内容(flex 容器默认拉伸到最高页 = 高页拖矮页)
   const cur = tr.children[page];
@@ -1523,6 +2597,7 @@ function setPage(i, opts) {
   }
   const changed = i !== page || first;
   page = i;
+  syncConnbarVisibility();
   applyPagesX(true);
   document.querySelectorAll("#tabbar .tab").forEach(b => b.classList.toggle("active", +b.dataset.p === i));
   if (changed) activatePage(i);
@@ -1530,16 +2605,28 @@ function setPage(i, opts) {
   requestAnimationFrame(() => applyPagesX(false));
 }
 function activatePage(i) {
-  if (i === 1 && isMobile()) {       // 服务页: 骨架 → 渲染
+  if (i === 0) requestAnimationFrame(drawChart);
+  if (i === 1) { const ap = $("activity-page"); if (ap) ap.hidden = false; renderActivityPage(); }
+  if (i === 2 && isMobile()) {       // 服务页: 骨架 → 渲染
     const tbody = $("svc").querySelector("tbody");
     if (!tbody.children.length) tbody.innerHTML = mobileSkel(4);
     applyFilter();
   }
-  if (i === 2) { const goal = $("goals"); if (goal) goal.hidden = false; }
-  if (i === 3) {
+  if (i === 2) {                     // 服务页尾部 = 计划任务 + 日志区(原管理页迁入)
+    const cp = $("cron-panel");
+    if (cp) cp.hidden = false;
+    cronLoad();
     initLogPage(); renderLogTimeline();
+  }
+  if (i === 3) {
+    const tp = $("tmux-panel");
+    if (tp) tp.hidden = false;
+    renderTmuxPage();
+  }
+  if (i === 4) {
+    const ap = $("agents-page");
+    if (ap) ap.hidden = false;
     initAgentsPage();
-    initToolsPage();
   }
 }
 document.addEventListener("click", (e) => {
@@ -1644,33 +2731,77 @@ function toastCopied(anchor) {
 // --- Agent 运行时总览: 注册表 + 过滤分组 + 装卸 + 状态/进程/任务/额度 ---
 let agentsInit = false, rtCache = null, rtT = 0, rtTimer = null, rtFilter = null, rtModelTimer = null;
 async function loadRuntimes(force) {
+  if (BOOT.static && BOOT.runtimesData) {
+    rtCache = BOOT.runtimesData;
+    return rtCache;
+  }
   const n = Date.now();
   if (!force && rtCache && n - rtT < 15000) return rtCache;
   rtCache = await tlGet("/api/runtimes");
   rtT = n;
   return rtCache;
 }
+let curAgentSearch = "";
+
 const rtState = a => !a.installed ? "none" : a.procs > 0 ? "run" : "idle";
 const rtHasQuota = a => !!(a.quota && a.quota.ok && a.quota.buckets && a.quota.buckets.length);
 const rtHasTasks = a => a.installed && (a.task_count || 0) > 0;
+function rtActivityRank(a, nowSec = Date.now() / 1000) {
+  const tasks = a.tasks || [];
+  const liveTasks = tasks.filter(x => x.health === "running" || x.health === "blocked").length;
+  const ages = tasks.map(x => Number(x.idle_seconds ?? x.age_sec))
+    .filter(n => Number.isFinite(n) && n >= 0);
+  const newestAge = ages.length ? Math.min(...ages) : Infinity;
+  const recentTasks = ages.filter(age => age <= 30 * 86400).length;
+  const recentSessions = Number((a.meta || {}).sessions_24h) || 0;
+  return [
+    a.installed ? 1 : 0,
+    (a.procs || 0) > 0 || liveTasks > 0 ? 1 : 0,
+    liveTasks,
+    a.procs || 0,
+    recentTasks + recentSessions,
+    -newestAge,
+  ];
+}
+function sortAgentsByActivity(agents) {
+  return (agents || []).map((agent, index) => ({ agent, index, rank: rtActivityRank(agent) }))
+    .sort((a, b) => {
+      for (let i = 0; i < a.rank.length; i++) {
+        if (a.rank[i] !== b.rank[i]) return b.rank[i] - a.rank[i];
+      }
+      return a.index - b.index;
+    })
+    .map(x => x.agent);
+}
+
 function rtQuotaHtml(a) {
   const q = a.quota;
   if (!q) return "";
   if (!q.buckets || !q.buckets.length)
     return `<div class="rt-qnone">${t("rt_quotafail")}</div>`;
-  return q.buckets.slice(0, 3).map(b => {
-    const p = b.remaining_pct;
-    if (p == null) return "";
-    const cls = p >= 50 ? "green" : p >= 20 ? "warn" : "red";
-    const dead = p <= 0;
-    return `<div class="rt-q ${cls}">
-      <div class="rt-q-top"><span>${escHtml(b.label)}</span><b>${p}%</b></div>
-      <div class="rt-q-track"><i style="width:${Math.max(p, 1.5)}%"></i></div>
-      ${b.detail ? `<div class="rt-q-sub">${escHtml(b.detail)}</div>` : ""}
-      ${b.reset ? `<div class="rt-q-sub">${dead ? t("rt_exhausted") : t("rt_reset")} ${escHtml(b.reset)}</div>` : ""}
-    </div>`;
-  }).join("");
+  return `<div class="agent-quota-box">
+    <div class="agent-quota-title">
+      <span>${icon("gauge", 12)} ${t("agent_quota_title")}</span>
+      ${q.account ? `<span style="font-weight:normal;color:var(--text-ghost)">${escHtml(q.account)}${q.plan ? ' · ' + escHtml(q.plan) : ''}</span>` : ""}
+    </div>
+    ${q.buckets.map(b => {
+      const p = b.remaining_pct;
+      if (p == null) return "";
+      const cls = p >= 50 ? "high" : p >= 15 ? "mid" : "low";
+      const dead = p <= 0;
+      return `<div class="agent-bucket-row">
+        <div class="agent-bucket-meta">
+          <span><b>${escHtml(b.label)}</b>: ${p}%</span>
+          <span class="reset-txt">${b.reset ? (dead ? t("rt_exhausted") : t("rt_reset")) + " " + escHtml(b.reset) : (b.detail ? escHtml(b.detail) : "")}</span>
+        </div>
+        <div class="agent-bar-track">
+          <div class="agent-bar-fill ${cls}" style="width:${Math.max(p, 2)}%"></div>
+        </div>
+      </div>`;
+    }).join("")}
+  </div>`;
 }
+
 function rtTasksHtml(a) {
   const rows = [];
   (a.tasks || []).forEach(x => {
@@ -1689,29 +2820,46 @@ function rtTasksHtml(a) {
   });
   return rows.join("");
 }
+
 function rtCardHtml(a) {
-  const meta = [];
-  if (a.quota && a.quota.account) meta.push(escHtml(a.quota.account));
-  if (a.quota && a.quota.plan) meta.push(escHtml(a.quota.plan));
-  if (a.meta && a.meta.sessions_24h != null && a.meta.sessions_24h > 0) meta.push(t("rt_sess24", { n: a.meta.sessions_24h }));
-  if (a.meta && a.meta.sessions_total != null) meta.push(t("rt_sessall", { n: a.meta.sessions_total }));
-  let procs = "";
-  if (a.procs > 0 && a.proc_list && a.proc_list[0]) {
-    const p0 = a.proc_list[0];
-    procs = `<div class="rt-procline"><b>${a.procs}</b> ${t("rt_procs")} · <b>${p0.cpu_pct}%</b> CPU · <b>${p0.mem_mb}</b> MB</div>`;
+  const st = rtState(a);
+  const stDot = st === "run" ? "on" : st === "idle" ? "idle" : "";
+  const stText = st === "run" ? `${t("rt_f_run")} (${a.procs})` : (a.installed ? t("rt_sec_idle") : t("rt_f_none"));
+
+  let procsHtml = "";
+  if (a.procs > 0 && a.proc_list && a.proc_list.length) {
+    procsHtml = `<div class="agent-procs-list">
+      ${a.proc_list.map(p => `
+        <div class="agent-proc-item">
+          <div><span class="agent-proc-pid">PID ${p.pid}</span> <span class="agent-proc-cwd" title="${escAttr(p.cwd || '')}">${escHtml(p.cwd || '—')}</span></div>
+          <div class="agent-proc-res"><b>${p.cpu_pct}%</b> CPU · <b>${p.mem_mb}</b> MB</div>
+        </div>
+      `).join("")}
+    </div>`;
   }
-  const tasks = rtTasksHtml(a);
-  const quota = rtQuotaHtml(a);
-  const btn = a.installable
-    ? `<button class="rt-btn ghost danger" data-act="uninstall" data-id="${escAttr(a.id)}">${t("rt_uninstbtn")}</button>` : "";
-  return `<div class="rt-card ${rtState(a)}">
-    <div class="rt-head"><b>${escHtml(a.name)}</b><span class="rt-ver">${escHtml(a.version || "")}</span></div>
-    ${meta.length ? `<div class="rt-sub">${meta.join(" · ")}</div>` : ""}
-    ${procs}${quota}
-    ${tasks ? `<div class="rt-tasks">${tasks}</div>` : ""}
-    ${btn ? `<div class="rt-actions">${btn}</div>` : ""}
-  </div>`;
+
+  const tasksHtml = rtTasksHtml(a);
+  const quotaHtml = rtQuotaHtml(a);
+  const detailBtn = `<button class="rt-btn ghost btn-agent-detail" data-agent-id="${escAttr(a.id)}">${t("agent_btn_detail")}</button>`;
+
+  return `<article class="agent-card ${st}" data-aname="${escAttr(a.name)}">
+    <div class="agent-card-top">
+      <div class="agent-card-title-wrap">
+        <span class="agent-status-dot ${stDot}"></span>
+        <span class="agent-aname">${escHtml(a.name)}</span>
+        <span class="agent-pill ${st}">${escHtml(stText)}</span>
+        ${a.version ? `<span class="agent-acc-badge">${escHtml(a.version)}</span>` : ""}
+      </div>
+      <div class="agent-card-actions">
+        ${detailBtn}
+      </div>
+    </div>
+    ${procsHtml}
+    ${quotaHtml}
+    ${tasksHtml ? `<div class="rt-tasks" style="margin-top:8px;">${tasksHtml}</div>` : ""}
+  </article>`;
 }
+
 function rtMatch(a, f) {
   const st = rtState(a);
   if (f === "run") return st === "run";
@@ -1719,101 +2867,231 @@ function rtMatch(a, f) {
   if (f === "tasks") return rtHasTasks(a);
   if (f === "quota") return a.installed && rtHasQuota(a);
   if (f === "none") return st === "none";
-  return true;   // all
+  return true;
 }
+
 async function refreshAgentsPage() {
   const el = $("agents-page");
   if (!el || el.hidden) return;
-  el.innerHTML = `<h2>${t("rt_title")}</h2>` + mobileSkelDiv(3);
   try { renderRuntimes(await loadRuntimes(true)); }
-  catch (e) { el.innerHTML = esHtml("cpu", t("a_fail", { e: escHtml(e.message) })); }
+  catch (e) {
+    const cont = $("agent-cards-container");
+    if (cont) cont.innerHTML = esHtml("cpu", t("a_fail", { e: escHtml(e.message) }));
+  }
 }
+
+function bindAgentHubEvents(el, d) {
+  const searchInput = $("agent-search");
+  if (searchInput && !searchInput.dataset.bound) {
+    searchInput.dataset.bound = "1";
+    searchInput.addEventListener("input", (e) => {
+      curAgentSearch = e.target.value;
+      renderRuntimes(d);
+    });
+  }
+
+  const btnQuota = $("btn-refresh-quota");
+  if (btnQuota && !btnQuota.dataset.bound) {
+    btnQuota.dataset.bound = "1";
+    btnQuota.addEventListener("click", async () => {
+      btnQuota.classList.add("loading");
+      await tlPost("/api/runtimes", { agent: "", action: "quota" });
+      setTimeout(refreshAgentsPage, 1000);
+    });
+  }
+
+  const btnProbeAll = $("btn-probe-all");
+  if (btnProbeAll && !btnProbeAll.dataset.bound) {
+    btnProbeAll.dataset.bound = "1";
+    btnProbeAll.addEventListener("click", async () => {
+      const testBtns = el.querySelectorAll("[data-mtest]");
+      if (!testBtns.length) return;
+      btnProbeAll.classList.add("loading");
+      for (const b of testBtns) {
+        b.click();
+        await new Promise(r => setTimeout(r, 120));
+      }
+      setTimeout(() => btnProbeAll.classList.remove("loading"), 1000);
+    });
+  }
+
+  const filterWrap = $("agent-filters");
+  if (filterWrap && !filterWrap.dataset.bound) {
+    filterWrap.dataset.bound = "1";
+    filterWrap.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (!chip || !chip.dataset.rtf) return;
+      filterWrap.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      rtFilter = chip.dataset.rtf;
+      try { localStorage.setItem("svc-rtf", rtFilter); } catch (err) {}
+      renderRuntimes(d);
+    });
+  }
+
+  el.querySelectorAll(".rt-btn[data-act]").forEach(b => {
+    if (b.dataset.bound) return;
+    b.dataset.bound = "1";
+    b.addEventListener("click", async () => {
+      const id = b.dataset.id, act = b.dataset.act;
+      const a = (d.agents || []).find(x => x.id === id) || {};
+      const msg = act === "install" ? t("rt_ask_inst", { n: a.name }) : t("rt_ask_uninst", { n: a.name });
+      if (!(await uiConfirm(msg))) return;
+      b.textContent = "…"; b.disabled = true;
+      try {
+        const r = await tlPost("/api/runtimes", { agent: id, action: act });
+        if (r && !r.ok && r.msg) uiNotice(r.msg);
+      } catch (err) { uiNotice(err.message); }
+      rtPollCtl();
+    });
+  });
+
+  el.querySelectorAll(".rt-task[data-sid]").forEach(c => {
+    if (c.dataset.bound) return;
+    c.dataset.bound = "1";
+    c.addEventListener("click", () => {
+      if (typeof setPage !== "undefined" && isMobile()) setPage(3);
+      else setCat("tmux");
+    });
+  });
+}
+
 function renderRuntimes(d) {
   const el = $("agents-page");
   if (!el || !d || !d.agents) return;
   if (!rtFilter) { try { rtFilter = localStorage.getItem("svc-rtf") || "all"; } catch (e) { rtFilter = "all"; } }
-  const allAgents = d.agents || [];
-  const rtHasContent = a => (a.procs || 0) > 0 || rtHasTasks(a) || rtHasQuota(a) ||
-    !!(a.meta && ((a.meta.sessions_24h || 0) > 0 || (a.meta.sessions_total || 0) > 0));
-  const all = allAgents.filter(rtHasContent);
-  const run = all.filter(a => rtState(a) === "run");
-  const idle = all.filter(a => rtState(a) === "idle");
-  const none = all.filter(a => rtState(a) === "none");
+
+  const allAgents = sortAgentsByActivity(d.agents || []);
+  const run = allAgents.filter(a => rtState(a) === "run");
+  const idle = allAgents.filter(a => rtState(a) === "idle");
+  const none = allAgents.filter(a => rtState(a) === "none");
+
+  // 1. 低额度预警收集 (< 15%)
   const low = [];
-  all.forEach(a => ((a.quota && a.quota.buckets) || []).forEach(b => {
-    // 横幅只报即将耗尽(>0 且 <10%); 已耗尽(0%)卡片里红色可见, 不再重复横幅
-    if (b.remaining_pct != null && b.remaining_pct > 0 && b.remaining_pct < 10) low.push(a.name);
+  allAgents.forEach(a => ((a.quota && a.quota.buckets) || []).forEach(b => {
+    if (b.remaining_pct != null && b.remaining_pct < 15) {
+      low.push({ agent: a.name, label: b.label, pct: b.remaining_pct, reset: b.reset });
+    }
   }));
-  const counts = { all: all.length, run: run.length, tasks: all.filter(rtHasTasks).length,
-    quota: all.filter(a => a.installed && rtHasQuota(a)).length, none: none.length };
-  const FILTERS = [["all", "rt_f_all"], ["run", "rt_f_run"], ["tasks", "rt_f_tasks"],
-    ["quota", "rt_f_quota"], ["none", "rt_f_none"]];
-  const hist = ((d.ctl && d.ctl.history) || []).slice(-3).reverse();
-  const secCards = (key, arr, cls) => {
-    const list = arr.filter(a => rtMatch(a, rtFilter));
-    if (!list.length) return "";
-    return `<section class="rt-sec"><h3 class="rt-sechead"><span class="rt-sq ${cls}"></span>${t(key)} <em>${list.length}</em></h3>
-      <div class="rt-grid">${list.map(rtCardHtml).join("")}</div></section>`;
-  };
-  const secNone = () => {
-    const list = none.filter(a => rtMatch(a, rtFilter));
-    if (!list.length) return "";
-    return `<section class="rt-sec"><h3 class="rt-sechead"><span class="rt-sq none"></span>${t("rt_f_none")} <em>${list.length}</em></h3>
-      <div class="rt-none-list">${list.map(a => `<div class="rt-none-row"><b>${escHtml(a.name)}</b>
-        ${a.installable ? `<button class="rt-btn" data-act="install" data-id="${escAttr(a.id)}">${t("rt_instbtn")}</button>` : ""}</div>`).join("")}</div></section>`;
-  };
-  const any = all.some(a => rtMatch(a, rtFilter));
-  el.innerHTML = `<h2>${t("rt_title")} <span class="ghint">${t("rt_summary", { i: d.total_installed, n: all.length, p: d.total_running })}</span></h2>` +
-    `${low.length ? `<div class="rt-low">${t("rt_low", { n: [...new Set(low)].join(" / ") })}</div>` : ""}` +
-    `${d.quota && d.quota.running ? `<div class="rt-qrefresh">${t("rt_refreshing")}</div>` : ""}` +
-    `<div class="rt-toolbar"><div class="rt-filters">${FILTERS.map(([id, key]) =>
-      `<button class="rt-f${rtFilter === id ? " on" : ""}" data-f="${id}">${t(key)}<em>${counts[id]}</em></button>`).join("")}</div>` +
-    `<button class="rt-btn ghost" id="rt-quota-btn">${t("rt_refresh")}</button></div>` +
-    (any ? secCards("rt_f_run", run, "run") + secCards("rt_sec_idle", idle, "idle") + secNone()
-      : `<div class="rt-empty">${t("rt_empty")}</div>`) +
-    rtModelsSection(d) +
-    `${hist.length ? `<div class="rt-hist">${hist.map(h =>
-      `<div>${escHtml(h.t || "")} ${escHtml(h.agent)} ${escHtml(h.action)} ${h.ok ? "✓" : "✗"} ${escHtml(h.msg || "")}</div>`).join("")}</div>` : ""}`;
-  el.querySelectorAll(".rt-f").forEach(b => b.addEventListener("click", () => {
-    if (rtFilter === b.dataset.f) return;
-    rtFilter = b.dataset.f;
-    try { localStorage.setItem("svc-rtf", rtFilter); } catch (e) {}
-    renderRuntimes(d);   // 纯前端过滤, 用缓存数据重渲染
-  }));
-  const qb = $("rt-quota-btn");
-  if (qb) qb.addEventListener("click", async () => {
-    qb.textContent = "…";
-    await tlPost("/api/runtimes", { agent: "", action: "quota" });
-    setTimeout(refreshAgentsPage, 800);
+
+  // 2. 顶部 KPI
+  const kpisEl = $("agent-kpis");
+  if (kpisEl) {
+    const provs = (d.models && d.models.providers) || [];
+    const totalTasks = allAgents.reduce((acc, a) => acc + (a.task_count || 0), 0);
+    kpisEl.innerHTML = `
+      <div class="agent-kpi-card">
+        <div class="agent-kpi-val">${d.total_installed || 0} <small>/ ${allAgents.length}</small></div>
+        <div class="agent-kpi-lbl">${escHtml(t("agent_kpi_installed"))}</div>
+      </div>
+      <div class="agent-kpi-card">
+        <div class="agent-kpi-val" style="color:#4ade80;">${d.total_running || 0}</div>
+        <div class="agent-kpi-lbl">${escHtml(t("agent_kpi_procs"))}</div>
+      </div>
+      <div class="agent-kpi-card">
+        <div class="agent-kpi-val" style="color:#38bdf8;">${totalTasks}</div>
+        <div class="agent-kpi-lbl">${escHtml(t("agent_kpi_tasks"))}</div>
+      </div>
+      <div class="agent-kpi-card">
+        <div class="agent-kpi-val" style="color:#a78bfa;">${escHtml(t("agent_kpi_gateway_count", { n: provs.length }))}</div>
+        <div class="agent-kpi-lbl">${escHtml(t("agent_kpi_models"))}</div>
+      </div>
+      <div class="agent-kpi-card">
+        <div class="agent-kpi-val" style="color:${low.length ? '#f87171' : '#4ade80'};">${escHtml(low.length ? t("agent_kpi_warn_count", { n: low.length }) : t("agent_kpi_quota_ok"))}</div>
+        <div class="agent-kpi-lbl">${escHtml(t("agent_kpi_quota_warn"))}</div>
+      </div>
+    `;
+  }
+
+  // 3. 低额度横幅
+  const lowWrap = $("agent-low-quota-wrap");
+  if (lowWrap) {
+    if (low.length > 0) {
+      lowWrap.hidden = false;
+      lowWrap.innerHTML = `
+        <div class="agent-low-quota-banner">
+          <div class="agent-low-quota-head">${icon("warn", 14)} <span>${escHtml(t("agent_low_quota_banner"))}</span></div>
+          <div class="agent-low-quota-list">
+            ${low.map(x => `
+              <div class="agent-low-quota-item">
+                <span><b>${escHtml(x.agent)}</b> · ${escHtml(x.label)}</span>
+                <span>${escHtml(t("agent_quota_remaining", { n: x.pct }))} ${x.reset ? `<small style="color:var(--text-ghost)">(${escHtml(x.reset)})</small>` : ''}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    } else {
+      lowWrap.hidden = true;
+      lowWrap.innerHTML = "";
+    }
+  }
+
+  // 4. 筛选计数
+  const nAll = $("n-rtf-all"), nRun = $("n-rtf-run"), nTasks = $("n-rtf-tasks"), nQuota = $("n-rtf-quota"), nNone = $("n-rtf-none");
+  if (nAll) nAll.textContent = `(${allAgents.length})`;
+  if (nRun) nRun.textContent = `(${run.length})`;
+  if (nTasks) nTasks.textContent = `(${allAgents.filter(rtHasTasks).length})`;
+  if (nQuota) nQuota.textContent = `(${allAgents.filter(a => a.installed && rtHasQuota(a)).length})`;
+  if (nNone) nNone.textContent = `(${none.length})`;
+
+  // 5. 过滤与搜索
+  const q = curAgentSearch.toLowerCase().trim();
+  const filtered = allAgents.filter(a => {
+    if (!rtMatch(a, rtFilter)) return false;
+    if (q) {
+      const matchName = (a.name || "").toLowerCase().includes(q);
+      const matchBin = (a.bin || "").toLowerCase().includes(q);
+      const matchAcc = (a.quota && a.quota.account ? a.quota.account.toLowerCase() : "").includes(q);
+      const matchProcs = (a.proc_list || []).some(p => (p.cwd || "").toLowerCase().includes(q) || (p.cmd || "").toLowerCase().includes(q) || String(p.pid).includes(q));
+      const matchTasks = (a.tasks || []).some(t => (t.cwd || "").toLowerCase().includes(q) || (t.goal || t.title || "").toLowerCase().includes(q));
+      if (!matchName && !matchBin && !matchAcc && !matchProcs && !matchTasks) return false;
+    }
+    return true;
   });
-  el.querySelectorAll(".rt-btn[data-act]").forEach(b => b.addEventListener("click", async () => {
-    const id = b.dataset.id, act = b.dataset.act;
-    const a = d.agents.find(x => x.id === id) || {};
-    const msg = act === "install" ? t("rt_ask_inst", { n: a.name }) : t("rt_ask_uninst", { n: a.name });
-    if (!(await uiConfirm(msg))) return;
-    b.textContent = "…"; b.disabled = true;
-    try {
-      const r = await tlPost("/api/runtimes", { agent: id, action: act });
-      if (r && !r.ok && r.msg) uiNotice(r.msg);
-    } catch (e) { uiNotice(e.message); }
-    rtPollCtl();
-  }));
-  // omp 任务行 → 跳日志页并选中该 agent(手机切页签, 桌面切分类)
-  el.querySelectorAll(".rt-task[data-sid]").forEach(c =>
-    c.addEventListener("click", async () => {
-      await initLogPage();
-      const sel = $("logagent-sel");
-      const opt = sel && [...sel.options].find(o => o.value === c.dataset.sid && o.dataset.cwd === c.dataset.cwd);
-      if (opt) { sel.value = opt.value; loadLogView(); }
-      if (isMobile()) setPage(3);
-      else { setCat("manage"); scrollTo(0, 0); }
-    }));
-  rtBindModels(el, d);
+
+  // 6. 渲染卡片
+  const cardsContainer = $("agent-cards-container");
+  if (cardsContainer) {
+    if (!filtered.length) {
+      cardsContainer.innerHTML = `<div class="gempty">${escHtml(t("agent_empty"))}</div>`;
+    } else {
+      cardsContainer.innerHTML = filtered.map(rtCardHtml).join("");
+    }
+  }
+
+  // 7. 模型网关探活区
+  const modelsContainer = $("agent-models-section");
+  if (modelsContainer) {
+    modelsContainer.innerHTML = rtModelsSection(d);
+    rtBindModels(modelsContainer, d);
+  }
+
+  // 8. 智能体运行环境区
+  const envContainer = $("agent-env-section");
+  if (envContainer) {
+    const tools = d.env_tools || {};
+    envContainer.innerHTML = `
+      <div class="agent-env-section">
+        <div class="agent-env-head">${icon("cpu", 14)} <span>${escHtml(t("agent_env_title"))}</span></div>
+        <div class="agent-env-grid">
+          ${Object.entries(tools).map(([name, ver]) => `
+            <div class="agent-env-chip"><b>${escHtml(name)}</b> <span>${escHtml(ver)}</span></div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // 9. 动作与事件监听
+  bindAgentHubEvents(el, d);
+
   if ((d.models && d.models.providers || []).some(p => p.models.some(m => m.test && m.test.status === "running"))) rtPollModels();
   if (d.ctl && d.ctl.running) rtPollCtl();
   else if (d.quota && d.quota.running && !rtTimer) rtPollQuota();
 }
 function rtModelTestHtml(m) {
+  if (BOOT.readonly) return `<span class="rt-mst readonly">${t("st_readonly")}</span>`;
   const r = m.test;
   if (!r) return `<button class="rt-btn ghost" data-mtest="1">${t("rt_m_test")}</button>`;
   if (r.status === "running") return `<span class="rt-mst testing">${t("rt_m_testing")}</span>`;
@@ -1834,8 +3112,9 @@ function rtModelsSection(d) {
         <b>${escHtml(p.name)}</b>${badge}<span class="rt-mhost">${escHtml((p.base || "").replace(/^https?:\/\//, "").split("/")[0])}</span></div>
       ${rows}</div>`;
   }).join("");
+  const hint = BOOT.readonly ? t("rt_static_hint") : t("rt_m_hint");
   return `<section class="rt-sec"><h3 class="rt-sechead"><span class="rt-sq model"></span>${t("rt_m_title")} <em>${provs.length}</em></h3>
-    <div class="rt-mhint">${t("rt_m_hint")}</div>
+    <div class="rt-mhint">${hint}</div>
     <div class="rt-mgrid">${cards}</div></section>`;
 }
 function rtBindModels(el, d) {
@@ -1888,10 +3167,329 @@ async function initAgentsPage() {
   el.hidden = false;  // 双端进入 agent 页即显示(移动页签 / 桌面 cat=agent)
   if (agentsInit) { refreshAgentsPage(); return; }
   agentsInit = true;
-  el.innerHTML = `<h2>${t("rt_title")}</h2>` + mobileSkelDiv(3);
+  const cards = $("agent-cards-container");
+  if (cards) cards.innerHTML = mobileSkelDiv(3);
   try { renderRuntimes(await loadRuntimes()); }
-  catch (e) { el.innerHTML = esHtml("cpu", t("a_fail", { e: escHtml(e.message) })); }
+  catch (e) {
+    if (cards) cards.innerHTML = esHtml("cpu", t("a_fail", { e: escHtml(e.message) }));
+  }
 }
+let curAgentDetail = null;
+let curAgentDetailTab = "basic";
+
+function renderAgentDetailContent(data, tab) {
+  if (!data) return `<div class="gempty">${escHtml(t("a_fail", { e: "No data" }))}</div>`;
+
+  if (tab === "basic") {
+    const models = data.models || {};
+    const procs = data.procs || [];
+    const cfg = data.config_summary || {};
+    let modelRows = "";
+    if (models.default) {
+      modelRows += `<div class="ad-info-card">
+        <span class="ad-info-label">Default Model</span>
+        <span class="ad-info-val">${escHtml(models.default)}</span>
+        ${models.provider ? `<span class="ad-skill-cat" style="margin-top:4px;">Provider: ${escHtml(models.provider)}</span>` : ""}
+      </div>`;
+    }
+    if (models.opus || models.sonnet) {
+      if (models.opus) {
+        modelRows += `<div class="ad-info-card">
+          <span class="ad-info-label">Opus Model</span>
+          <span class="ad-info-val">${escHtml(models.opus)}</span>
+        </div>`;
+      }
+      if (models.sonnet) {
+        modelRows += `<div class="ad-info-card">
+          <span class="ad-info-label">Sonnet Model</span>
+          <span class="ad-info-val">${escHtml(models.sonnet)}</span>
+        </div>`;
+      }
+    }
+    if (models.reasoning_effort) {
+      modelRows += `<div class="ad-info-card">
+        <span class="ad-info-label">Reasoning Effort</span>
+        <span class="ad-info-val">${escHtml(models.reasoning_effort)}</span>
+      </div>`;
+    }
+    if (models.context_length) {
+      modelRows += `<div class="ad-info-card">
+        <span class="ad-info-label">Context Length</span>
+        <span class="ad-info-val">${(models.context_length / 1024).toFixed(0)}k tokens</span>
+      </div>`;
+    }
+
+    let fallbackHtml = "";
+    if (models.fallbacks && models.fallbacks.length) {
+      fallbackHtml = `<div class="ad-section">
+        <div class="ad-sec-title">${icon("bolt", 13)} Fallback Providers</div>
+        <div class="ad-fallback-list">
+          ${models.fallbacks.map(fb => `<span class="ad-fallback-chip">${escHtml(fb.provider || "")}: <b>${escHtml(fb.model || "")}</b></span>`).join("")}
+        </div>
+      </div>`;
+    }
+
+    let procsHtml = "";
+    if (procs.length) {
+      procsHtml = `<div class="ad-section">
+        <div class="ad-sec-title">${icon("terminal", 13)} ${t("agent_sec_procs")} (${procs.length})</div>
+        <div class="ad-card-grid">
+          ${procs.map(p => `<div class="ad-info-card">
+            <span class="ad-info-label">PID ${escHtml(p.pid)} · Up ${escHtml(fmtUp(p.up_sec))}</span>
+            <span class="ad-info-val">${escHtml(p.cmd || "")}</span>
+            <span class="ad-info-label" style="margin-top:2px;">CPU: ${escHtml(p.cpu_pct)}% · Mem: ${escHtml(p.mem_mb)} MB</span>
+          </div>`).join("")}
+        </div>
+      </div>`;
+    }
+
+    return `<div class="ad-section">
+      <div class="ad-sec-title">${icon("cpu", 13)} ${t("agent_sec_models")}</div>
+      <div class="ad-card-grid">
+        <div class="ad-info-card">
+          <span class="ad-info-label">Version</span>
+          <span class="ad-info-val">${escHtml(data.version || "—")}</span>
+        </div>
+        <div class="ad-info-card">
+          <span class="ad-info-label">Binary Path</span>
+          <span class="ad-info-val" style="font-family:var(--mono);font-size:11px;">${escHtml(data.bin || "—")}</span>
+        </div>
+        ${modelRows}
+      </div>
+      ${fallbackHtml}
+      ${procsHtml}
+    </div>`;
+  }
+
+  if (tab === "skills") {
+    const skills = data.skills || [];
+    if (!skills.length) {
+      return `<div class="gempty">${escHtml(t("agent_no_skills"))}</div>`;
+    }
+    return `<div class="ad-section">
+      <div class="ad-sec-title">${icon("bolt", 13)} ${t("agent_sec_skills")} (${skills.length})</div>
+      <div class="ad-skills-grid">
+        ${skills.map(s => `<div class="ad-skill-card">
+          <div class="ad-skill-top">
+            <span class="ad-skill-name">${escHtml(s.name)}</span>
+            <span class="ad-skill-cat">${escHtml(s.category)}</span>
+          </div>
+          ${s.description ? `<div class="ad-skill-desc">${escHtml(s.description)}</div>` : ""}
+        </div>`).join("")}
+      </div>
+    </div>`;
+  }
+
+  if (tab === "platforms") {
+    const gw = data.gateway || {};
+    const plats = data.platforms || {};
+    const pKeys = Object.keys(plats);
+    const mcp = data.mcp_servers || [];
+    const cfg = data.config_summary || {};
+    const toolsets = cfg.platform_toolsets || [];
+
+    let platHtml = "";
+    if (pKeys.length) {
+      platHtml = `<div class="ad-section">
+        <div class="ad-sec-title">${icon("share", 13)} Communication Platforms (Gateway)</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${pKeys.map(k => {
+            const p = plats[k] || {};
+            const st = p.state || "unknown";
+            return `<div class="ad-platform-row">
+              <div class="ad-platform-name">${icon("message", 15)} ${escHtml(k.toUpperCase())}</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                ${p.updated_at ? `<span class="ad-info-label">${escHtml(p.updated_at.slice(0, 19).replace("T", " "))}</span>` : ""}
+                <span class="ad-platform-badge ${st === "connected" ? "connected" : ""}">${escHtml(st)}</span>
+              </div>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>`;
+    }
+
+    let toolsetsHtml = "";
+    if (toolsets.length) {
+      toolsetsHtml = `<div class="ad-section">
+        <div class="ad-sec-title">${icon("tool", 13)} Platform Toolsets</div>
+        <div class="ad-fallback-list">
+          ${toolsets.map(ts => `<span class="ad-fallback-chip">${escHtml(ts)}</span>`).join("")}
+        </div>
+      </div>`;
+    }
+
+    let mcpHtml = "";
+    if (mcp.length) {
+      mcpHtml = `<div class="ad-section">
+        <div class="ad-sec-title">${icon("gauge", 13)} MCP Servers (${mcp.length})</div>
+        <div class="ad-card-grid">
+          ${mcp.map(m => `<div class="ad-info-card">
+            <span class="ad-info-label">MCP Server</span>
+            <span class="ad-info-val">${escHtml(m.name)}</span>
+            <span class="ad-info-label" style="font-family:var(--mono);margin-top:2px;">${escHtml(m.command)}</span>
+          </div>`).join("")}
+        </div>
+      </div>`;
+    }
+
+    return `<div style="display:flex;flex-direction:column;gap:16px;">
+      ${platHtml || `<div class="gempty">暂无外部接入平台</div>`}
+      ${toolsetsHtml}
+      ${mcpHtml}
+    </div>`;
+  }
+
+  if (tab === "memories") {
+    const mems = data.memories || {};
+    const mKeys = Object.keys(mems);
+    if (!mKeys.length) {
+      return `<div class="gempty">${escHtml(t("agent_no_memories"))}</div>`;
+    }
+    return `<div class="ad-section">
+      <div class="ad-sec-title">${icon("book", 13)} ${t("agent_sec_memories")}</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${mKeys.map(k => {
+          const m = mems[k] || {};
+          const topics = m.topics || [];
+          return `<div class="ad-memory-box">
+            <div class="ad-memory-head">
+              <span class="ad-memory-title">${escHtml(k)}</span>
+              <span class="ad-memory-count">${m.count || 0} 条设定</span>
+            </div>
+            ${m.preview ? `<div class="ad-skill-desc" style="color:var(--text-title);">${escHtml(m.preview)}</div>` : ""}
+            <div class="ad-memory-items">
+              ${topics.map(tText => `<div class="ad-memory-item">${escHtml(tText)}</div>`).join("")}
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+  }
+
+  if (tab === "cron") {
+    const cron = data.cron || [];
+    if (!cron.length) {
+      return `<div class="gempty">${escHtml(t("agent_no_cron"))}</div>`;
+    }
+    return `<div class="ad-section">
+      <div class="ad-sec-title">${icon("clock", 13)} ${t("agent_sec_cron")} (${cron.length})</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${cron.map(j => `<div class="ad-cron-card">
+          <div class="ad-cron-top">
+            <span class="ad-cron-name">${escHtml(j.name || j.id)}</span>
+            <span class="ad-cron-sched">${escHtml(j.schedule || "")}</span>
+          </div>
+          ${j.prompt ? `<div class="ad-cron-prompt">${escHtml(j.prompt)}</div>` : ""}
+          <div class="ad-cron-meta">
+            <span>Status: <b style="color:${j.last_status === 'ok' ? '#4ade80' : '#f87171'}">${escHtml(j.last_status || 'never')}</b></span>
+            ${j.last_run_at ? `<span>Last: ${escHtml(j.last_run_at.slice(0, 19).replace('T', ' '))}</span>` : ""}
+            ${j.next_run_at ? `<span>Next: ${escHtml(j.next_run_at.slice(0, 19).replace('T', ' '))}</span>` : ""}
+            ${j.origin && j.origin.platform ? `<span>Deliver: <b>${escHtml(j.origin.platform)}</b></span>` : ""}
+          </div>
+        </div>`).join("")}
+      </div>
+    </div>`;
+  }
+
+  return "";
+}
+
+function closeAgentDetail() {
+  const sheet = $("agent-detail-sheet");
+  if (!sheet) return;
+  sheet.hidden = true;
+  document.documentElement.classList.remove("traj-noscroll");
+}
+
+async function openAgentDetail(agentId) {
+  const sheet = $("agent-detail-sheet");
+  const title = $("agent-sheet-title");
+  const sub = $("agent-sheet-sub");
+  const dot = $("agent-sheet-dot");
+  const pill = $("agent-sheet-pill");
+  const body = $("agent-sheet-body");
+  const backBtn = $("agent-sheet-back");
+  const nav = $("agent-sheet-nav");
+  if (!sheet || !body) return;
+
+  curAgentDetailTab = "basic";
+  sheet.hidden = false;
+  sheet.classList.remove("opening"); void sheet.offsetWidth; sheet.classList.add("opening");
+  document.documentElement.classList.add("traj-noscroll");
+  haptic(8);
+  body.innerHTML = `<div class="gempty">${escHtml(t("st_loading"))}</div>`;
+
+  if (backBtn && !backBtn.dataset.bound) {
+    backBtn.dataset.bound = "1";
+    backBtn.addEventListener("click", closeAgentDetail);
+  }
+
+  // 绑定 tab 切换
+  if (nav && !nav.dataset.bound) {
+    nav.dataset.bound = "1";
+    nav.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (!chip || !chip.dataset.adtab) return;
+      nav.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      curAgentDetailTab = chip.dataset.adtab;
+      body.innerHTML = renderAgentDetailContent(curAgentDetail, curAgentDetailTab);
+    });
+  }
+
+  // 重置 tab 激活态
+  nav?.querySelectorAll(".chip")?.forEach(c => {
+    if (c.dataset.adtab === "basic") c.classList.add("active");
+    else c.classList.remove("active");
+  });
+
+  try {
+    let d = null;
+    // 静态公网优先使用 BOOT.agentDetails
+    if (BOOT && BOOT.agentDetails && BOOT.agentDetails[agentId]) {
+      d = BOOT.agentDetails[agentId];
+    } else {
+      const r = await fetch("/api/agentdetail?agent=" + encodeURIComponent(agentId), { cache: "no-store" });
+      d = await r.json();
+    }
+    if (!d || !d.ok) throw new Error((d && d.msg) || "failed to load");
+    curAgentDetail = d;
+
+    if (title) title.textContent = t("agent_detail_title", { name: d.name });
+    if (sub) sub.textContent = d.bin || "";
+    if (dot) {
+      dot.className = "agent-status-dot " + (d.procs && d.procs.length ? "on" : (d.installed ? "idle" : ""));
+    }
+    if (pill) {
+      pill.className = "agent-pill " + (d.procs && d.procs.length ? "run" : (d.installed ? "idle" : "none"));
+      pill.textContent = d.procs && d.procs.length ? `${t("rt_f_run")} (${d.procs.length})` : (d.installed ? t("rt_sec_idle") : t("rt_f_none"));
+    }
+
+    const sCnt = $("ad-skills-count");
+    if (sCnt) sCnt.textContent = (d.skills && d.skills.length) ? `(${d.skills.length})` : "";
+    const cCnt = $("ad-cron-count");
+    if (cCnt) cCnt.textContent = (d.cron && d.cron.length) ? `(${d.cron.length})` : "";
+
+    body.innerHTML = renderAgentDetailContent(d, curAgentDetailTab);
+  } catch (err) {
+    body.innerHTML = `<div class="gempty">${escHtml(t("a_fail", { e: err.message }))}</div>`;
+  }
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest(".btn-agent-detail");
+  if (b) {
+    e.preventDefault();
+    e.stopPropagation();
+    openAgentDetail(b.dataset.agentId);
+    return;
+  }
+  if (e.target.closest("#agent-sheet-back")) {
+    closeAgentDetail();
+    return;
+  }
+});
+
 // --- Goal 详情: 双栏 KV + ANSI 彩色终端 + 活动/事件; 宽弹层 ---
 function goalDetailHtml(d) {
   const esc = escHtml;
@@ -2031,7 +3629,7 @@ if (TOUCH) document.addEventListener("touchend", (e) => {
   const now = Date.now();
   if (now - lastTap < 300 && stat === lastTapEl) {
     lastTap = 0;
-    if (stat.dataset.k === "load") { setPage(2); haptic(10); }
+    if (stat.dataset.k === "load") { setPage(3); haptic(10); }
   } else { lastTap = now; lastTapEl = stat; }
 }, { passive: true });
 
@@ -2110,12 +3708,14 @@ if (TOUCH) (function setupGestures() {
 // --- 负载/CPU 折线图(最近 24 采样存 localStorage, 捏合调时间窗) ---
 const chart = $("chart");
 function chartData() {
+  if (BOOT.static && Array.isArray(BOOT.chartData)) return BOOT.chartData;
   try { return JSON.parse(localStorage.getItem("svc-chart") || "[]"); }
   catch (e) { return []; }
 }
 function chartSave(arr) { try { localStorage.setItem("svc-chart", JSON.stringify(arr)); } catch (e) {} }
 function chartSample(s) {
-  if (!chart || !isMobile()) return;
+  if (!chart) return;
+  if (BOOT.static) { drawChart(); return; }
   const arr = chartData();
   const now = Date.now();
   const m = s.mem || {};
@@ -2127,55 +3727,95 @@ function chartSample(s) {
 }
 let chartWin = 24;
 function drawChart() {
-  if (!chart || !isMobile()) return;
-  const ctx = chart.getContext("2d");
+  if (!chart) return;
+  const rect = chart.getBoundingClientRect();
+  const w = Math.round(rect.width || chart.clientWidth);
+  const h = Math.round(rect.height || chart.clientHeight || 150);
+  if (w <= 0 || h <= 0) {
+    requestAnimationFrame(() => { if (chart.clientWidth > 0) drawChart(); });
+    return;
+  }
   const dpr = window.devicePixelRatio || 1;
-  const w = chart.clientWidth || 360, h = 150;
-  if (chart.width !== w * dpr) { chart.width = w * dpr; chart.height = h * dpr; }
+  const targetW = Math.round(w * dpr);
+  const targetH = Math.round(h * dpr);
+  if (chart.width !== targetW || chart.height !== targetH) {
+    chart.width = targetW;
+    chart.height = targetH;
+  }
+  const ctx = chart.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
   const all = chartData();
-  $("chart-empty").style.display = all.length < 2 ? "" : "none";
-  $("chart-win").textContent = all.length >= 2 ? t("chart_win", { n: chartWin }) : "";
-  if (all.length < 2) return;
-  const data = all.slice(-chartWin);
+  const emptyEl = $("chart-empty");
+  const winEl = $("chart-win");
+  if (!all.length) {
+    if (emptyEl) emptyEl.style.display = "";
+    if (winEl) winEl.textContent = "";
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = "none";
+  if (winEl) winEl.textContent = t("chart_win", { n: Math.min(chartWin, all.length) });
+
+  const data = all.length === 1 ? [all[0], all[0]] : all.slice(-chartWin);
   const maxL = Math.max(2, ...data.map(d => d.load || 0));
-  const X = i => 6 + i * ((w - 12) / (data.length - 1));
+  // 采样点不足时从右侧向前排布，防止少量点生硬拉伸横跨整屏
+  const step = (w - 24) / Math.max(chartWin - 1, 1);
+  const X = i => (w - 12) - (data.length - 1 - i) * step;
   // 主题色从 CSS 变量读取(getComputedStyle), 明暗主题切换即跟随
   const cs = getComputedStyle(document.documentElement);
   const cssVar = (n) => cs.getPropertyValue(n).trim();
-  const CH = { cpu: cssVar("--ch-cpu"), load: cssVar("--ch-load"),
-               mem: cssVar("--ch-mem"), swap: cssVar("--ch-swap"), grid: cssVar("--ch-grid") };
+  const CH = { cpu: cssVar("--ch-cpu") || "#0a84ff", load: cssVar("--ch-load") || "#30d158",
+               mem: cssVar("--ch-mem") || "#ff9f0a", swap: cssVar("--ch-swap") || "#bf5af2",
+               grid: cssVar("--ch-grid") || "rgba(255,255,255,.08)" };
   // 网格线
   ctx.strokeStyle = CH.grid; ctx.lineWidth = 1;
   [0.25, 0.5, 0.75].forEach(f => { ctx.beginPath(); ctx.moveTo(0, h * f); ctx.lineTo(w, h * f); ctx.stroke(); });
+
+  const drawLine = (color, width, getY) => {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath();
+    data.forEach((d, i) => { const y = getY(d); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
+    ctx.stroke();
+    if (data.length <= 8) {
+      ctx.fillStyle = color;
+      data.forEach((d, i) => {
+        const y = getY(d);
+        ctx.beginPath(); ctx.arc(X(i), y, 2.5, 0, Math.PI * 2); ctx.fill();
+      });
+    }
+  };
+
   // CPU %: 0-100 映射
-  ctx.strokeStyle = CH.cpu; ctx.lineWidth = 1.6; ctx.beginPath();
-  data.forEach((d, i) => { const y = h - 6 - (d.cpu || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
-  ctx.stroke();
+  drawLine(CH.cpu, 1.6, d => h - 6 - (d.cpu || 0) / 100 * (h - 18));
   // 内存 %: 0-100 映射(橙)
-  ctx.strokeStyle = CH.mem; ctx.lineWidth = 1.6; ctx.beginPath();
-  data.forEach((d, i) => { if (d.mem == null) return; const y = h - 6 - (d.mem || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
-  ctx.stroke();
-  // Swap %: 0-100 映射(紫; 无 swap 或 0% 时贴底直线,仍显示以便观察趋势)
-  ctx.strokeStyle = CH.swap; ctx.lineWidth = 1.6; ctx.beginPath();
-  data.forEach((d, i) => { const y = h - 6 - (d.swap || 0) / 100 * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
-  ctx.stroke();
+  drawLine(CH.mem, 1.6, d => h - 6 - (d.mem || 0) / 100 * (h - 18));
+  // Swap %: 0-100 映射(紫)
+  drawLine(CH.swap, 1.6, d => h - 6 - (d.swap || 0) / 100 * (h - 18));
   // 负载: 按各自 max 缩放
-  ctx.strokeStyle = CH.load; ctx.lineWidth = 1.8; ctx.beginPath();
-  data.forEach((d, i) => { const y = h - 6 - (d.load || 0) / maxL * (h - 18); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
-  ctx.stroke();
-  // 图例(左上 CPU/mem/swap, 右上 load; 颜色同线)
-  ctx.font = "10px ui-monospace, monospace";
-  ctx.fillStyle = CH.cpu; ctx.fillText("CPU " + Math.round(data[data.length-1].cpu || 0) + "%", 8, 12);
-  ctx.fillStyle = CH.mem; ctx.fillText("mem " + Math.round(data[data.length-1].mem || 0) + "%", 8, 26);
-  ctx.fillStyle = CH.swap; ctx.fillText("swap " + Math.round(data[data.length-1].swap || 0) + "%", 8, 40);
-  ctx.fillStyle = CH.load; ctx.textAlign = "right"; ctx.fillText("load " + maxL.toFixed(1), w - 8, 12); ctx.textAlign = "left";
+  drawLine(CH.load, 1.8, d => h - 6 - (d.load || 0) / maxL * (h - 18));
+
+  // 图例(现代无衬线体防宽体字畸变)
+  ctx.font = "600 11px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'SF Pro Text', sans-serif";
+  const lastD = data[data.length - 1];
+  ctx.fillStyle = CH.cpu; ctx.fillText("CPU " + Math.round(lastD.cpu || 0) + "%", 8, 16);
+  ctx.fillStyle = CH.mem; ctx.fillText("mem " + Math.round(lastD.mem || 0) + "%", 8, 32);
+  ctx.fillStyle = CH.swap; ctx.fillText("swap " + Math.round(lastD.swap || 0) + "%", 8, 48);
+  ctx.fillStyle = CH.load; ctx.textAlign = "right"; ctx.fillText("load " + maxL.toFixed(1), w - 8, 16); ctx.textAlign = "left";
 }
 if (chart) {
-  window.addEventListener("resize", drawChart);
-  mqMobile.addEventListener("change", drawChart);
-  drawChart();
+  window.addEventListener("resize", () => requestAnimationFrame(drawChart));
+  mqMobile.addEventListener("change", () => requestAnimationFrame(drawChart));
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) drawChart();
+      }
+    });
+    ro.observe(chart);
+    const wrap = $("chart-wrap");
+    if (wrap) ro.observe(wrap);
+  }
+  requestAnimationFrame(drawChart);
+  setTimeout(drawChart, 150);
   // 捏合调整时间窗: 两指距离变化 → chartWin 4..24
   let pinch = null;
   chart.addEventListener("touchstart", (e) => {
@@ -2200,7 +3840,7 @@ document.addEventListener("visibilitychange", () => {
     console.log("[svc-dashboard] visibilitychange -> hidden, polling paused");
   } else {
     console.log("[svc-dashboard] visibilitychange -> visible, polling resumed");
-    if (autoOn && !autoLocked) load(false); // 回前台立即刷一次(锁定时不刷)
+    if (!BOOT.static && autoOn && !autoLocked) load(false); // 回前台立即刷一次(锁定时不刷)
   }
 });
 
@@ -2219,10 +3859,11 @@ function applyAutoSec() {
 mqMobile.addEventListener("change", applyAutoSec);
 let autoTimer = setInterval(autoTick, autoSec * 1000);
 function autoTick() {
+  if (BOOT.static) return;
   if (autoOn && !autoLocked && !document.hidden) {  // 长按锁定时 30s 自动刷新完全停止
     console.log("[svc-dashboard] auto refresh tick");
     if (filter === "manage") loadManage();
-    else load(false);
+    else load(true);
   }
 }
 applyAutoSec();
@@ -2361,9 +4002,29 @@ function renderConnbar() {
   const hosts = TL_CONF.hosts || {};
   const ts = hosts.tailscale || "", lan = hosts.lan || "";
   const user = (hosts.ssh_user || "tetsuya");
-  grid.innerHTML =
-    (ts ? `<span class="gcopy" data-copy="ssh ${user}@${ts}" role="button" tabindex="0" title="ssh ${escAttr(user + '@' + ts)}"><b>${escHtml(ts)}</b></span>` : "") +
-    (lan ? `<span class="gcopy" data-copy="${escAttr(lan)}" role="button" tabindex="0" title="LAN ${escAttr(lan)}"><b>${escHtml(lan)}</b></span>` : "");
+  let h = "";
+  if (BOOT.readonly) {
+    const currentHost = String(location.hostname || "");
+    const onlineHost = /^192\.168\./.test(currentHost) ? currentHost
+      : (/^100\.(?:6[4-9]|[7-9]\d|1\d\d)\./.test(currentHost) ? currentHost : TS_HOST);
+    const onlineUrl = `http://${onlineHost}/`;
+    h += `<a class="h-badge-ro h-online-link" href="${escAttr(onlineUrl)}" title="${escAttr(t("st_online_hint"))}" aria-label="${escAttr(t("st_online"))}">${icon("lock", 12)} ${escHtml(t("st_readonly"))} <span class="h-ro-arrow">↗ ${escHtml(t("st_online"))}</span></a>`;
+  }
+  if (!BOOT.readonly) {
+    if (ts) h += `<span class="gcopy h-live-conn" data-copy="ssh ${user}@${ts}" role="button" tabindex="0" title="ssh ${escAttr(user + '@' + ts)}"><b>${escHtml(ts)}</b></span>`;
+    if (lan) h += `<span class="gcopy h-live-conn" data-copy="${escAttr(lan)}" role="button" tabindex="0" title="LAN ${escAttr(lan)}"><b>${escHtml(lan)}</b></span>`;
+  }
+  grid.innerHTML = h;
+  syncConnbarVisibility();
+}
+
+function syncConnbarVisibility() {
+  const grid = $("conn-grid");
+  const home = isMobile() ? page === 0 : curCat === "home";
+  // 状态卡和 SSH/IP 提示都只属于首页；只读快照的“在线版”入口不受影响。
+  const status = $("statuscard");
+  if (status) status.hidden = !home;
+  if (grid) grid.querySelectorAll(".h-live-conn").forEach(el => { el.hidden = !home; });
 }
 
 // --- F3 垃圾清理 ---
@@ -2542,24 +4203,31 @@ function usvcUnlock() {
   usvcLoad();
 }
 
-// --- G4 计划任务一览(只读, 复用 /api/tasks 的 cron 枚举) ---
+// --- 计划任务(只读, 复用 /api/tasks 的 cron/timer 枚举; 服务页表格样式) ---
 async function cronLoad() {
   const body = $("tl-cron-body");
+  if (!body) return;
   try {
     const d = await tlGet("/api/tasks?lang=" + encodeURIComponent(LANG));
-    body.innerHTML = (d.tasks || []).length ? (d.tasks || []).map(x =>
-      `<div class='tl-row'><span class='tl-dot off'></span>` +
-      `<span class='tl-name'>${escHtml(x.name)}</span>` +
-      `<span class='tl-val'>${escHtml(x.schedule)}</span></div>`).join("")
-      : `<div class='gempty'>—</div>`;
+    const ts = d.tasks || [];
+    const cnt = $("cron-count");
+    if (cnt) cnt.textContent = ts.length ? t("t_total", { n: ts.length }) : "";
+    body.innerHTML = ts.length ? ts.map(x =>
+      `<tr><td class='name'>${escHtml(x.name)}</td>` +
+      `<td class='cron-sch'>${escHtml(x.schedule)}</td>` +
+      `<td class='cron-src'><span class='tbadge ${x.type === "watchdog" ? "wd" : x.type === "reminder" ? "rd" : "sc"}'>${escHtml(x.type)}</span>` +
+      `<span class='cron-scope'>${escHtml(x.scope)}</span></td></tr>`).join("")
+      : `<tr><td class='empty' colspan='3'>—</td></tr>`;
   } catch (e) {
-    body.innerHTML = `<div class='gempty t-red'>${icon("err", 13)} ${escHtml(e.message)}</div>`;
+    body.innerHTML = `<tr><td class='empty t-red' colspan='3'>${icon("err", 13)} ${escHtml(e.message)}</td></tr>`;
   }
 }
 
 // --- ツール页初始化(首次进入触发) ---
 function initToolsPage() {
-  $("toolspage").hidden = false;
+  const tp = $("toolspage");
+  if (!tp) return;
+  tp.hidden = false;
   if (!toolsInited) {
     toolsInited = true;
     renderConnbar();
@@ -2570,41 +4238,60 @@ function initToolsPage() {
   // 事件绑定(一次性)
   if (!initToolsPage._bound) {
     initToolsPage._bound = true;
-    $("tl-health-run").addEventListener("click", runHealth);
-    $("tl-clean-scan").addEventListener("click", cleanScan);
-    $("tl-clean-exec").addEventListener("click", cleanExec);
-    $("tl-aiclean-run").addEventListener("click", aiCleanHome);
-    $("tl-net-run").addEventListener("click", netRun);
-    $("tl-usvc-unlock").addEventListener("click", usvcUnlock);
-    $("tl-usvc-showlock").addEventListener("click", () => {
-      $("tl-usvc-showlock").hidden = true;
-      $("tl-usvc-unlockwrap").hidden = false;
+    $("tl-health-run")?.addEventListener("click", runHealth);
+    $("tl-clean-scan")?.addEventListener("click", cleanScan);
+    $("tl-clean-exec")?.addEventListener("click", cleanExec);
+    $("tl-aiclean-run")?.addEventListener("click", aiCleanHome);
+    $("tl-net-run")?.addEventListener("click", netRun);
+    $("tl-usvc-unlock")?.addEventListener("click", usvcUnlock);
+    $("tl-usvc-showlock")?.addEventListener("click", () => {
+      const sl = $("tl-usvc-showlock"); if (sl) sl.hidden = true;
+      const uw = $("tl-usvc-unlockwrap"); if (uw) uw.hidden = false;
     });
   }
 }
 
-// --- 桌面端分类条(右上角 #catbar): 概览/服务/Goal/管理; 移动端隐藏(底部页签) ---
+// --- 桌面端分类条(右上角 #catbar): 概览/活动/服务/Tmux/Agent; 移动端隐藏(底部页签) ---
 const CATS = [
-  ["home", "tab_home"], ["svc", "tab_svc"], ["goal", "tab_goal"], ["manage", "tab_manage"],
+  ["home", "tab_home"], ["activity", "tab_activity"], ["svc", "tab_svc"], ["tmux", "tab_tmux"], ["agent", "tab_agent"],
 ];
 const CAT_SELS = {
-  home: ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#hp-aiclean", "#sysbar", "#repos", "#chart-wrap", "#recent", "#toolchips"],
-  svc: ["#filters", "#tasks", "#svc-panel"],
-  goal: ["#goals"],
-  manage: ["#logpage", "#agents-page", "#toolspage", "#events"],
+  home: ["#statuscard", "#sysbar", "#chart-wrap", "#hp-portal-grid"],
+  activity: ["#activity-page"],
+  svc: ["#filters", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
+  tmux: ["#tmux-panel"],
+  goal: ["#tmux-panel"],
+  agent: ["#agents-page"],
+  manage: ["#agents-page"],
 };
 var curCat = "all";
 function setCat(c, save) {
   curCat = c;
+  syncConnbarVisibility();
   document.querySelectorAll("#catbar .cat").forEach(b => b.classList.toggle("active", b.dataset.cat === c));
   const keep = new Set((CAT_SELS[c] || []).map(s => document.querySelector(s)).filter(Boolean));
   document.querySelectorAll("#pages > *").forEach(el => el.classList.toggle("cat-off", !keep.has(el)));
-  if (c === "manage") {
-    const lp = $("logpage"), ap = $("agents-page"), tp = $("toolspage");
-    if (lp) lp.hidden = false;
+  if (c === "home") requestAnimationFrame(drawChart);
+  if (c === "activity") {
+    const ap = $("activity-page");
     if (ap) ap.hidden = false;
+    renderActivityPage();
+  }
+  if (c === "tmux" || c === "goal") {
+    const tp = $("tmux-panel");
     if (tp) tp.hidden = false;
-    initLogPage(); renderLogTimeline(); initAgentsPage(); initToolsPage();
+    renderTmuxPage();
+  }
+  if (c === "svc") {
+    const lp = $("logpage"), cp = $("cron-panel");
+    if (lp) lp.hidden = false;
+    if (cp) cp.hidden = false;
+    initLogPage(); renderLogTimeline(); cronLoad();
+  }
+  if (c === "agent" || c === "manage") {
+    const ap = $("agents-page");
+    if (ap) ap.hidden = false;
+    initAgentsPage();
   }
   if (save !== false) {
     try { localStorage.setItem("svc-cat", c); } catch (e) {}
@@ -2619,7 +4306,9 @@ function catFromHash() {
   const m = location.hash.match(/^#cat=([a-z]+)/);
   let c = m && m[1] ? m[1] : null;
   if (c === "all") c = "home";
-  if (c === "log" || c === "agent" || c === "tools") c = "manage";
+  if (c === "goal") c = "tmux";
+  if (c === "log") c = "svc";   // 旧 #cat=log 现落在服务页(日志迁入)
+  if (c === "manage" || c === "tools") c = "agent";
   return CATS.some(x => x[0] === c) ? c : null;
 }
 window.addEventListener("hashchange", () => {   // 手改 hash/后退也跟随
@@ -2665,20 +4354,21 @@ if (isMobile()) {
   setPage(0, { first: true });
   applyAutoSec();
 } else {
-  initToolsPage();   // 桌面无页签: 工具面板直接展开在页面流里(内部会解除 hidden)
   // 日志/agent 页不再硬锁 hidden: 初始由 HTML hidden 属性遮蔽, 首次 setCat 进入时解除
   let savedCat = catFromHash();
   if (!savedCat) { try { savedCat = localStorage.getItem("svc-cat"); } catch (e) {} }
   if (savedCat === "all") savedCat = "home";
+  if (savedCat === "manage") savedCat = "agent";
   setCat(CATS.some(c => c[0] === savedCat) ? savedCat : "home", false);  // URL 优先，随后本地恢复
 }
 initLogAgentPicker();   // 延后到这里: escHtml 等 const 已初始化(避免 TDZ 崩整页)
+initLanguageMenu();
 load(true);
 renderConnbar();   // 顶栏连接信息(ssh/IP)随首屏渲染, 不等进工具页
 // AI 清理: 首页面板按钮 + 弹层关闭(独立于工具页惰性初始化, 首页直达)
-$("hp-aiclean-run").addEventListener("click", aiCleanHome);
-$("aiclean-modal-close").addEventListener("click", aiCloseModal);
-$("aiclean-modal").addEventListener("click", e => { if (e.target.id === "aiclean-modal") aiCloseModal(); });
-$("aiclean-modal-rerun").addEventListener("click", aiRerun);
+$("hp-aiclean-run")?.addEventListener("click", aiCleanHome);
+$("aiclean-modal-close")?.addEventListener("click", aiCloseModal);
+$("aiclean-modal")?.addEventListener("click", e => { if (e.target.id === "aiclean-modal") aiCloseModal(); });
+$("aiclean-modal-rerun")?.addEventListener("click", aiRerun);
 aiStatusChip();
 hydrateFragments();

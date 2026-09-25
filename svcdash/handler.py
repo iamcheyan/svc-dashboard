@@ -267,7 +267,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"updated": time.time(), "omp": agents.scan_omp(),
                                   "codex": agents.scan_codex()})
         elif path == "/api/tmux":
-            self._send_json(200, {"updated": time.time(), "panes": agents.scan_tmux()})
+            self._send_json(200, agents.scan_tmux_full())
         elif path == "/api/manage":
             qs = parse_qs(urlparse(self.path).query)
             uid = (qs.get("unit") or [""])[0]
@@ -283,6 +283,11 @@ class Handler(BaseHTTPRequestHandler):
             qs = parse_qs(urlparse(self.path).query)
             repo = (qs.get("repo") or [""])[0]
             self._send_json(200, repos.repo_trajectory(repo))
+        elif path == "/api/commitdiff":
+            qs = parse_qs(urlparse(self.path).query)
+            repo = (qs.get("repo") or [""])[0]
+            sha = (qs.get("sha") or [""])[0]
+            self._send_json(200, repos.repo_commit_diff(repo, sha))
         elif path.startswith("/api/agentlog"):
             qs = parse_qs(urlparse(self.path).query)
             sid = (qs.get("sid") or [""])[0]
@@ -297,6 +302,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, tools.health_check())
         elif path == "/api/nettest":
             self._send_json(200, tools.net_test())
+        elif path == "/api/agentdetail":
+            qs = parse_qs(urlparse(self.path).query)
+            agent_id = (qs.get("agent") or [""])[0]
+            if not agent_id:
+                self._send_json(400, {"ok": False, "msg": "agent required"})
+            else:
+                self._send_json(200, runtimes.inspect_agent_detail(agent_id, for_public=False))
         elif path == "/api/runtimes":
             # 额度后台刷新(过期 5 分钟且无任务在跑时触发), 本响应返回缓存快照
             if not runtimes.quota_snapshot()["running"]:

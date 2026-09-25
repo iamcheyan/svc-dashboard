@@ -67,8 +67,9 @@ def agent_repos():
     return repos
 
 
-def parse_repo_commits(per_repo=12, total=60):
+def parse_repo_commits(per_repo=30, total=150):
     """各 agent 仓库最近提交 -> commit 事件(60s 缓存)。
+    支持 --name-status 解析变更文件列表及状态。
     事件 shape 与 merge_events 其余来源同构: kind/src 均为 "commit"。"""
     now = time.time()
     if _repo_ev_cache["data"] is not None and now - _repo_ev_cache["t"] < 60:
@@ -76,23 +77,53 @@ def parse_repo_commits(per_repo=12, total=60):
     out = []
     for repo in agent_repos():
         name = os.path.basename(repo.rstrip("/"))
-        text = _git(repo, ["log", "-n", str(per_repo),
-                           "--format=%h%x1f%ct%x1f%s%x1f%an"])
-        for line in text.splitlines():
-            parts = line.split("\x1f")
-            if len(parts) != 4:
+        text = _git(repo, ["log", "-n", str(per_repo), "--name-status",
+                           "--format=COMMIT%x1f%h%x1f%ct%x1f%s%x1f%an"])
+        cur = None
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
                 continue
-            h, ct, subj, author = parts
-            try:
-                ts = float(ct)
-            except ValueError:
-                continue
-            out.append({"ts": ts,
-                        "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)),
-                        "gid": h, "name": name, "kind": "commit",
-                        "text": f"{subj} — {author}", "src": "commit"})
-    out.sort(key=lambda x: -x["ts"])
-    out = out[:total]
+            if line.startswith("COMMIT\x1f"):
+                if cur:
+                    out.append(cur)
+                parts = line.split("\x1f")
+                if len(parts) != 5:
+                    cur = None
+                    continue
+                _, h, ct, subj, author = parts
+                try:
+                    ts = float(ct)
+                except ValueError:
+                    cur = None
+                    continue
+                cur = {
+                    "ts": ts,
+                    "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)),
+                    "gid": h,
+                    "name": name,
+                    "repo": name,
+                    "kind": "commit",
+                    "text": f"{subj} — {author}",
+                    "subject": subj,
+                    "author": author,
+                    "src": "commit",
+                    "files": [],
+                }
+            elif cur and "\t" in raw_line:
+                f_parts = raw_line.split("\t")
+                st = f_parts[0].strip()[:1].upper() if f_parts[0].strip() else "M"
+                fpath = f_parts[-1].strip()
+                cur["files"].append({"status": st, "path": fpath})
+        if cur:
+            out.append(cur)
+    try:
+        from svcdash.github import fetch_github_events, merge_commits
+        gh_events = fetch_github_events()
+        out = merge_commits(out, gh_events, total=total)
+    except Exception:
+        out.sort(key=lambda x: -x["ts"])
+        out = out[:total]
     _repo_ev_cache.update({"t": now, "data": out})
     return out
 
@@ -416,6 +447,41 @@ def repo_trajectory(name):
             d = _traj_data(repo)
             return {"ok": True, "repo": name, "path": repo, "days": _TRAJ_DAYS, **d}
     return {"ok": False, "msg": "unknown repo"}
+
+
+def repo_commit_diff(repo_name, commit_sha, max_bytes=100 * 1024):
+    """获取指定仓库特定提交的 diff (含安全过滤与截断防护)"""
+    if not repo_name or not commit_sha:
+        return {"ok": False, "error": "Missing repo or sha"}
+    if not re.match(r"^[A-Za-z0-9_.-]+$", repo_name) or not re.match(r"^[0-9a-fA-F]{4,40}$", commit_sha):
+        return {"ok": False, "error": "Invalid repo name or sha format"}
+
+    target_repo = None
+    for r in agent_repos():
+        bn = os.path.basename(r.rstrip("/"))
+        if bn.lower() == repo_name.lower():
+            target_repo = r
+            break
+
+    if not target_repo:
+        return {"ok": False, "error": f"Repository '{repo_name}' not found locally"}
+
+    raw = _git(target_repo, ["show", "--stat", "-p", "--color=never", commit_sha])
+    if not raw:
+        return {"ok": False, "error": f"Commit '{commit_sha}' not found in '{repo_name}'"}
+
+    truncated = False
+    if len(raw) > max_bytes:
+        raw = raw[:max_bytes] + "\n\n... [Diff truncated: exceeded size limit] ..."
+        truncated = True
+
+    return {
+        "ok": True,
+        "repo": repo_name,
+        "sha": commit_sha,
+        "diff": raw,
+        "truncated": truncated
+    }
 
 
 def repo_stats(refresh=False):

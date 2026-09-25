@@ -233,16 +233,31 @@ def _lite_sysbar(lang):
         for k, key in (("load", "sys_load"), ("cpu", "sys_cpu"), ("mem", "sys_mem"),
                        ("disk", "sys_disk"), ("up", "sys_up"))) + '</div>'
 
-_LITE_GOALS = ('<div class="gpanel" id="goals"><h2>{{T:g_panel}} <span class="ghint">{{T:g_hint}}</span></h2>'
-               '<div class="gcards">' + "".join(
-                   '<div class="skel"><div class="skel-line" style="width:86%"></div>'
-                   '<div class="skel-line" style="width:64%"></div></div>' for _ in range(3))
-               + '</div></div>')
+_LITE_TMUX = (
+    '<div class="gpanel" id="tmux-panel">'
+    '<div class="tmux-header">'
+    '<h2>{{T:tmux_title}} <span class="ghint">{{T:tmux_hint}}</span></h2>'
+    '<div class="tmux-search-wrap">'
+    '<input type="search" id="tmux-search" placeholder="{{T:tmux_search_ph}}" autocomplete="off" />'
+    '</div>'
+    '</div>'
+    '<div class="tmux-summary-stats" id="tmux-stats"></div>'
+    '<div class="filters tmux-filters" id="tmux-filters">'
+    '<span class="chip active" data-tf="all" role="button" tabindex="0">{{T:act_all}} <span id="n-tf-all"></span></span>'
+    '<span class="chip" data-tf="agent" role="button" tabindex="0">{{ICO:bot:13}} {{T:tmux_filter_agent}} <span id="n-tf-agent"></span></span>'
+    '<span class="chip" data-tf="attached" role="button" tabindex="0">{{T:tmux_filter_attached}} <span id="n-tf-attached"></span></span>'
+    '<span class="chip" data-tf="detached" role="button" tabindex="0">{{T:tmux_filter_detached}} <span id="n-tf-detached"></span></span>'
+    '</div>'
+    '<div id="tmux-body">'
+    '<div class="gempty">{{T:a_loading}}</div>'
+    '</div></div>'
+)
+_LITE_GOALS = _LITE_TMUX
 _LITE_EVENTS = ('<div class="gpanel" id="events"><h2>{{T:ev_title}} <span class="ghint">{{T:ev_hint}}</span></h2>'
                 '<div class="gempty">{{T:a_loading}}</div></div>')
 
 
-def _svc_rows(entries, lang, host_header):
+def _svc_rows(entries, lang, host_header, readonly=False):
     rows = []
     for e in entries:
         ip, port = e["ip"], e["port"]
@@ -281,8 +296,9 @@ def _svc_rows(entries, lang, host_header):
                            "cmd": e["cmdline"] or "", "cwd": e["cwd"] or "",
                            "pids": e.get("pids") or []}, ensure_ascii=False)
         det_enc = escape(quote(det, safe=""), quote=True)
-        detail_btn = (f'<span class="svc-detail" role="button" tabindex="0" data-detail="{det_enc}" '
-                      f'title="{t(lang, "svc_detail")}">{t(lang, "svc_detail")}</span>')
+        detail_btn = "" if readonly else (
+            f'<span class="svc-detail" role="button" tabindex="0" data-detail="{det_enc}" '
+            f'title="{t(lang, "svc_detail")}">{t(lang, "svc_detail")}</span>')
         cmd_cell = f'<div class="cmd-cell"><span class="cmd-text">{cmd}</span>{detail_btn}{ctl_btn}</div>'
         cwd_cell = f'<div class="cmd-cell"><span class="cmd-text">{cwd}</span>{detail_btn}</div>'
         rows.append(
@@ -311,7 +327,7 @@ def _render_shell_core(host_header, entries, updated_ts, lang, sysdata):
         table = ""
         toolchips = ""
         goals_panel = _LITE_GOALS
-        events_panel = _LITE_EVENTS
+        events_panel = ""
     else:
         if sysdata is None:
             sysdata = sys_info()
@@ -319,16 +335,14 @@ def _render_shell_core(host_header, entries, updated_ts, lang, sysdata):
         table = _svc_rows(entries, lang, host_header)
         toolchips = render_toolchips(entries, host_header, lang)
         goals_panel = render_goal_cards(scan_goals(), lang)
-        events_panel = render_events(merge_events(
-            parse_watchdog_events(), parse_completed_goals(),
-            parse_repo_commits()), lang)
+        events_panel = ""
     body = (_shell_tpl()
             .replace("{{LANG}}", lang)
             .replace("{{HOSTNAME}}", escape(hostname))
             .replace("{{SYSBAR}}", sysbar)
             .replace("{{TOOLCHIPS}}", toolchips)
             .replace("{{GOALS_PANEL}}", goals_panel)
-            .replace("{{EVENTS_PANEL}}", events_panel)
+            .replace("{{EVENTS_PANEL}}", "")
             .replace("{{UPDATED}}", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(updated_ts)))
             .replace("{{COUNT}}", str(len(entries)))
             .replace("<!--TABLE-->", table))
