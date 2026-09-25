@@ -6,7 +6,7 @@
 ## 一、这是什么
 
 手机+tailscale 的随身运维中枢：服务列表、系统负载、goal 看板、模型检测、agent 日志、
-服务管理、文件浏览/健康检查/垃圾清理。
+服务管理、健康检查、垃圾清理与网络巡检。
 
 - **包架构**：薄入口 `dashboard.py`（9 行）+ 后端包 `svcdash/`（13 个领域模块）+
   静态前端 `static/{index.html, app.css, app.js}`。前端 JS/CSS 是**真文件**（不再内嵌
@@ -21,9 +21,9 @@ svcdash/              后端：config/i18n/icons/procscan/sysinfo/tasks/manage/
 static/               前端：index.html(壳+占位) app.css app.js
 ```
 
-## 二、页面结构（六页签，移动优先）
+## 二、页面结构（四页签，移动优先）
 
-六页：概要/日志/Goal/服务/模型/ツール（i18n 三语 zh/en/ja，按 Accept-Language 自动切换，
+四页：概览/服务/Goal/管理（i18n 三语 zh/en/ja，按 Accept-Language 自动切换，
 `?lang=` 可强制）。
 
 - **概要**：状态大字卡 → 指标 2×2 → Web 服务磁贴（真身份+资源占用 CPU/内存/时长，
@@ -38,10 +38,8 @@ static/               前端：index.html(壳+占位) app.css app.js
 - **模型**：模型可用性检测
 - **Agent**：agent CLI 运行时总览(装卸/进程/任务/五家额度条, svcdash/runtimes.py)（⚠️ evomap=用户充值仅探活 GET /v1/models **禁发 chat**；
   其余 1-token 实测）。
-- **ツール**：文件浏览（`/api/fs/list|file`，白名单根+防穿越+密钥文件 404）/ 健康检查
-  （`/api/health`，磁盘趋势外推满盘日期）/ 垃圾清理（`POST /api/cleanup`，dry_run
-  默认 true）/ 网络速测 / 工具直达 chips / 快捷复制组。
-- 桌面端用顶部分类条 `[data-cat]`，移动端用底部页签 `[data-p=0..5]`；手势：左右滑动切页。
+- **管理**：模型、Agent、日志、定时任务、网络/健康检查、垃圾清理、工具直达与偏好设置。
+- 桌面端用顶部分类条 `[data-cat]`，移动端用底部页签 `[data-p=0..3]`；手势：左右滑动切页。
 
 ## 三、API 端点表（svcdash/handler.py 路由，均已实现）
 
@@ -56,6 +54,8 @@ static/               前端：index.html(壳+占位) app.css app.js
 | `/api/goaldetail?gid=&session=` | GET | 单 goal 详情 |
 | `/api/repos?refresh=` | GET | agent 改动过的 git 仓库统计（600s 缓存） |
 | `/api/tasks?lang=` | GET | systemd timer + cron 定时任务列表 |
+| `/api/models` | GET | 模型清单+测试结果(密钥只判存在, 值不外传) |
+| `POST /api/models` | POST | `{provider,model}` 模型测试(chat 1-token; evomap 禁 chat 仅探活) |
 | `/api/runtimes` | GET | Agent 运行时总览(12 agent 注册表: 安装/版本/进程/任务/额度) |
 | `GET /api/agentctl` | GET | 装卸动作状态+历史 |
 | `POST /api/runtimes` | POST | `{"agent":id,"action":"install\|uninstall\|quota"}` 装卸(runuser 降权跑 ~/dotfiles/agent wrapper)/刷额度 |
@@ -66,8 +66,6 @@ static/               前端：index.html(壳+占位) app.css app.js
 | `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（免密 sudo） |
 | `GET /api/svcctl` | GET | 通用暂停台账 + 历史（`~/.omp/svc-dashboard/{paused.json,actions.log}`） |
 | `POST /api/svcctl` | POST | `{"port":N,"action":"pause"\|"resume"}`——任意监听服务冻结/解冻（docker→`docker pause`；其余→SIGSTOP/SIGCONT）；守卫拒绝自身/22/受保护进程；`/api` 条目新增 `res{cpu,mem_mb,up_sec}`/`manageable`/`svcctl_paused` |
-| `/api/fs/list?path=` | GET | 目录列表（白名单+防穿越+敏感隐藏） |
-| `/api/fs/file?path=&mode=view\|download` | GET | 文件预览/下载 |
 | `/api/health` | GET | 健康快检（系统/磁盘趋势/温度/进程/端口/看门狗） |
 | `/api/nettest` | GET | 外网延迟 + tailscale ping |
 | `/api/toolports` | GET | 工具 chips 端口存活 |

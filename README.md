@@ -1,6 +1,6 @@
 # svc-dashboard
 
-本机监听服务一览表 —— 在浏览器里列出服务器当前后台运行的对外 TCP 服务，并展示系统负载/CPU/内存/磁盘状态、OMP/Codex agent 任务、goal 进度、定时任务、服务管理、文件浏览/健康检查/垃圾清理。
+本机监听服务一览表 —— 在浏览器里列出服务器当前后台运行的对外 TCP 服务，并展示系统负载/CPU/内存/磁盘状态、OMP/Codex agent 任务、goal 进度、定时任务、服务管理、健康检查与垃圾清理。
 
 纯 Python 标准库实现，零第三方依赖。访问 `http://<服务器>/` 即可使用（默认监听 80 端口）。
 
@@ -21,7 +21,7 @@ svcdash/              后端包（按领域拆分）
   agents.py            OMP / Codex / tmux 状态 + agent 日志
   goals.py             goal_watchdog 解析、上下文体积、事件时间线
   repos.py             agent 改动过的 git 仓库统计
-  tools.py             文件浏览 / 健康检查 / 垃圾清理 / 网络速测 / 用户服务
+  tools.py             健康检查 / 垃圾清理 / 网络速测 / 用户服务
   runtimes.py          Agent 运行时注册表: 装卸/进程/任务/额度(agent-quota.sh)
   render.py            壳渲染 + 片段渲染（静态模板 + BOOT 注入）
   handler.py           HTTP 路由（HTTP/1.1 + gzip + ETag）
@@ -33,15 +33,12 @@ static/
   app.js               前端逻辑（从 window.__BOOT__ 取运行时值，浏览器可缓存）
 ```
 
-## 功能（六页签，移动优先）
+## 功能（四页签，移动优先）
 
-- **概要**：状态大字卡 → 指标 2×2 → 需要处理 → 最近活动
-- **日志**：agent 选择器 + 事件时间线（默认 24h，同 goal 循环事件折叠）
-- **Goal**：omp goal 进度卡片（状态灯/上下文体积警示/Retrying 检测）+ 负载水位
-- **服务**：监听端口表 + 分类 chips（用户服务默认）+ 手动进程服务启停按钮
-- **模型**：模型可用性检测
-- **Agent**：agent CLI 运行时总览——12 个已知 agent（omp/codex/claude/antigravity/grok/cursor/opencode/copilot/kiro/pi/mimo/hermes）：安装状态/版本/活跃进程(CPU·内存)/活跃任务(OMP goal、grok 会话、codex·claude 24h 会话)/订阅额度（codex/agy/grok/kiro/cursor，剩余条+重置时间+不足告警），支持一键装卸（复用 ~/dotfiles/agent wrapper；卸载只删二进制，配置与登录保留）
-- **ツール**：文件浏览 / 健康检查 / 垃圾清理 / 网络速测 / 工具直达 / 快捷复制组
+- **概览**：服务器状态、关键资源、常用服务、Goal 摘要、少量最近活动；空告警/空 Goal/空事件区块默认隐藏
+- **服务**：紧凑展示服务名、端口、状态、CPU/内存/运行时长；命令、工作目录、PID 等放入详情
+- **Goal**：运行中、异常、最近完成的 Goal 与详情
+- **管理**：模型、Agent、日志、定时任务、网络/健康检查、垃圾清理、工具直达与偏好设置
 
 手势：左右滑动切页、触感反馈、safe-area 适配。桌面端用顶部分类条，移动端用底部页签。
 
@@ -99,19 +96,19 @@ static/
 | `/api/repos?refresh=` | GET | agent 改动过的 git 仓库统计 |
 | `/api/trajectory?repo=NAME` | GET | 单仓库 Agent 操作轨迹（14 天双行色块 + 500 条事件流） |
 | `/api/tasks?lang=` | GET | systemd timer + cron 定时任务列表 |
-| `/api/runtimes` | GET | Agent 运行时总览（安装/版本/进程/任务/额度快照；触发额度后台刷新）|
+| `/api/models` | GET | 模型 provider/模型清单(opencode.json + ~/.env 密钥状态) + 最近测试结果 |
+| `POST /api/models` | POST | `{"provider":id,"model":mid}` 测试一个模型(chat 类 1-token 实测; evomap 预充值仅 GET /models 探活) |
+| `/api/runtimes` | GET | Agent 运行时总览（安装/版本/进程/统一 activity 任务/额度快照；触发额度后台刷新）|
 | `GET /api/agentctl` | GET | 安装/卸载动作状态 + 历史 |
 | `POST /api/runtimes` | POST | `{"agent":id,"action":"install\|uninstall\|quota"}` 一键装卸/刷新额度（白名单 wrapper，台账 `~/.omp/svc-dashboard/agentctl.json`）|
-| `/api/omp` | GET | agent 聚合（OMP 会话 + Codex 进程） |
+| `/api/omp` | GET | agent 聚合（OMP 会话 + Codex 进程及 `~/.codex/sessions` rollout 会话） |
 | `/api/tmux` | GET | tmux 窗格列表 |
-| `/api/agentlog?sid=&cwd=&tmux=` | GET | agent 会话日志时间线 + 终端画面 |
+| `/api/agentlog?sid=&cwd=&tmux=` | GET | OMP/Codex 会话最近事件时间线 + 终端画面 |
 | `/api/fragment?p=goals\|events\|toolchips` | GET | 渲染好的 HTML 片段（首屏异步填充） |
 | `/api/manage?unit=` | GET | 受管单元状态 |
 | `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（免密 sudo） |
 | `GET /api/svcctl` | GET | 服务暂停台账 + 暂停/恢复历史 |
 | `POST /api/svcctl` | POST | `{"port":N,"action":"pause"\|"resume"}` 任意服务冻结/解冻（容器→docker pause，其余→SIGSTOP；台账持久化，守卫拒绝 dashboard 自身/SSH/受保护进程） |
-| `/api/fs/list?path=` | GET | 目录列表（白名单根 + 防穿越 + 敏感文件隐藏） |
-| `/api/fs/file?path=&mode=view\|download` | GET | 文件预览（文本/图片）/ 下载 |
 | `/api/health` | GET | 一次性健康快检（系统/磁盘趋势/温度/进程/端口/看门狗） |
 | `/api/nettest` | GET | 外网延迟 + tailscale 对端 ping |
 | `/api/toolports` | GET | 工具直达 chips 端口存活 |
@@ -195,7 +192,7 @@ journalctl -u svc-dashboard -f             # 日志
 
 - **权限**：需免密 sudo（`sudo -n`）才能完整显示 root/其他用户服务的 PID 与命令；无 sudo 时这些服务的 PID 栏为空，其余功能不受影响
 - **端口冲突**：80 被占用时改 `--port 8080`，或编辑单元文件 `ExecStart` 追加 `--port` 后 `daemon-reload && restart`
-- **安全**：文件浏览根白名单为 `~/` 与 `/tmp`，realpath 越界/敏感文件（`.env`/`*key*`/`id_rsa`/`.pem`/`.git` 全树）一律 404；垃圾清理 dry_run 默认 true，用户媒体/System.db/git 历史/.env 永不触碰
+- **安全**：文件浏览已移除；垃圾清理 dry_run 默认 true，用户媒体/System.db/git 历史/.env 永不触碰
 
 ## 许可证
 

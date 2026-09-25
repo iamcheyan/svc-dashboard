@@ -5,133 +5,8 @@ from svcdash.config import SERVER_VER
 from svcdash.procscan import read, gather
 from svcdash.sysinfo import sys_info
 from svcdash.goals import WATCHDOG_LOG
-# ================= ツール页: 文件浏览 / 健康检查 / 垃圾清理 / 网络速测 / 用户服务 =================
+# ================= 工具页: 健康检查 / 垃圾清理 / 网络速测 / 用户服务 =================
 # 全部纯标准库; 写操作只限下方枚举路径(红线: 用户媒体/System.db/git 历史/.env 永不触碰)。
-
-HOME_DIR = "/home/tetsuya"   # svc-dashboard 以 root 运行(systemd 系统级), 不能用 expanduser
-
-# --- F1 文件浏览 ---
-# 红线: 根白名单 = home 全树 + /tmp; realpath 越界一律 404; 只读(无上传/删除/改名)。
-FS_HOME = HOME_DIR
-FS_ROOTS = [HOME_DIR, "/tmp"]
-# 敏感文件名: .env* / *key* / *secret* / id_(rsa|ed25519|ecdsa|dsa) / *.pem / *.ppk / credentials* /
-#            known_hosts / authorized_keys / ssh config / .git / .ssh(整目录, 与 .git 同待遇)
-# 列表直接不显示 + 访问 404(与历史实现一致: 隐藏而非仅拦截)。
-_FS_SENSITIVE = re.compile(
-    r"\.env|key|secret|^id_(rsa|ed25519|ecdsa|dsa)|\.pem$|\.ppk$|^credentials|known_hosts|^authorized_keys",
-    re.I)
-_FS_IMAGE = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
-# 文本预览上限: 超过只服务前 2MB 并标记 truncated(前端提示"仅预览前 2MB")
-_FS_TEXT_MAX = 2 << 20
-
-
-def fs_sensitive(name):
-    """.git/.ssh 按路径组件整目录拒绝(私钥/known_hosts/config 等全部不可见)。"""
-    return name in (".git", ".ssh") or bool(_FS_SENSITIVE.search(name))
-
-
-def fs_resolve(path_param):
-    """用户路径 -> 白名单根内 realpath; 越界/敏感/非法返回 None。
-    os.path.realpath 递归解析全部符号链接后复检前缀, 天然覆盖"跟随一层再复检"。"""
-    p = (path_param or "").strip()
-    if not p or "\x00" in p:
-        return None
-    p = os.path.expanduser(p)
-    if not p.startswith("/"):
-        return None
-    real = os.path.realpath(p)
-    if any(part == ".git" for part in real.split(os.sep)):
-        return None
-    for root in FS_ROOTS:
-        rroot = os.path.realpath(root)
-        if real == rroot or real.startswith(rroot + os.sep):
-            return None if fs_sensitive(os.path.basename(real)) else real
-    return None
-
-
-def fs_list(path_param):
-    """目录列表(名称/大小/mtime/类型/目录项数), 敏感名直接跳过, 文件夹优先。
-    目录项数带 0.4s 总预算, 超时停数(前端显示 —)。parent 供面包屑跳级。"""
-    real = fs_resolve(path_param)
-    if not real or not os.path.isdir(real):
-        return {"ok": False, "msg": "not found"}
-    out = []
-    deadline = time.monotonic() + 0.4
-    try:
-        with os.scandir(real) as it:
-            for e in it:
-                try:
-                    if fs_sensitive(e.name):
-                        continue
-                    is_dir = e.is_dir(follow_symlinks=True)
-                    if not is_dir and not e.is_file(follow_symlinks=True):
-                        continue   # socket/fifo 等跳过
-                    st = e.stat(follow_symlinks=True)
-                    ent = {"name": e.name, "type": "dir" if is_dir else "file",
-                           "size": None if is_dir else st.st_size,
-                           "mtime": int(st.st_mtime)}
-                    if is_dir and time.monotonic() < deadline:
-                        try:
-                            ent["count"] = len(os.listdir(e.path))
-                        except OSError:
-                            pass
-                    out.append(ent)
-                except OSError:
-                    continue
-    except OSError as ex:
-        return {"ok": False, "msg": str(ex)}
-    out.sort(key=lambda x: (x["type"] != "dir", x["name"].lower()))
-    at_root = any(real == os.path.realpath(r) for r in FS_ROOTS)
-    try:
-        d_mtime = int(os.stat(real).st_mtime)
-    except OSError:
-        d_mtime = 0
-    return {"ok": True, "path": real, "name": os.path.basename(real) or real,
-            "parent": None if at_root else os.path.dirname(real),
-            "mtime": d_mtime, "entries": out}
-
-
-def fs_meta(real):
-    """预览类型 + MIME: 图片直显; 其余走文本探测(NUL -> 二进制提示)。"""
-    ext = os.path.splitext(real)[1].lower()
-    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-            "webp": "image/webp", "gif": "image/gif"}.get(ext[1:], "application/octet-stream")
-    return ("image" if ext in _FS_IMAGE else "text"), mime
-
-
-def fs_read_text(real, enc=""):
-    """文本预览读取: 前 2MB 截断 / NUL 前探测二进制 / UTF-8 为主 + GB18030 候选。
-    utf-8 严格解码失败而 gb18030 严格通过 -> alt_enc=gb18030(前端给"重开"按钮)。"""
-    try:
-        st = os.stat(real)
-        with open(real, "rb") as f:
-            raw = f.read(_FS_TEXT_MAX + 1)
-    except OSError as ex:
-        return {"ok": False, "msg": str(ex)}
-    truncated = len(raw) > _FS_TEXT_MAX
-    if truncated:
-        raw = raw[:_FS_TEXT_MAX]
-    name = os.path.basename(real)
-    if b"\x00" in raw[:8192]:
-        return {"ok": True, "binary": True, "name": name, "path": real,
-                "size": st.st_size, "mtime": int(st.st_mtime)}
-    if enc == "gb18030":
-        text, used, alt = raw.decode("gb18030", "replace"), "gb18030", None
-    else:
-        used = "utf-8"
-        try:
-            text = raw.decode("utf-8")
-            alt = None
-        except UnicodeDecodeError:
-            text = raw.decode("utf-8", "replace")
-            try:
-                raw.decode("gb18030")
-                alt = "gb18030"
-            except UnicodeDecodeError:
-                alt = None
-    return {"ok": True, "binary": False, "name": name, "path": real, "size": st.st_size,
-            "mtime": int(st.st_mtime), "text": text, "truncated": truncated,
-            "encoding": used, "alt_enc": alt}
 
 
 # --- F2 健康检查 ---
@@ -685,9 +560,8 @@ def tool_ports_alive():
     return {"ok": True, "alive": alive}
 
 def tools_conf():
-    """页面内嵌工具配置: 文件浏览起点 + 主机地址 + G1 chips 端口表。"""
-    return {"fs_home": FS_HOME,
-            "hosts": local_hosts(),
+    """页面内嵌工具配置: 主机地址 + G1 chips 端口表。"""
+    return {"hosts": local_hosts(),
             "g1": [["dbeditor", 8810], ["mapviewer", 8899], ["wilviewer", 8765],
                    ["uieditor", 8820], ["dbviewer", 8800], ["webclient", 8822],
                    ["yomu", 8830], ["fudoki", 8831]]}

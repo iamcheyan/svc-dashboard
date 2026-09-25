@@ -7,7 +7,7 @@
 try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")document.documentElement.setAttribute("data-theme",_tm)}catch(e){}</script>
 <title>Mikata · {{HOSTNAME}}</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="%23141519"/><path d="M9 16C12.2 11.2 19.8 11.2 23 16M9 16C12.2 20.8 19.8 20.8 23 16" stroke="%23F4F0E6" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="16" cy="16" r="3" fill="%23E2604C"/></svg>'>
-<link rel="stylesheet" href="/static/app.css?v=5e899fb5">
+<link rel="stylesheet" href="/static/app.css?v=7c4f1a2d">
 <header>
   <!-- topbar: 左=品牌 Mikata(守护之眼纹 logo) · 服务器名(绿点=在线), 右=分类条+刷新。 -->
   <h1 title="Mikata · {{T:title}}"><span class="h-logo" aria-hidden="true">{{ICO:mikata:23}}</span><span class="h-brand">Mikata</span><span class="h-sep" aria-hidden="true">·</span><span class="h-host"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</span></h1>
@@ -16,7 +16,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <span id="updated">{{UPDATED}}</span> <span id="count">{{COUNT}}</span>
   </span>
   <span class="spacer"></span>
-  <!-- 桌面端分类条(右上角): 全部/概览/Goal/服务/工具, 过滤主体分区; 移动端隐藏(有底部页签) -->
+  <!-- 桌面端分类条(右上角): 概览/服务/Goal/管理; 移动端使用底部页签 -->
   <nav id="catbar" aria-label="category"></nav>
 
   <span class="btn icon-btn" id="refresh" role="button" tabindex="0"
@@ -96,13 +96,9 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 </div>
 <div id="tasks" hidden></div>
 <div class="gpanel svc-panel" id="svc-panel">
-<table id="svc" data-col="cmd">
+<table id="svc">
   <thead><tr>
-    <th>{{T:th_svc}}</th><th>{{T:th_port}}</th><th>{{T:th_addr}}</th><th>{{T:th_pid}}</th>
-    <th class="colswitch">
-      <span class="tcol active" data-col="cmd" role="button" tabindex="0">{{T:th_cmd}}</span>
-      <span class="tcol" data-col="cwd" role="button" tabindex="0">{{T:th_cwd}}</span>
-    </th>
+    <th>{{T:th_svc}}</th><th>{{T:th_port}}</th><th>{{T:th_res}}</th><th>{{T:g_detail}}</th>
   </tr></thead>
   <tbody>
 <!--TABLE-->
@@ -132,7 +128,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <div id="logbody"></div>
 </div>
 <div class="gpanel toolspage" id="toolspage" hidden>
-  <h2>{{T:tab_tools}}</h2>
+  <h2>{{T:tab_manage}}</h2>
   <!-- P1-10: 4 分组 巡检→运维→直达→偏好; P1-11: 桌面 2 列(#tlg-insp 左 / #tlg-ops 右, 直达+偏好全宽) -->
   <div class="tl-group" id="tlg-insp">
     <div class="tl-grouph">{{T:tl_grp_insp}}</div>
@@ -163,14 +159,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 
   <div class="tl-group" id="tlg-ops">
     <div class="tl-grouph">{{T:tl_grp_ops}}</div>
-    <!-- F1 文件浏览: 入口卡 → 全屏独立浏览页(遮罩为 body 直接子级, 避开 #track transform) -->
-    <div class="tl-sec" id="tl-fs">
-      <div class="fs-entry" id="fs-entry" role="button" tabindex="0">
-        <span class="fs-eico">{{ICO:folder:24}}</span>
-        <span class="fs-etxt"><h3>{{T:fs_entry_title}}</h3><p>{{T:fs_entry_sub}}</p></span>
-        <span class="fs-earr">{{ICO:chev:18}}</span>
-      </div>
-    </div>
 
     <!-- F3 垃圾清理(dry_run 默认 true, 不许改) -->
     <div class="tl-sec" id="tl-clean">
@@ -224,16 +212,12 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 <nav id="tabbar" aria-label="{{T:title}}">
   <span class="tab" data-p="0" role="button" tabindex="0" aria-label="{{T:tab_home}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8.5 8 3l6 5.5V14H9.5v-4h-5v4H2z"/></svg><span class="tlabel">{{T:tab_home}}</span><span class="tbadge-dot" id="tab-alert-badge" hidden></span></span>
-  <span class="tab" data-p="1" role="button" tabindex="0" aria-label="{{T:tab_log}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3.5 3.5h9M3.5 6.5h9M3.5 9.5h6M3.5 12.5h4"/></svg><span class="tlabel">{{T:tab_log}}</span></span>
+  <span class="tab" data-p="1" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg><span class="tlabel">{{T:tab_svc}}</span></span>
   <span class="tab" data-p="2" role="button" tabindex="0" aria-label="{{T:tab_goal}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/></svg><span class="tlabel">{{T:tab_goal}}</span></span>
-  <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg><span class="tlabel">{{T:tab_svc}}</span></span>
-  <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_agent}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 4.5 6 8l-3.5 3.5M8.5 12h5.5"/></svg><span class="tlabel">{{T:tab_agent}}</span></span>
-  <span class="tab" data-p="5" role="button" tabindex="0" aria-label="{{T:tab_tools}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9.5 1.5 3 8l-1.5 5 5-1.5 6.5-6.5a2.1 2.1 0 0 0-3-3z"/><path d="M9.5 1.5 12.5 4.5"/></svg><span class="tlabel">{{T:tab_tools}}</span></span>
+  <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_manage}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h12M2 8h12M2 11.5h12"/></svg><span class="tlabel">{{T:tab_manage}}</span></span>
 </nav>
 <div class="ui-modal" id="ui-modal" hidden role="presentation">
   <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="ui-dialog-title">
@@ -254,51 +238,10 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <div class="aiclean-actions"><span class="ui-action primary" id="aiclean-modal-rerun" role="button" tabindex="0" hidden>{{T:tl_aiclean_rerun}}</span></div>
   </div>
 </div>
-<!-- 文件浏览全屏页(body 直接子级): 左=浏览主体(推入列表), 右=文本/图片预览; 桌面双栏并列 -->
-<div class="fs-sheet" id="fs-app" hidden>
-  <div class="fs-left">
-    <div class="fs-top">
-      <span class="fs-iconbtn" id="fs-back" role="button" tabindex="0" aria-label="{{T:fs_back}}">{{ICO:back:20}}</span>
-      <span class="fs-iconbtn" id="fs-home" role="button" tabindex="0" aria-label="{{T:fs_home_btn}}">{{ICO:home:19}}</span>
-      <div class="fs-subtitle">
-        <div class="fs-dirname" id="fs-dirname"></div>
-        <div class="fs-crumbs-wrap"><nav class="fs-crumbs" id="fs-crumbs" aria-label="path"></nav></div>
-      </div>
-      <span class="fs-iconbtn" id="fs-sortbtn" role="button" tabindex="0" aria-label="{{T:fs_sort}}">{{ICO:sort:18}}</span>
-      <span class="fs-iconbtn" id="fs-more" role="button" tabindex="0" aria-label="{{T:fsv_more}}">···</span>
-    </div>
-    <div class="fs-searchrow">
-      <label class="fs-search">{{ICO:search:16}}<input type="search" id="fs-filter" placeholder="{{T:tl_fs_filter}}" autocomplete="off"></label>
-    </div>
-    <div class="fs-list" id="fs-list"></div>
-  </div>
-<div class="fs-sheet" id="fs-view" hidden>
-  <div class="fsv-top">
-    <span class="fs-iconbtn" id="fsv-back" role="button" tabindex="0" aria-label="{{T:fs_back}}">{{ICO:back:20}}</span>
-    <div class="fsv-title"><span class="fsv-name" id="fsv-name"></span><span class="fsv-sub" id="fsv-sub"></span></div>
-    <span class="fs-iconbtn" id="fsv-more" role="button" tabindex="0" aria-label="{{T:fsv_more}}">···</span>
-  </div>
-  <div class="fsv-searchrow">
-    <label class="fsv-find">{{ICO:search:15}}<input type="search" id="fsv-find" placeholder="{{T:fsv_search_ph}}" autocomplete="off"></label>
-    <span class="fsv-count" id="fsv-count"></span>
-    <span class="fs-iconbtn fsv-nav" id="fsv-prev" role="button" tabindex="0" aria-label="↑">{{ICO:up:16}}</span>
-    <span class="fs-iconbtn fsv-nav" id="fsv-next" role="button" tabindex="0" aria-label="↓">{{ICO:down:16}}</span>
-  </div>
-  <div class="fsv-tools">
-    <span class="fsv-tbtn" id="fsv-t-wrap" role="button" tabindex="0">{{T:fsv_wrap}}</span>
-    <span class="fsv-tbtn" id="fsv-t-num" role="button" tabindex="0">{{T:fsv_lineno}}</span>
-    <span class="fsv-tbtn" id="fsv-t-minus" role="button" tabindex="0">A−</span>
-    <span class="fsv-tbtn" id="fsv-t-plus" role="button" tabindex="0">A+</span>
-  </div>
-  <div class="fsv-banner" id="fsv-banner"></div>
-  <div class="fsv-body" id="fsv-body"></div>
-  <div class="fsv-status" id="fsv-status"></div>
-</div>
-</div>
-<div class="fs-sheet traj-sheet" id="traj-view" hidden>
-  <div class="fsv-top">
-    <span class="fs-iconbtn" id="traj-back" role="button" tabindex="0" aria-label="{{T:fs_back}}">{{ICO:back:20}}</span>
-    <div class="fsv-title"><span class="fsv-name" id="traj-name"></span><span class="fsv-sub" id="traj-sub"></span></div>
+<div class="traj-sheet" id="traj-view" hidden>
+  <div class="traj-top">
+    <span class="traj-iconbtn" id="traj-back" role="button" tabindex="0" aria-label="{{T:m_close}}">{{ICO:back:20}}</span>
+    <div class="traj-title"><span class="traj-name" id="traj-name"></span><span class="traj-sub" id="traj-sub"></span></div>
   </div>
   <div class="traj-stripwrap">
     <div class="traj-strip" id="traj-strip"></div>
@@ -308,9 +251,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <div class="traj-filter" id="traj-filter" hidden></div>
   <div class="traj-body" id="traj-body"></div>
 </div>
-
-<div id="tl-lightbox" hidden><img id="tl-lightbox-img" alt=""><div class="tl-lb-close" role="button" tabindex="0">{{ICO:close:16}}</div></div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
-<script src="/static/app.js?v=5e899fb5" defer></script>
+<script src="/static/app.js?v=7c4f1a2d" defer></script>
 </body>
 </html>

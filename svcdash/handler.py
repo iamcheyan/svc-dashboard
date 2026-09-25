@@ -4,7 +4,7 @@
 import gzip, hashlib, hmac, ipaddress, json, os, re, secrets, socket, time
 from html import escape
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 from svcdash import procscan, sysinfo, tasks, manage, agents, goals, repos, tools, render, svcctl, runtimes
 from svcdash.i18n import t, detect_lang, DEFAULT_LANG
@@ -293,17 +293,6 @@ class Handler(BaseHTTPRequestHandler):
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             self._send_json(200, {"events": agents.scan_agent_log(sid, lang) if sid else [],
                                   "capture": agents._tmux_capture(tmx)})
-        elif path == "/api/fs/list":
-            qs = parse_qs(urlparse(self.path).query)
-            p = (qs.get("path") or [""])[0]
-            data = tools.fs_list(p)
-            if not data.get("ok"):
-                self.log_message("fs/list rejected %r -> 404", p[:160])
-                self._send_json(404, data)
-            else:
-                self._send_json(200, data)
-        elif path == "/api/fs/file":
-            self._fs_file()
         elif path == "/api/health":
             self._send_json(200, tools.health_check())
         elif path == "/api/nettest":
@@ -327,47 +316,6 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
-    def _fs_file(self):
-        """GET /api/fs/file?path=&mode=view|download[&enc=gb18030]"""
-        qs = parse_qs(urlparse(self.path).query)
-        p = (qs.get("path") or [""])[0]
-        mode = (qs.get("mode") or ["view"])[0]
-        enc = (qs.get("enc") or [""])[0]
-        real = tools.fs_resolve(p)
-        if not real or not os.path.isfile(real):
-            self.log_message("fs/file rejected %r mode=%s -> 404", p[:160], mode)
-            self.send_error(404)
-            return
-        kind, mime = tools.fs_meta(real)
-        if mode == "view" and kind != "image":
-            data = tools.fs_read_text(real, enc)
-            if not data.get("ok"):
-                self.log_message("fs/file read error %r: %s", p[:160], data.get("msg"))
-                self._send_json(500, data)
-            else:
-                self._send_json(200, data)
-            return
-        try:
-            size = os.path.getsize(real)
-            self.send_response(200)
-            ctype = mime if (mode != "download" and kind == "image") else "application/octet-stream"
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(size))
-            self.send_header("Cache-Control", "no-store")
-            if mode == "download":
-                fn = os.path.basename(real)
-                safe = re.sub(r"[^A-Za-z0-9._-]", "_", fn) or "download"
-                self.send_header("Content-Disposition",
-                                 f'attachment; filename="{safe}"; filename*=UTF-8\'\'{quote(fn)}')
-            self.end_headers()
-            with open(real, "rb") as f:
-                while True:
-                    chunk = f.read(65536)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-        except (OSError, BrokenPipeError) as ex:
-            self.log_message("fs/file stream error: %s", ex)
 
     def _origin_ok(self):
         """浏览器跨站 POST 防护(CSRF): Origin/Referer 任一存在时, 其 host 必须与

@@ -6,7 +6,6 @@ from svcdash.goals import (parse_ctx_k, ctx_level, parse_retry, parse_progress,
                            parse_completed_goals, parse_watchdog_events,
                            merge_events, scan_goals, goal_detail,
                            _WD_LINE_RE, _wd_event_kind, GOAL_COMPLETED_LOG)
-from svcdash.tools import fs_resolve, fs_sensitive, fs_read_text, _FS_TEXT_MAX
 from svcdash.sysinfo import sys_info, load_zone
 from svcdash.repos import agent_repos, repo_stats, parse_repo_commits
 from svcdash.procscan import gather
@@ -51,49 +50,6 @@ def selftest():
             b = render.render_fragment("goals", "zh", "localhost:80")
             self.assertIs(a, b)
             self.assertTrue(a)
-
-        def test_fs_security(self):
-            self.assertIsNone(fs_resolve("/etc"))
-            self.assertIsNone(fs_resolve("/root"))
-            self.assertIsNone(fs_resolve("/proc/self/environ"))
-            self.assertIsNone(fs_resolve("/home/tetsuya/../etc"))
-            self.assertIsNone(fs_resolve("/home/tetsuya/.env"))
-            self.assertIsNone(fs_resolve("/home/tetsuya/prod_key.pem"))
-            self.assertIsNone(fs_resolve("/home/tetsuya/creds/id_rsa"))
-            self.assertIsNone(fs_resolve("/home/tetsuya/known_hosts"))
-            self.assertIsNone(fs_resolve("/home/tetsuya/development/.git/config"))
-            self.assertIsNone(fs_resolve("relative/path"))
-            self.assertEqual(fs_resolve("/home/tetsuya/development"),
-                             __import__("os").path.realpath("/home/tetsuya/development"))
-            self.assertTrue(fs_sensitive(".git"))
-            self.assertTrue(fs_sensitive("xkey.txt"))
-            self.assertFalse(fs_sensitive("normal.md"))
-
-        def test_fs_text(self):
-            import tempfile, os
-            with tempfile.TemporaryDirectory() as td:
-                utf8 = os.path.join(td, "a.txt")
-                open(utf8, "wb").write("hello\nworld".encode())
-                r = fs_read_text(utf8)
-                self.assertTrue(r["ok"] and not r["binary"])
-                self.assertEqual(r["encoding"], "utf-8")
-                self.assertIsNone(r["alt_enc"])
-                gb = os.path.join(td, "b.txt")
-                open(gb, "wb").write("传奇配置文件".encode("gb18030"))
-                r = fs_read_text(gb)
-                self.assertEqual(r["encoding"], "utf-8")
-                self.assertEqual(r["alt_enc"], "gb18030")
-                r2 = fs_read_text(gb, "gb18030")
-                self.assertEqual(r2["encoding"], "gb18030")
-                self.assertIn("传奇", r2["text"])
-                binf = os.path.join(td, "c.bin")
-                open(binf, "wb").write(b"\x00\x01\x02binary")
-                self.assertTrue(fs_read_text(binf)["binary"])
-                big = os.path.join(td, "big.log")
-                open(big, "wb").write(b"x" * (5 << 20))
-                r = fs_read_text(big)
-                self.assertTrue(r["truncated"])
-                self.assertEqual(len(r["text"]), _FS_TEXT_MAX)
 
         def test_retry_progress(self):
             self.assertEqual(parse_retry("API error. Retrying (3)/10 in 5s"), "3")

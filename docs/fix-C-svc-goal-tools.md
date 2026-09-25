@@ -1,4 +1,5 @@
 # svc-dashboard P0+P1 整改 · Goal C（服务表 + Goal 卡 + 工具页重排）
+> 历史审计记录：本文涉及的文件浏览分组不再属于当前实现；文件浏览页面与 API 已于 2026-09-25 删除。
 
 ## 背景
 `docs/ui-audit-full.md` 是唯一事实依据（编号沿用）。仓库 `/home/tetsuya/development/svc-dashboard`（main，单文件 dashboard.py ~7580 行）。服务 root systemd svc-dashboard (:80)，改完重启 + curl 验证。

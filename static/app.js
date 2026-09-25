@@ -68,54 +68,35 @@ function row(e, mobile) {
   const loopback = ip.startsWith("127.") || ip === "::1" || ip.startsWith("::ffff:127.");
   const link = loopback ? `http://127.0.0.1:${e.port}/` : `http://${linkHost(location.hostname)}:${e.port}/`;
   const loop = loopback ? ' <span class="local">' + t("loopback") + '</span>' : "";
-  const cmd = e.cmdline || "—";
-  const cwd = e.cwd || "—";
+  const cmd = e.cmdline || "—", cwd = e.cwd || "—";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  // 可管理的手动进程服务: 行尾渲染 暂停/继续 按钮(状态由 fillCtl 填充)
   const man = MANAGE_PROC_BY_PORT[e.port];
-  // P0-6: 行首运行状态点(红=paused/异常 绿=正常 灰=受管单元状态未知); 受管单元由 fillSvcDots 异步上色
   const svcUnit = man || (e.type === "systemd" && MANAGE_SVC_BY_UNIT[e.unit]) || null;
   const svcDot = `<span class="svc-dot ${svPaused ? "bad" : svcUnit ? "off" : "on"}"${svcUnit ? ` data-unit="${esc(svcUnit)}"` : ""}></span>`;
   const ctl = man
     ? `<span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span>`
     : "";
-  // 通用暂停/恢复(svcctl) + 资源行: 详情弹层 payload 带上 res
   const svctl = svBtn(e);
   const svBtnNamed = svctl ? svctl.replace("data-svcp=", `data-svcn='${esc(e.name.replace(/ \(docker\)| \(paused\)$/g, ""))}' data-svcp=`) : "";
   const res = fmtRes(e);
-  const detailBtn = (payload) => `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(payload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
-  // res 数值按展示粒度取整(cpu 整数%/mem 整数MB/up 分钟)——行 HTML 在轮询间稳定,
-  // 增量渲染才能复用未变行; 详情弹层显示同粒度, 不损失可读信息。
   const rres = e.res ? { cpu: Math.round(e.res.cpu), mem_mb: Math.round(e.res.mem_mb),
                          up_sec: Math.floor(e.res.up_sec / 60) * 60 } : null;
   const dpayload = { name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids, res: rres, unit: e.unit || null, cid: e.container_id || null };
+  const detailBtn = `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(dpayload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
+  const actions = `${detailBtn}${ctl}${svBtnNamed}`;
   if (mobile) {
-    // 手机卡片(合法表格结构): 头行右侧显式 44px 圆形 复制/打开 按钮(无滑扫手势)
-    const kv = (k, v) => `<div class='kv'><span class='k'>${k}</span><span class='v'>${v}</span></div>`;
-    const rows =
-      kv(t("th_port"), `<a href='${link}' target='_blank' rel='noopener'>${e.port}</a>`) +
-      kv(t("th_addr"), `${esc(ip)}${loop}`) +
-      kv("PID", e.pids.join(", ")) +
-      (res ? kv(t("th_res"), res) : "") +
-      kv(t("th_cmd"), `<span class='mclamp' role='button' tabindex='0' aria-expanded='false'>${esc(cmd)}</span>`) +
-      kv(t("th_cwd"), esc(cwd)) +
-      (man || svBtnNamed ? kv(t("th_ctl"), ctl + svBtnNamed) : "");
-    return `<tr><td>` +
-      `<div class='td-head'>${svcDot}<span class='svc'>${esc(e.name)}</span>` +
+    return `<tr><td><div class='td-head'>${svcDot}<span class='svc'>${esc(e.name)}</span>` +
       `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
       `<span class='svc-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}' aria-label='${t("act_copy_addr")}'>${icon("copy", 15)}</span>` +
       `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>${icon("ext", 15)}</a></div>` +
-      `<div class='td-rows'>${rows}</div></td></tr>`;
+      `<div class='svc-summary'><a class='port' href='${link}' target='_blank' rel='noopener'>:${e.port}</a>` +
+      `<span class='svc-summary-res'>${res || "—"}</span><span class='svc-summary-detail'>${actions}</span></div></td></tr>`;
   }
   return `<tr>
     <td class='name'>${svcDot}<span class='svc'>${esc(e.name)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
     <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
-    <td class='addr' data-label='${t("th_addr")}'>${esc(ip)}${loop}</td>
-    <td class='pid' data-label='PID'>${e.pids.join(", ")}${res ? `<div class='pid-res'>${res}</div>` : ""}${svBtnNamed ? `<div class='pid-svctl'>${svBtnNamed}</div>` : ""}</td>
-    <td class='cmd' data-label='${t("th_cmd")}'>
-      <div class='cmd-cell'><span class='cmd-text'>${esc(cmd)}</span>${detailBtn(dpayload)}${ctl ? `<span class='cmd-ctl'>${ctl}</span>` : ""}</div></td>
-    <td class='cwd' data-label='${t("th_cwd")}'>
-      <div class='cmd-cell'><span class='cmd-text'>${esc(cwd)}</span>${detailBtn(dpayload)}</div></td>
+    <td class='res' data-label='${t("th_res")}'>${res || "—"}</td>
+    <td class='svc-actions' data-label='${t("g_detail")}'>${actions}</td>
   </tr>`;
 }
 
@@ -315,7 +296,7 @@ function renderTrajFilter() {
 }
 function closeTraj() {
   $("traj-view").hidden = true;
-  document.documentElement.classList.remove("fs-noscroll");
+  document.documentElement.classList.remove("traj-noscroll");
 }
 async function openTraj(name) {
   const v = $("traj-view");
@@ -330,7 +311,7 @@ async function openTraj(name) {
   $("traj-body").innerHTML = `<div class="gempty">${t("a_loading")}</div>`;
   v.hidden = false;
   v.classList.remove("opening"); void v.offsetWidth; v.classList.add("opening");
-  document.documentElement.classList.add("fs-noscroll");
+  document.documentElement.classList.add("traj-noscroll");
   haptic(8);
   try {
     const r = await fetch("/api/trajectory?repo=" + encodeURIComponent(name), { cache: "no-store" });
@@ -457,10 +438,10 @@ function renderAgentPanel(agents) {
   });
   // Codex agents
   agents.codex.forEach(x => {
-    rows += "<tr><td><span class='tbadge rd'>Codex</span><span class='tname tlink' data-sid='' data-cwd='" +
-      esc(x.cwd) + "' data-tmux='' title='" + t("a_openterm", { p: esc(x.pid) }) + "'>" +
-      esc(x.cwd) + "</span></td><td data-label='" + t("a_status") + "'>" + t("a_running") + "</td><td class='tscope' data-label='" + t("a_loc") + "'>—<br>" + esc(x.cwd) + "</td><td class='tsch' data-label='" + t("a_active") + "'>" +
-      esc(x.last_activity) + "<br>" + agoStr(x.idle_seconds) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>pid " + esc(x.pid) + "</td></tr>";
+    rows += "<tr><td><span class='tbadge rd'>Codex</span><span class='tname tlink' data-sid='" + esc(x.session_id) + "' data-cwd='" +
+      esc(x.cwd) + "' data-tmux='' title='" + t("a_openlog", { g: esc(x.title) }) + "'>" +
+      esc(x.title || x.session_id) + "</span></td><td data-label='" + t("a_status") + "'>" + (labels[x.health] || esc(x.health)) + "</td><td class='tscope' data-label='" + t("a_loc") + "'>session " + esc(x.session_id) + "<br>" + esc(x.cwd) + "</td><td class='tsch' data-label='" + t("a_active") + "'>" +
+      esc(x.last_activity) + "<br>" + agoStr(x.idle_seconds) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>" + esc(x.last_event || (x.pid !== "—" ? "pid " + x.pid : "—")) + "</td></tr>";
   });
   const total = agents.omp.length + agents.codex.length;
   el.innerHTML = "<h2>" + t("a_title") + " <span style='color:var(--text-dead);font-weight:400'>" + t("a_hint", { n: total }) + "</span></h2><table><thead><tr><th>" + t("a_th_agent") + "</th><th>" + t("a_status") + "</th><th>" + t("a_loc") + "</th><th>" + t("a_active") + "</th><th>" + t("a_tool") + "</th></tr></thead><tbody>" +
@@ -1048,9 +1029,10 @@ function goalAlerts(goals) {
   return out;
 }
 function renderAlerts(alerts) {
-  const el = $("alert-body");
+  const el = $("alert-body"), panel = $("alerts");
   if (!el) return;
-  if (!alerts.length) { el.innerHTML = esHtml("bell", t("al_none")); return; }
+  if (panel) panel.hidden = !alerts.length;
+  if (!alerts.length) { el.innerHTML = ""; return; }
   el.innerHTML = alerts.map(a => `
     <div class="alert-item" data-key="${escAttr(a.key)}">
       <span class="al-ico ${a.icon[1]}">${icon(a.icon[0], 15)}</span>
@@ -1093,15 +1075,17 @@ async function renderOverview(apiData) {
   $("m-alert").textContent = nAlert;
   $("m-alert").classList.toggle("alert", nAlert > 0);
   renderAlerts(alerts);
-  // 最近活动: 只显示 agent 仓库的提交(由新到旧), 点击进日志页
+  // 最近活动: 只显示少量 agent 仓库提交, 点击进管理页日志
   const recent = events.filter(e => e.kind === "commit").slice(0, 5);
+  const recentPanel = $("recent");
+  if (recentPanel) recentPanel.hidden = !recent.length;
   $("recent-body").innerHTML = recent.length ? recent.map(e => {
     const m = EV_META[e.kind] || EV_META.other;
     return `<div class="rc-row" role="button" tabindex="0"><span class="rc-ico">${icon(m.ico, 14)}</span>` +
       `<span class="rc-kind">${escHtml(t(m.key))} · <b class="rc-name">${escHtml(e.name)}</b>` +
       `<span class="rc-sub">${escHtml(e.text)}</span></span>` +
       `<span class="rc-ago">${escHtml(agoFromTs(e.ts))}</span></div>`;
-  }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
+  }).join("") : "";
   // Web磁贴 + Goal 摘要: 双端都渲染(移动端 #hp-grid 同样显示, 修复永久"loading…")
   renderHomeTiles(apiData && apiData.services);
   renderHomeGoals(goals, nRun, nBad);
@@ -1111,6 +1095,7 @@ async function renderOverview(apiData) {
 function renderHomeTiles(services) {
   const el = $("hp-tiles");
   if (!el) return;
+  const panel = el.closest(".hp-web");
   const svcs = services || [];
   const web = svcs.filter(e => {
     const ip = e.ip || "";
@@ -1120,6 +1105,7 @@ function renderHomeTiles(services) {
   // 同端口去重(docker v4/v6 双行)
   const seen = new Set(), uniq = [];
   web.forEach(e => { const k = e.port + ":" + (e.name || ""); if (!seen.has(k)) { seen.add(k); uniq.push(e); } });
+  if (panel) panel.hidden = !uniq.length;
   el.innerHTML = uniq.length ? uniq.map(e => {
     const link = `http://${linkHost(location.hostname)}:${e.port}/`;
     const id = svcIdentity(e);
@@ -1140,7 +1126,7 @@ function renderHomeTiles(services) {
       + `<span class="hp-tile-main-r"><span class="hp-tile-port">:${e.port}</span>${btn}</span></span>`
       + resLine
       + `<span class="hp-tile-sub">${escHtml(id.sub)}</span></a>`;
-  }).join("") : `<div class="gempty">${t("ev_none")}</div>`;
+  }).join("") : "";
 }
 // Web 磁贴身份识别: 主标签选"最能认出这是啥"的名字, 副行给程序/路径上下文。
 // docker → 容器名; systemd 真单元 → 单元名; 否则脚本名(解释器/dashboard 这类泛化名
@@ -1183,6 +1169,8 @@ function svcIdentity(e) {
 function renderHomeGoals(goals, nRun, nBad) {
   const el = $("hp-goal-body");
   if (!el) return;
+  const panel = el.closest(".hp-goals");
+  if (panel) panel.hidden = !(goals || []).length;
   const act = (goals || []).filter(g => g.light === "active" || g.light === "retry")
     .sort((a, b) => (b.idle_sec || 0) - (a.idle_sec || 0)).slice(0, 4);
   el.innerHTML = `<div class="hp-goal-line"><b>${nRun}</b> ${t("g_active")} · <b class="${nBad ? "t-red" : ""}">${nBad}</b> ${t("g_paused")}</div>`
@@ -1209,7 +1197,7 @@ const staleHtml = icon("warn", 12) + " " + t("st_stale");
 }
 setInterval(() => { if (!document.hidden) refreshFreshness(); }, 20000);
 
-// 概要页交互: 状态卡→Goal页 / 状态栏→回概要 / 最近活动→日志页 / 告警操作
+// 概要页交互: 状态卡→Goal页 / 最近活动→管理页日志 / 告警操作
 $("statuscard").addEventListener("click", (e) => { if (!e.target.closest(".gcopy")) setPage(2); });
 const statuslineEl = $("statusline");   // header 状态栏已移除(85102dc), 此处判空防崩
 if (statuslineEl) statuslineEl.addEventListener("click", () => {
@@ -1223,7 +1211,7 @@ if (hpMore) hpMore.addEventListener("click", () => {   // 首页 Goal 摘要 "Go
   if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(2);
   else setCat("goal");
 });
-$("recent-body").addEventListener("click", () => setPage(1));
+$("recent-body").addEventListener("click", () => setPage(3));
 document.addEventListener("click", (e) => {
   const it = e.target.closest(".alert-item");
   if (!it) return;
@@ -1434,15 +1422,13 @@ const isMobile = () => mqMobile.matches;
 const haptic = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 // 触摸互斥: 一次触摸只属于一个手势(分页/滑动露按钮/边缘返回)
 const gesture = { claimed: null };
-// 移动端把各分区装进 6 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
+// 移动端把各分区装进 4 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#hp-aiclean", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
-  ["#logpage"],
-  ["#goals"],
+  ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#hp-aiclean", "#sysbar", "#repos", "#chart-wrap", "#recent", "#toolchips"],
   ["#filters", "#tasks", "#svc-panel"],
-  ["#agents-page"],
-  ["#toolspage"],
+  ["#goals"],
+  ["#logpage", "#agents-page", "#toolspage", "#events"],
 ];
 let pagesHomeOrder = null, pgWrappers = null, trackEl = null, headerHome = null;
 function placeHeader(mobile) {
@@ -1495,12 +1481,12 @@ mqMobile.addEventListener("change", () => {
     document.querySelectorAll(".cat-off").forEach(el => el.classList.remove("cat-off"));
   } else setCat(curCat, false);   // 切回桌面: 恢复选中分类的过滤
 });
-// --- 分页(概览/日志/Goal/模型/ツール) ---
+// --- 分页(概览/服务/Goal/管理) ---
 const pages = $("pages");
-const N_PAGES = 6;
-const PAGE_W = 100 / N_PAGES;   // 轨道宽 600%, 每页位移 = 轨道的 1/6
+const N_PAGES = 4;
+const PAGE_W = 100 / N_PAGES;   // 轨道宽 400%, 每页位移 = 轨道的 1/4
 var page = 0;   // var: 挂到 window, 便于外部调试/测试读取
-function pageLabels() { return [t("tab_home"), t("tab_log"), t("tab_goal"), t("tab_svc"), t("tab_agent"), t("tab_tools")]; }
+function pageLabels() { return [t("tab_home"), t("tab_svc"), t("tab_goal"), t("tab_manage")]; }
 function applyPagesX(withTransition) {
   const tr = trackEl; // 移动端才有轨道
   if (!tr) return;
@@ -1544,13 +1530,16 @@ function setPage(i, opts) {
   requestAnimationFrame(() => applyPagesX(false));
 }
 function activatePage(i) {
-  if (i === 1) { initLogPage(); renderLogTimeline(); }  // 日志页: agent 选择器 + 事件时间线
-  if (i === 4) initAgentsPage();     // 模型页: 拉取 OMP/Codex 卡片
-  if (i === 5) initToolsPage();      // ツール页: 惰性初始化(健康/文件/清理/速测/服务/任务)
-  if (i === 3 && isMobile()) {       // 服务页: 骨架 → 渲染
+  if (i === 1 && isMobile()) {       // 服务页: 骨架 → 渲染
     const tbody = $("svc").querySelector("tbody");
     if (!tbody.children.length) tbody.innerHTML = mobileSkel(4);
     applyFilter();
+  }
+  if (i === 2) { const goal = $("goals"); if (goal) goal.hidden = false; }
+  if (i === 3) {
+    initLogPage(); renderLogTimeline();
+    initAgentsPage();
+    initToolsPage();
   }
 }
 document.addEventListener("click", (e) => {
@@ -1684,11 +1673,15 @@ function rtQuotaHtml(a) {
 function rtTasksHtml(a) {
   const rows = [];
   (a.tasks || []).forEach(x => {
-    if (x.kind === "omp") rows.push(`<div class="rt-task" data-sid="${escAttr(x.id)}" data-cwd="${escAttr(x.cwd)}" data-tmux="${escAttr(x.tmux)}" role="button" tabindex="0">
+    if (x.kind === "omp" || x.kind === "codex") rows.push(`<div class="rt-task" data-sid="${escAttr(x.id)}" data-cwd="${escAttr(x.cwd)}" data-tmux="${escAttr(x.tmux || "")}" role="button" tabindex="0">
       <span class="rt-dot2 ${x.health === "running" ? "run" : "warn"}"></span>
-      <span class="rt-taskgoal">${escHtml(stripMd(x.goal || x.cwd).slice(0, 70))}</span>
-      <span class="rt-taskmeta">${agoStr(x.idle_seconds)} · ${escHtml(x.tool)}</span></div>`);
+      <span class="rt-taskgoal">${escHtml(stripMd(x.goal || x.title || x.cwd).slice(0, 70))}</span>
+      <span class="rt-taskmeta">${agoStr(x.idle_seconds)} · ${escHtml(x.tool || "session")}</span></div>`);
     else if (x.kind === "grok") rows.push(`<div class="rt-task"><span class="rt-dot2 run"></span>
+      <span class="rt-taskgoal">${escHtml(x.cwd)}</span><span class="rt-taskmeta">pid ${escHtml(String(x.pid))}</span></div>`);
+    else if (x.kind === "session") rows.push(`<div class="rt-task"><span class="rt-dot2 ${x.health === "running" ? "run" : "dim"}"></span>
+      <span class="rt-taskgoal">${escHtml(x.title || x.cwd)}</span><span class="rt-taskmeta">${agoStr(x.age_sec)} · ${escHtml(x.cwd)}</span></div>`);
+    else if (x.kind === "process") rows.push(`<div class="rt-task"><span class="rt-dot2 run"></span>
       <span class="rt-taskgoal">${escHtml(x.cwd)}</span><span class="rt-taskmeta">pid ${escHtml(String(x.pid))}</span></div>`);
     else if (x.kind === "file") rows.push(`<div class="rt-task"><span class="rt-dot2 dim"></span>
       <span class="rt-taskgoal">${escHtml(x.file)}</span><span class="rt-taskmeta">${agoStr(x.age_sec)}</span></div>`);
@@ -1808,8 +1801,8 @@ function renderRuntimes(d) {
       const sel = $("logagent-sel");
       const opt = sel && [...sel.options].find(o => o.value === c.dataset.sid && o.dataset.cwd === c.dataset.cwd);
       if (opt) { sel.value = opt.value; loadLogView(); }
-      if (isMobile()) setPage(1);
-      else { setCat("log"); scrollTo(0, 0); }
+      if (isMobile()) setPage(3);
+      else { setCat("manage"); scrollTo(0, 0); }
     }));
   rtBindModels(el, d);
   if ((d.models && d.models.providers || []).some(p => p.models.some(m => m.test && m.test.status === "running"))) rtPollModels();
@@ -2279,7 +2272,7 @@ themeMQ.addEventListener("change", () => { applyThemeMeta(); drawChart(); });  /
 if ($("logagent-sel")) $("logagent-sel").addEventListener("change", loadLogView);
 
 // ================================================================
-// ツール页: 健康检查 / 文件浏览 / 垃圾清理 / 网络速测 / 用户服务 / 计划任务
+// 工具页: 健康检查 / 垃圾清理 / 网络速测 / 用户服务 / 计划任务
 // ================================================================
 const TL_CONF = BOOT.tl;
 let toolsInited = false;
@@ -2369,344 +2362,6 @@ function renderConnbar() {
     (lan ? `<span class="gcopy" data-copy="${escAttr(lan)}" role="button" tabindex="0" title="LAN ${escAttr(lan)}"><b>${escHtml(lan)}</b></span>` : "");
 }
 
-// --- F1 文件浏览: 独立全屏页(home 起点), 移动单栏 / 桌面≥1024 双栏 ---
-const FS_HOME = TL_CONF.fs_home || "/home/tetsuya";
-const fsState = { cwd: null, parent: null, name: "", entries: [], err: "",
-  sort: localStorage.getItem("svc-fs-sort") || "name",
-  hidden: localStorage.getItem("svc-fs-hidden") === "1",
-  seq: 0 };
-const FS_SORTS = [["name", "fs_sort_name"], ["time", "fs_sort_time"],
-                  ["size", "fs_sort_size"], ["type", "fs_sort_type"]];
-const FS_ICONS = [["dir", "folder", "fs-ico-dir"], ["img", "img", "fs-ico-img"],
-  ["zip", "zip", "fs-ico-zip"], ["code", "code", "fs-ico-code"],
-  ["txt", "doc", "fs-ico-txt"], ["bin", "file", "fs-ico-bin"]];
-
-function fsExt(name) { const i = name.lastIndexOf("."); return i > 0 ? name.slice(i + 1).toLowerCase() : ""; }
-function fsKind(e) {
-  if (e.type === "dir") return "dir";
-  const ext = fsExt(e.name);
-  if (["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico"].includes(ext)) return "img";
-  if (["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "zst"].includes(ext)) return "zip";
-  if (["py", "js", "ts", "cs", "rs", "go", "c", "h", "cpp", "java", "sh", "css", "html", "htm", "xml", "sql", "lua", "rb", "php"].includes(ext)) return "code";
-  return "txt";
-}
-
-function fsRelTime(ts) {
-  const d = Math.max(0, Math.floor(Date.now() / 1000 - ts));
-  if (d < 50) return t("fs_rel_now");
-  if (d < 3600) return t("fs_rel_m", { n: Math.round(d / 60) });
-  if (d < 86400) return t("fs_rel_h", { n: Math.round(d / 3600) });
-  if (d < 172800) return t("fs_rel_y");
-  const dt = new Date(ts * 1000);
-  const sameYear = dt.getFullYear() === new Date().getFullYear();
-  const opt = { month: "short", day: "numeric" };
-  if (!sameYear) opt.year = "numeric";
-  return dt.toLocaleDateString(LANG === "zh" ? "zh-CN" : LANG === "ja" ? "ja-JP" : "en-US", opt);
-}
-
-function fsCrumbsHtml(path) {
-  const parts = path.split("/").filter(Boolean);
-  let h = `<a data-crumb='/'><svg width='13' height='13' viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round">`
-    + (ICONS["home"] || "") + `</svg></a>`;
-  let acc = "";
-  parts.forEach((p, i) => {
-    acc += "/" + p;
-    h += `<span class='csep'>/</span>`;
-    h += i === parts.length - 1 ? `<span class='cur'>${escHtml(p)}</span>`
-                                : `<a data-crumb='${escAttr(acc)}'>${escHtml(p)}</a>`;
-  });
-  return h;
-}
-
-function fsApplySort(list) {
-  const s = fsState.sort;
-  const key = { name: e => e.name.toLowerCase(), time: e => e.mtime,
-                size: e => (e.size == null ? -1 : e.size), type: e => fsKind(e) + e.name.toLowerCase() }[s];
-  return [...list].sort((a, b) => (a.type === b.type ? 0 : a.type === "dir" ? -1 : 1)
-    || (s === "time" || s === "size" ? key(b) - key(a) : (key(a) > key(b) ? 1 : key(a) < key(b) ? -1 : 0)));
-}
-
-function fsRender() {
-  const list = $("fs-list");
-  const q = ($("fs-filter").value || "").trim().toLowerCase();
-  $("fs-dirname").textContent = fsState.name || FS_HOME;
-  $("fs-crumbs").innerHTML = fsCrumbsHtml(fsState.cwd || FS_HOME);
-  $("fs-crumbs").parentElement.scrollLeft = 1e4;
-  const rows = fsApplySort(fsState.entries)
-    .filter(e => (fsState.hidden || !e.name.startsWith(".")) && (!q || e.name.toLowerCase().includes(q)));
-  const html = rows.map(e => {
-    const kind = fsKind(e), ico = FS_ICONS.find(x => x[0] === kind);
-    const sub = e.type === "dir"
-      ? `${e.count != null ? t("fs_items", { n: e.count }) : "—"}</span>`
-      : `${fmtB(e.size)}</span>`;
-    const acts = `<span class='fs-acts'>` +
-      `<span class='fs-hact' data-ha='copy' role='button' tabindex='0' title='${t("fs_copy_path")}' aria-label='${t("fs_copy_path")}'>${icon("copy", 15)}</span>` +
-      (e.type === "dir" ? "" :
-        `<span class='fs-hact' data-ha='dl' role='button' tabindex='0' title='${t("tl_fs_dl")}' aria-label='${t("tl_fs_dl")}'>${icon("down", 15)}</span>`) +
-      `</span>`;
-    return `<div class='fs-row' data-kind='${kind}' data-type='${e.type}' data-name='${escAttr(e.name)}'>` +
-      `<span class='fs-fico ${ico[2]}'>${icon(ico[1], 19)}</span>` +
-      `<span class='fs-main'><span class='fs-nm'>${escHtml(e.name)}</span>` +
-      `<span class='fs-meta'><span>${sub}<span class='dot'> · </span>${fsRelTime(e.mtime)}</span></span></span>` +
-      acts +
-      (e.type === "dir" ? `<span class='fs-earr' style='color:var(--text-dead)'>${icon("chev", 15)}</span>` : "") +
-      `</div>`;
-  }).join("");
-  list.innerHTML = html
-    || (fsState.err ? `<div class='fs-errcard'>${icon("err", 16)}<span>${escHtml(fsState.err)}</span>` +
-        `<span class='btn fs-retry' role='button' tabindex='0'>${t("fs_retry")}</span></div>`
-       : `<div class='fs-note'>${icon("folder", 44)}<span>${q ? t("tl_fs_empty") : t("fs_empty_dir")}</span></div>`);
-}
-
-async function fsOpen(path, dir) {
-  const seq = ++fsState.seq;
-  if (fsState.cwd) {
-    const list = $("fs-list");
-    list.classList.remove("push", "pop");
-    void list.offsetWidth;
-    list.classList.add(dir === "up" ? "pop" : "push");
-  }
-  $("fs-list").innerHTML = Array.from({ length: 7 }, () =>
-    "<div class='fs-skrow'><div class='skel-line' style='width:70%'></div><div class='skel-line' style='width:42%;margin-bottom:0'></div></div>").join("");
-  try {
-    const d = await tlGet("/api/fs/list?path=" + encodeURIComponent(path));
-    if (seq !== fsState.seq) return;
-    fsState.cwd = d.path; fsState.parent = d.parent || null; fsState.name = d.name;
-    fsState.entries = d.entries || []; fsState.err = "";
-  } catch (e) {
-    if (seq !== fsState.seq) return;
-    fsState.err = e.message || String(e);
-    if (!fsState.cwd) fsState.cwd = FS_HOME;
-  }
-  fsRender();
-}
-
-function fsFileUrl(path, mode, enc) {
-  let u = "/api/fs/file?path=" + encodeURIComponent(path) + "&mode=" + mode;
-  if (enc) u += "&enc=" + enc;
-  return u;
-}
-
-function fsOpenFile(name) {
-  const path = (fsState.cwd || FS_HOME) + "/" + name;
-  const kind = fsKind({ name, type: "file" });
-  haptic(8);
-  if (kind === "img") {          // 图片: 复用现有 lightbox
-    $("tl-lightbox-img").src = fsFileUrl(path, "view");
-    $("tl-lightbox").hidden = false;
-    return;
-  }
-  fsvOpen(path, name);           // 其余全部走文本预览(含二进制提示)
-}
-
-function fsPopupMenu(items, anchor) {
-  fsCloseMenu();
-  const m = document.createElement("div");
-  m.className = "fs-menu"; m.id = "fs-menu";
-  m.innerHTML = items.map((x, i) => x === "-" ? "<hr>"
-    : `<div class='mi ${x.on ? "on" : ""}' data-mi='${i}' role='button' tabindex='0'>${x.ico ? icon(x.ico, 15) : ""}` +
-      `<span>${escHtml(x.label)}</span><span class='chk'>${icon("ok", 14)}</span></div>`).join("");
-  document.body.appendChild(m);
-  const r = anchor.getBoundingClientRect();
-  m.style.top = Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 10) + "px";
-  m.style.left = Math.max(8, Math.min(r.left, innerWidth - m.offsetWidth - 8)) + "px";
-  m.addEventListener("click", (e) => {
-    const mi = e.target.closest("[data-mi]");
-    if (mi) { fsCloseMenu(); items[+mi.dataset.mi].act(); }
-  });
-}
-function fsCloseMenu() { const m = $("fs-menu"); if (m) m.remove(); }
-
-function fsOpenBrowser() {
-  $("fs-app").hidden = false;
-  document.documentElement.classList.add("fs-noscroll");
-  if (!fsState.cwd) fsOpen(FS_HOME);
-  else fsRender();
-}
-function fsCloseBrowser() {
-  $("fs-app").hidden = true; $("fs-view").hidden = true;
-  document.documentElement.classList.remove("fs-noscroll");
-}
-
-// --- F1b 文本预览: 语法高亮(自写零依赖)/行号/搜索/换行/字号/GB18030 重开 ---
-const fsvState = { path: null, name: "", enc: "utf-8", altEnc: null, data: null,
-  wrap: localStorage.getItem("svc-fsv-wrap") !== "0",
-  lineNo: localStorage.getItem("svc-fsv-num") !== "0",
-  font: clampFont(+(localStorage.getItem("svc-fsv-font") || 13)),
-  lines: [], marks: [], cur: 0 };
-function clampFont(px) { return Math.max(10, Math.min(22, px)); }
-
-/* 轻量高亮: 输入必须是 escHtml 后的文本(已无 < > &), 只产出 <span class=tk-*>。
-   够用即可: json/yaml/toml 值色, md 结构色, 代码类 关键字/字符串/注释 三色。 */
-const FSV_MD_HEAD = /^#{1,6} .*$|^={3,}$|^-{3,}$/;
-function hlLine(line, lang) {
-  let out = line;
-  const wrap = (re, cls) => { out = out.replace(re, (m) => `\u0001${cls}\u0002${m}\u0003`); };
-  if (lang === "md") {
-    if (FSV_MD_HEAD.test(line)) wrap(/^.*$/, "h");
-    else {
-      wrap(/`[^`]+`/g, "s");
-      wrap(/\*\*[^*]+\*\*/g, "b");
-      wrap(/\[[^\]]*\]\([^)]*\)/g, "l");
-      wrap(/^ *([-*+]|\d+\.) /, "p");
-    }
-  } else if (lang === "json") {
-    if (!line.startsWith("//")) {
-      wrap(/"(?:[^"\\]|\\)*"(?= *:)/g, "k");
-      wrap(/"(?:[^"\\]|\\)*"/g, "s");
-      wrap(/\b(?:true|false|null)\b/g, "k");
-      wrap(/-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g, "n");
-    }
-  } else if (lang === "yaml" || lang === "toml" || lang === "ini") {
-    wrap(/^[^:=#]+?(?= *[:=])/g, "k");
-    wrap(/(["']).*?\1/g, "s");
-    wrap(/\b\d+(?:\.\d+)?\b/g, "n");
-  } else if (lang === "code") {
-    wrap(/(#.*$|\/\/.*$)/g, "c");
-    wrap(/(["']).*?(?:\1|$)/g, "s");
-    wrap(/\b(0x[0-9a-fA-F]+|\d+(?:\.\d+)?)\b/g, "n");
-    wrap(/\b(?:def|class|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|import|from|as|with|try|except|finally|raise|lambda|yield|pass|break|continue|global|async|await|const|let|var|function|new|typeof|instanceof|this|self|super|static|public|private|protected|void|int|float|double|string|bool|char|struct|enum|match|fn|impl|trait|pub|mut|use|where|select|insert|update|delete|create|table|case|switch|do|throw|catch|namespace|using|template|virtual|override)\b/g, "k");
-  } else if (lang === "log") {
-    wrap(/\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?\b/g, "n");
-    wrap(/\b(?:ERROR|FATAL|WARN|WARNING)\b/g, "k");
-  }
-  out = out.replace(/\u0001([A-Za-z0-9_-]+)\u0002((?:[^\u0001\u0003])*)\u0003/g,
-    (m0, cls, body) => `<span class='tk-${cls}'>${body}</span>`);
-  return out;
-}
-function hlLang(name, kind) {
-  if (kind === "img") return "";
-  const ext = fsExt(name);
-  if (ext === "md" || ext === "markdown") return "md";
-  if (ext === "json") return "json";
-  if (["yaml", "yml", "toml", "ini", "conf", "env", "properties"].includes(ext)) return ext === "yml" ? "yaml" : ext;
-  if (kind === "code") return "code";
-  if (ext === "log") return "log";
-  return "plain";
-}
-
-const FSV_MAX_LINES = 5000;   // 行数上限: 超出提示截断(大文件保护第二道)
-function fsvRender() {
-  const d = fsvState.data;
-  const body = $("fsv-body");
-  $("fs-view").classList.toggle("wrap", fsvState.wrap);
-  $("fs-view").classList.toggle("nonum", !fsvState.lineNo);
-  $("fs-view").style.setProperty("--fsv-fs", fsvState.font + "px");
-  $("fsv-t-wrap").classList.toggle("on", fsvState.wrap);
-  $("fsv-t-num").classList.toggle("on", fsvState.lineNo);
-  if (!d || d.binary) { body.innerHTML = ""; return; }
-  const lang = hlLang(fsvState.name, fsKind({ name: fsvState.name, type: "file" }));
-  const lines = fsvState.lines;
-  const capped = lines.length > FSV_MAX_LINES;
-  const shown = capped ? lines.slice(0, FSV_MAX_LINES) : lines;
-  let h = "<pre class='fsv-code'>";
-  for (let i = 0; i < shown.length; i++)
-    h += `<div class='fsl' data-ln='${i}'><span class='fsln'>${i + 1}</span><span class='fst'>${hlLine(escHtml(shown[i]), lang) || ""}</span></div>`;
-  h += "</pre>";
-  if (capped) h += `<div class='fs-note' style='padding:18px'>${icon("warn", 20)}<span>${t("fsv_lines_cap", { n: FSV_MAX_LINES.toLocaleString() })}</span></div>`;
-  body.innerHTML = h;
-  body.scrollTop = 0;
-}
-
-function fsvBanner() {
-  const d = fsvState.data, el = $("fsv-banner");
-  if (!d || d.binary) { el.innerHTML = ""; return; }
-  let h = "";
-  if (d.truncated) h += `<div>${icon("warn", 14)}<span>${t("fsv_big")}</span>` +
-    `<a class='btn' href='${fsFileUrl(fsvState.path, "download")}' download>${t("tl_fs_dl")}</a></div>`;
-  if (fsvState.altEnc) h += `<div>${icon("warn", 14)}<span>${t("fsv_gb_hint")}</span>` +
-    `<span class='btn' id='fsv-reenc' role='button' tabindex='0'>${t(fsvState.enc === "gb18030" ? "fsv_utf8" : "fsv_gb")}</span></div>`;
-  el.innerHTML = h;
-  const rb = $("fsv-reenc");
-  if (rb) rb.addEventListener("click", () => fsvLoad(fsvState.path, fsvState.name, fsvState.enc === "gb18030" ? "" : fsvState.altEnc));
-}
-
-async function fsvLoad(path, name, enc) {
-  $("fsv-name").textContent = name;
-  $("fsv-sub").textContent = "…";
-  $("fsv-banner").innerHTML = "";
-  $("fsv-body").innerHTML = "<div class='fs-note'><div class='skel-line' style='width:60%'></div><div class='skel-line' style='width:80%'></div><div class='skel-line' style='width:48%'></div></div>";
-  try {
-    const d = await tlGet(fsFileUrl(path, "view", enc));
-    fsvState.path = path; fsvState.name = name;
-    fsvState.enc = d.encoding || "utf-8";
-    fsvState.altEnc = d.alt_enc || null;
-    fsvState.data = d;
-    fsvState.lines = d.binary ? [] : (d.text || "").split("\n");
-    fsvState.marks = []; fsvState.cur = 0;
-    if (d.binary) {
-      $("fsv-body").innerHTML = `<div class='fs-note'>${icon("box", 44)}<span>${t("fsv_binary")}</span>` +
-        `<a class='btn' href='${fsFileUrl(path, "download")}' download>${icon("down", 13)} ${t("tl_fs_dl")}</a></div>`;
-      $("fsv-sub").textContent = fmtB(d.size);
-      $("fsv-status").innerHTML = `${fmtB(d.size)}<span class='dot'>·</span>${new Date(d.mtime * 1000).toLocaleString()}`;
-    } else {
-      fsvRender(); fsvBanner(); fsvStatus();
-      fsvSearch(($("fsv-find").value || "").trim());
-    }
-  } catch (e) {
-    $("fsv-body").innerHTML = `<div class='fs-errcard'>${icon("err", 16)}<span>${escHtml(e.message)}</span>` +
-      `<a class='btn' href='${fsFileUrl(path, "download")}' download>${t("tl_fs_dl")}</a></div>`;
-  }
-}
-
-function fsvStatus() {
-  const d = fsvState.data;
-  $("fsv-sub").textContent = `${fmtB(d.size)} · ${d.encoding || "?"}`;
-  $("fsv-status").innerHTML =
-    `${fsvState.lines.length.toLocaleString()} ${t("fsv_lines")}<span class='dot'>·</span>${fmtB(d.size)}` +
-    `<span class='dot'>·</span>${escHtml(d.encoding || "?")}` +
-    `${d.alt_enc ? ` <span class='btn' id='fsv-reenc2' role='button' tabindex='0' style='min-height:22px;padding:2px 8px;font-size:11px'>${t("fsv_gb")}</span>` : ""}` +
-    `<span class='dot'>·</span>${new Date(d.mtime * 1000).toLocaleString()}`;
-  const b = $("fsv-reenc2");
-  if (b) b.addEventListener("click", () => fsvLoad(fsvState.path, fsvState.name, fsvState.altEnc));
-}
-
-function fsvOpen(path, name) {
-  const v = $("fs-view");
-  v.hidden = false;
-  v.classList.remove("opening"); void v.offsetWidth; v.classList.add("opening");
-  $("fsv-find").value = ""; $("fsv-count").textContent = "";
-  fsvLoad(path, name, "");
-}
-
-function fsvClose() { $("fs-view").hidden = true; }
-
-function fsvSearch(q, step) {
-  const d = fsvState.data;
-  if (!d || d.binary) return;
-  const cnt = $("fsv-count");
-  if (!q) {   // 清除高亮: 恢复原始高亮行
-    cnt.textContent = "";
-    fsvRender();
-    return;
-  }
-  const ql = q.toLowerCase();
-  if (!fsvState.marks.length || fsvState.lastQ !== q) {
-    const lines = fsvState.lines, marks = [];
-    for (let i = 0; i < lines.length; i++)
-      if (lines[i].toLowerCase().includes(ql)) marks.push(i);
-    fsvState.marks = marks; fsvState.lastQ = q; fsvState.cur = 0;
-    const lang = hlLang(fsvState.name, fsKind({ name: fsvState.name, type: "file" }));
-    const body = $("fsv-body");
-    body.querySelectorAll(".fsl").forEach((el) => {
-      const ln = +el.dataset.ln;
-      if (fsvState.lines[ln].toLowerCase().includes(ql)) {
-        const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-        el.querySelector(".fst").innerHTML = escHtml(fsvState.lines[ln]).replace(re, (m) => `<mark class='fsv-mark'>${m}</mark>`);
-      } else if (el.querySelector(".fst").innerHTML.includes("fsv-mark")) {
-        el.querySelector(".fst").innerHTML = hlLine(fsvState.lines[ln], lang) || "";
-      }
-    });
-  }
-  fsvState.cur = step ? (fsvState.cur + step + fsvState.marks.length) % fsvState.marks.length : 0;
-  const ln = fsvState.marks[fsvState.cur];
-  cnt.textContent = `${fsvState.cur + 1}/${fsvState.marks.length}`;
-  const body2 = $("fsv-body");
-  body2.querySelectorAll(".fsl.cur").forEach((e) => e.classList.remove("cur"));
-  const row = body2.querySelector(`.fsl[data-ln='${ln}']`);
-  if (row) { row.classList.add("cur"); row.scrollIntoView({ block: "center" }); }
-}
-
 // --- F3 垃圾清理 ---
 const CLEAN_IDS = ["journal", "apt", "tmp_old", "hermes_cache", "omp_jsonl", "binobj"];
 let cleanItems = [];
@@ -2720,9 +2375,9 @@ async function cleanScan() {
     cleanItems = (d.items || []).filter(x => !x.display_only);
     const docker = (d.items || []).find(x => x.display_only);
     let h = cleanItems.map(x => {
-      const def = x.safe === false;
+      const selected = x.safe !== false;
       return `<div class='tl-cleanrow'>` +
-        `<input type='checkbox' data-clean='${x.id}' ${def ? "" : "checked"}>` +
+        `<span class='clean-toggle${selected ? " selected" : ""}' data-clean='${x.id}' role='button' tabindex='0' aria-pressed='${selected}'>${icon(selected ? "ok" : "dot", 14)}</span>` +
         `<span class='lbl'>${escHtml(x.detail || x.id)}${x.error ? ` <small style='color:var(--c-red)'>${escHtml(x.error)}</small>` : ""}</span>` +
         `<span class='sz'>${fmtB(x.size)}</span></div>`;
     }).join("");
@@ -2733,6 +2388,11 @@ async function cleanScan() {
         `<span class='btn tl-run' id='tl-clean-docker' role='button' tabindex='0'>${t("tl_clean_docker_prune")}</span>`;
     }
     body.innerHTML = h;
+    body.querySelectorAll(".clean-toggle").forEach(toggle => toggle.addEventListener("click", () => {
+      const selected = !toggle.classList.toggle("selected");
+      toggle.setAttribute("aria-pressed", selected);
+      toggle.innerHTML = icon(selected ? "ok" : "dot", 14);
+    }));
     $("tl-clean-exec").hidden = false;
     const dp = $("tl-clean-docker");
     if (dp) dp.addEventListener("click", async () => {
@@ -2749,7 +2409,7 @@ async function cleanScan() {
 }
 
 async function cleanExec() {
-  const ids = [...document.querySelectorAll("input[data-clean]:checked")].map(x => x.dataset.clean);
+  const ids = [...document.querySelectorAll(".clean-toggle.selected")].map(x => x.dataset.clean);
   if (!ids.length) return;
   if (!await uiConfirm(t("tl_clean_confirm"))) return;
   const btn = $("tl-clean-exec"), body = $("tl-clean-body");
@@ -2816,11 +2476,14 @@ async function aiRerun() {
 }
 async function aiCleanHome() {
   const st = await _aiPoll();
-  if (st.status === "running") { aiOpenModal(); return; }        // 在跑: 直接看日志
-  if (st.status === "idle" && (st.log_tail || "").includes("清理报告")) { aiOpenModal(); return; }  // 有上次报告: 先看
+  if (st.status === "running") { aiOpenModal(); return; }        // 在跑: 直接看实时日志
+  // 空闲: 每次点击都发起一轮新清理(确认弹窗防误触)——不再"只带你看上次报告",
+  // 旧报告仍在弹层日志里, 看报告→弹层底部"发起一轮新清理"重跑也保留
   if (!await uiConfirm(t("tl_aiclean_confirm"))) return;
+  const btn = $("hp-aiclean-run");
+  if (btn) btn.textContent = "…";
   const r = await tlPost("/api/aicleanup", {});
-  if (!r.ok) { uiNotice(r.msg || "failed"); return; }
+  if (!r.ok) { uiNotice(r.msg || "failed"); if (btn) btn.textContent = t("tl_aiclean_run"); return; }
   aiOpenModal();
 }
 
@@ -2913,116 +2576,18 @@ function initToolsPage() {
       $("tl-usvc-showlock").hidden = true;
       $("tl-usvc-unlockwrap").hidden = false;
     });
-    // 文件浏览独立页(惰性: 首次打开才请求)
-    $("fs-entry").addEventListener("click", fsOpenBrowser);
-    $("fs-back").addEventListener("click", () => { haptic(6); fsCloseBrowser(); });
-    $("fs-home").addEventListener("click", () => { haptic(6); fsOpen(FS_HOME); });
-    $("fs-filter").addEventListener("input", fsRender);
-    $("fs-list").addEventListener("click", (e) => {
-      const crumb = e.target.closest("[data-crumb]");
-      if (crumb) { fsOpen(crumb.dataset.crumb, crumb.dataset.crumb === fsState.parent ? "up" : "down"); return; }
-      const ha = e.target.closest("[data-ha]");
-      if (ha) {   // 行内显式操作钮(复制/下载)
-        const row = ha.closest(".fs-row");
-        const path = fsState.cwd + "/" + row.dataset.name;
-        if (ha.dataset.ha === "copy") copyText(path, ha);
-        else location.href = fsFileUrl(path, "download");
-        return;
-      }
-      const retry = e.target.closest(".fs-retry");
-      if (retry) { fsOpen(fsState.cwd || FS_HOME); return; }
-      const row = e.target.closest(".fs-row");
-      if (!row) return;
-      if (row.dataset.type === "dir") { haptic(6); fsOpen(fsState.cwd + "/" + row.dataset.name); }
-      else fsOpenFile(row.dataset.name);
-    });
-    $("fs-crumbs").addEventListener("click", (e) => {
-      const crumb = e.target.closest("[data-crumb]");
-      if (crumb) { haptic(6); fsOpen(crumb.dataset.crumb, crumb.dataset.crumb === fsState.parent ? "up" : "down"); }
-    });
-    $("fs-sortbtn").addEventListener("click", (e) => {
-      e.stopPropagation();   // 不冒泡: 防触发 document 级"菜单外点击收起"
-      fsPopupMenu(FS_SORTS.map(([k, lbl]) => ({ label: t(lbl), on: fsState.sort === k, act: () => {
-        fsState.sort = k; localStorage.setItem("svc-fs-sort", k); fsRender();
-      } })), e.currentTarget);
-    });
-    $("fs-more").addEventListener("click", (e) => {
-      e.stopPropagation();
-      fsPopupMenu([
-        { label: t("tl_fs_hidden"), ico: "folder", on: fsState.hidden, act: () => {
-          fsState.hidden = !fsState.hidden;
-          fsRender();
-        } },
-        "-",
-        { label: t("fs_home_btn"), ico: "home", act: () => fsOpen(FS_HOME) },
-      ], e.currentTarget);
-    });
-    // 文本预览
-    $("fsv-back").addEventListener("click", () => { haptic(6); fsvClose(); });
-    $("fsv-t-wrap").addEventListener("click", () => {
-      fsvState.wrap = !fsvState.wrap;
-      localStorage.setItem("svc-fsv-wrap", fsvState.wrap ? "1" : "0");
-      fsvRender(); fsvSearch(($("fsv-find").value || "").trim());
-    });
-    $("fsv-t-num").addEventListener("click", () => {
-      fsvState.lineNo = !fsvState.lineNo;
-      localStorage.setItem("svc-fsv-num", fsvState.lineNo ? "1" : "0");
-      fsvRender(); fsvSearch(($("fsv-find").value || "").trim());
-    });
-    $("fsv-t-minus").addEventListener("click", () => {
-      fsvState.font = clampFont(fsvState.font - 1);
-      localStorage.setItem("svc-fsv-font", fsvState.font); fsvRender();
-    });
-    $("fsv-t-plus").addEventListener("click", () => {
-      fsvState.font = clampFont(fsvState.font + 1);
-      localStorage.setItem("svc-fsv-font", fsvState.font); fsvRender();
-    });
-    let fsvSearchTimer = null;
-    $("fsv-find").addEventListener("input", (e) => {
-      clearTimeout(fsvSearchTimer);
-      fsvSearchTimer = setTimeout(() => fsvSearch(e.target.value.trim()), 220);
-    });
-    $("fsv-find").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); fsvSearch(e.target.value.trim(), e.shiftKey ? -1 : 1); }
-    });
-    $("fsv-prev").addEventListener("click", () => fsvSearch(($("fsv-find").value || "").trim(), -1));
-    $("fsv-next").addEventListener("click", () => fsvSearch(($("fsv-find").value || "").trim(), 1));
-    $("fsv-more").addEventListener("click", (e) => {
-      e.stopPropagation();
-      fsPopupMenu([
-        { label: t("fsv_copy_all"), ico: "copy", act: () => copyText(fsvState.data.text || "", e.currentTarget) },
-        { label: t("fs_copy_path"), ico: "copy", act: () => copyText(fsvState.path || "", e.currentTarget) },
-        "-",
-        { label: t("fsv_copy_url"), ico: "ext", act: () => copyText(location.origin + fsFileUrl(fsvState.path, "view"), e.currentTarget) },
-        { label: t("tl_fs_dl"), ico: "down", act: () => { location.href = fsFileUrl(fsvState.path, "download"); } },
-      ], e.currentTarget);
-    });
-    // 全局: 菜单外点收起 / Esc 层级退出 / lightbox 复用
-    document.addEventListener("click", (e) => { if (!e.target.closest(".fs-menu")) fsCloseMenu(); });
-    document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      if ($("fs-menu")) { fsCloseMenu(); return; }
-      if (!$("tl-lightbox").hidden) { $("tl-lightbox").hidden = true; return; }
-      if (!$("traj-view").hidden) { closeTraj(); return; }
-      if (!$("fs-view").hidden) { fsvClose(); return; }
-      if (!$("fs-app").hidden) fsCloseBrowser();
-    });
-    $("tl-lightbox").addEventListener("click", () => { $("tl-lightbox").hidden = true; });
   }
 }
 
-// --- 桌面端分类条(右上角 #catbar): 过滤 #pages 各分区; 移动端隐藏(底部页签), 断点切换时清过滤 ---
-const CATS = [   // [id, i18n key]; 顺序 = 展示顺序, 与移动端 6 页签一致 ("全部"已删: 无信息架构,首页即导航面板)
-  ["home", "tab_home"], ["log", "tab_log"], ["goal", "tab_goal"],
-  ["svc", "tab_svc"], ["agent", "tab_agent"], ["tools", "tab_tools"],
+// --- 桌面端分类条(右上角 #catbar): 概览/服务/Goal/管理; 移动端隐藏(底部页签) ---
+const CATS = [
+  ["home", "tab_home"], ["svc", "tab_svc"], ["goal", "tab_goal"], ["manage", "tab_manage"],
 ];
-const CAT_SELS = {   // 桌面可见分区 → 分类(与移动端 PAGE_GROUPS 一一对应)
-  home: ["#hp-grid", "#hp-aiclean", "#sysbar", "#repos", "#chart-wrap", "#toolchips"],
-  log: ["#logpage"],
-  goal: ["#goals"],
+const CAT_SELS = {
+  home: ["#statuscard", ".mgrid4", "#alerts", "#hp-grid", "#hp-aiclean", "#sysbar", "#repos", "#chart-wrap", "#recent", "#toolchips"],
   svc: ["#filters", "#tasks", "#svc-panel"],
-  agent: ["#agents-page"],
-  tools: ["#toolspage"],
+  goal: ["#goals"],
+  manage: ["#logpage", "#agents-page", "#toolspage", "#events"],
 };
 var curCat = "all";
 function setCat(c, save) {
@@ -3030,12 +2595,16 @@ function setCat(c, save) {
   document.querySelectorAll("#catbar .cat").forEach(b => b.classList.toggle("active", b.dataset.cat === c));
   const keep = new Set((CAT_SELS[c] || []).map(s => document.querySelector(s)).filter(Boolean));
   document.querySelectorAll("#pages > *").forEach(el => el.classList.toggle("cat-off", !keep.has(el)));
-  // 日志/agent 页桌面首入: 解除 hidden + 惰性初始化(与移动端 activatePage 同一套函数)
-  if (c === "log") { const lp = $("logpage"); if (lp) lp.hidden = false; initLogPage(); renderLogTimeline(); }
-  if (c === "agent") { const ap = $("agents-page"); if (ap) ap.hidden = false; initAgentsPage(); }
+  if (c === "manage") {
+    const lp = $("logpage"), ap = $("agents-page"), tp = $("toolspage");
+    if (lp) lp.hidden = false;
+    if (ap) ap.hidden = false;
+    if (tp) tp.hidden = false;
+    initLogPage(); renderLogTimeline(); initAgentsPage(); initToolsPage();
+  }
   if (save !== false) {
     try { localStorage.setItem("svc-cat", c); } catch (e) {}
-    try {                                   // URL hash 同步: #cat=goal 可直达分类
+    try {
       const u = new URL(location.href);
       if (c === "home") u.hash = ""; else u.hash = "cat=" + c;
       history.replaceState(null, "", u);
@@ -3044,9 +2613,10 @@ function setCat(c, save) {
 }
 function catFromHash() {
   const m = location.hash.match(/^#cat=([a-z]+)/);
-  let c = m && CATS.some(x => x[0] === m[1]) ? m[1] : null;
-  if (c === "all") c = "home";   // 旧链接兼容
-  return c;
+  let c = m && m[1] ? m[1] : null;
+  if (c === "all") c = "home";
+  if (c === "log" || c === "agent" || c === "tools") c = "manage";
+  return CATS.some(x => x[0] === c) ? c : null;
 }
 window.addEventListener("hashchange", () => {   // 手改 hash/后退也跟随
   const c = catFromHash();

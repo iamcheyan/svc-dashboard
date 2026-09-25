@@ -140,7 +140,8 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
         fold = (f'<details class="gdone"><summary><span class="t-green">{icon("ok", 13)}</span> '
                 f'{t(lang, "g_done_fold", n=len(completed))}</summary>'
                 f'{items}</details>')
-    return (f'<div class="gpanel" id="goals"><h2>{t(lang, "g_panel")} '
+    hidden = " hidden" if not out and not completed else ""
+    return (f'<div class="gpanel" id="goals"{hidden}><h2>{t(lang, "g_panel")} '
             f'<span class="ghint">{t(lang, "g_hint")}</span></h2>'
             f'<div class="gcards">{body}</div>{fold}</div>')
 def render_toolchips(entries, host_header, lang=DEFAULT_LANG):
@@ -173,7 +174,8 @@ def render_events(events, lang=DEFAULT_LANG):
                     f'{ico_html}'
                     f'<span class="evt-txt">{escape(label)} {escape(e["text"][:110])}</span></div>')
     body = "".join(rows) if rows else f'<div class="gempty">{t(lang, "ev_none")}</div>'
-    return (f'<div class="gpanel" id="events"><h2>{t(lang, "ev_title")} '
+    hidden = " hidden" if not rows else ""
+    return (f'<div class="gpanel" id="events"{hidden}><h2>{t(lang, "ev_title")} '
             f'<span class="ghint">{t(lang, "ev_hint")}</span></h2>{body}</div>')
 _frag_cache = {}                 # (frag, lang) -> (ts, html); 只在锁内读写
 PAGE_CACHE_SEC = 5               # fragment 缓存 TTL(原字面量抽常量; 重构时漏定义致 NameError)
