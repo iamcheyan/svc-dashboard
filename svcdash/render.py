@@ -7,6 +7,7 @@ from svcdash.sysinfo import sys_info, fmt_bytes, fmt_uptime
 from svcdash.tools import tools_conf
 from svcdash.goals import (scan_goals, merge_events, parse_watchdog_events,
                            parse_completed_goals, TOOL_LINKS, fmt_ago)
+from svcdash.agents import scan_tmux, _tmux_capture
 from svcdash.repos import parse_repo_commits
 from svcdash.procscan import gather
 from svcdash.manage import MANAGE_UNITS
@@ -58,8 +59,38 @@ BADGE = {
     "systemd": "badge-systemd",
     "direct": "badge-direct",
 }
+def _tmux_summary_html(lang=DEFAULT_LANG):
+    """Goal 页显示全部 tmux session/pane 的只读状态和最近画面概要。"""
+    panes = scan_tmux()
+    groups = {}
+    for pane in panes:
+        groups.setdefault(pane.get("session") or "—", []).append(pane)
+    cards = []
+    ansi = re.compile(r"\x1b(?:\[[0-9;:<=>?]*[A-Za-z]|\][^\x07]*\x07|\][^\x1b]*\x1b\\)")
+    for session, rows in groups.items():
+        pane_html = []
+        for p in rows:
+            ref = f'{p.get("session", "")}:{p.get("pane", "")}'
+            lines = _tmux_capture(ref) or []
+            lines = [ansi.sub("", str(x)).strip() for x in lines if str(x).strip()][-8:]
+            summary = "\n".join(lines) or "—"
+            active = " <span class=\"tmux-live\">●</span>" if p.get("active") else ""
+            pane_html.append(
+                f'<div class="tmux-pane-summary"><div class="tmux-pane-head">'
+                f'<b>{escape(ref)}</b>{active} · {escape(str(p.get("command") or "—"))}'
+                f'<span class="tmux-pane-cwd">{escape(str(p.get("cwd") or "—"))}</span></div>'
+                f'<pre>{escape(summary)}</pre></div>')
+        cards.append(
+            f'<article class="tmux-session-card"><div class="tmux-session-head">'
+            f'<b>{escape(session)}</b><span>{len(rows)} pane(s)</span></div>'
+            f'{"".join(pane_html)}</article>')
+    if not cards:
+        return '<div class="tmux-goals"><div class="gempty">暂无 tmux session</div></div>'
+    return f'<div class="tmux-goals"><div class="tmux-goals-meta">tmux sessions: {len(groups)} · panes: {len(panes)}</div>{"".join(cards)}</div>'
+
+
 def render_goal_cards(cards, lang=DEFAULT_LANG):
-    """Goal 进度卡片 + 已完成折叠区(服务端渲染,打开页面/手动刷新时更新)。"""
+    """Goal 进度卡片 + 全量 tmux session 概要 + 已完成折叠区。"""
     # light -> (icon 名, 语义色 class, 状态文案 i18n key); SVG 图标颜色走 CSS 变量
     light = {"active": ("dot", "t-green", "g_active"), "paused": ("pause", "t-warn", "g_paused"),
              "retry": ("retry", "t-orange", "g_retry"), "done": ("ok", "t-green", "g_done"),
@@ -143,7 +174,8 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
     hidden = " hidden" if not out and not completed else ""
     return (f'<div class="gpanel" id="goals"{hidden}><h2>{t(lang, "g_panel")} '
             f'<span class="ghint">{t(lang, "g_hint")}</span></h2>'
-            f'<div class="gcards">{body}</div>{fold}</div>')
+            f'<div class="gcards">{body}</div>{fold}'
+            f'<h3 class="tmux-goals-title">tmux</h3>{_tmux_summary_html(lang)}</div>')
 def render_toolchips(entries, host_header, lang=DEFAULT_LANG):
     """快捷工具入口 chips: 端口存活才显示,点击直达。"""
     ports = {e["port"] for e in entries if not e.get("paused")}   # 暂停/冻结的服务不出现在快捷入口
