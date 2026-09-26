@@ -600,7 +600,7 @@ L10N = {
 
         "ev_other": "·", "ev_none": "イベントなし",
         "g_ago_s": "{s} 秒前", "g_ago_m": "{m} 分前", "g_ago_h": "{h} 時間前",
-        "tab_home": "概要", "tab_activity": "アクティビティ", "tab_svc": "サービス", "tab_tmux": "Tmux", "tab_goal": "Goal", "tab_agent": "Agent", "tab_log": "ログ",
+        "tab_home": "概要", "tab_activity": "活動", "tab_svc": "サービス", "tab_tmux": "Tmux", "tab_goal": "Goal", "tab_agent": "Agent", "tab_log": "ログ",
         "tmux_title": "Tmux セッション中枢", "tmux_hint": "端末のプレビュー、ペイン情報、エージェント連携",
         "tmux_search_ph": "セッション、ウィンドウ、コマンド、パスを検索…",
         "tmux_total_sessions": "セッション", "tmux_total_windows": "ウィンドウ", "tmux_total_panes": "ペイン",

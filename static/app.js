@@ -1051,7 +1051,7 @@ async function load(alsoSys) {
    /api/goals 15s 缓存,概要与日志页共用。 */
 let lastUpdatedTs = Date.now();
 let goalsCache = { t: 0, data: null };
-const LOG_LIMIT = 120;
+const LOG_LIMIT = 200;
 
 async function fetchGoalsData(force) {
   if (BOOT.static && BOOT.goalsData) return BOOT.goalsData;
@@ -2488,8 +2488,8 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ================================================================
-   移动 App 层(仅触摸设备): 分页滑动 / 底栏 / 列表手势 / 双击 /
-   边缘返回 / 捏合图表 / 触觉反馈 / 轮询暂停。
+   移动 App 层(仅触摸设备): 底栏 / 列表手势 / 双击 /
+   捏合图表 / 触觉反馈 / 轮询暂停。横向滑动不做切页, 交给原生滚动。
    桌面端不注册任何触摸事件,行为零变化。 */
 const TOUCH = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
 const mqMobile = window.matchMedia("(max-width: 768px)");
@@ -2500,8 +2500,6 @@ const haptic = (ms) => {
     navigator.vibrate && navigator.vibrate(ms);
   } catch (e) {}
 };
-// 触摸互斥: 一次触摸只属于一个手势(分页/滑动露按钮/边缘返回)
-const gesture = { claimed: null };
 // 移动端把各分区装进 5 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
@@ -3668,77 +3666,8 @@ if (TOUCH) document.addEventListener("touchend", (e) => {
   } else { lastTap = now; lastTapEl = stat; }
 }, { passive: true });
 
-// --- 触摸手势总协调: 分页滑动 / 边缘右滑返回 ---
-if (TOUCH) (function setupGestures() {
-  let g = null; // {kind:"page"|"edge", id, x0, y0, t0, dx, lastX, lockX}
-  const W = () => window.innerWidth;
-  document.addEventListener("touchstart", (e) => {
-    if (e.touches.length !== 1 || g) return;
-    const t = e.touches[0];
-    if (!isMobile()) return;
-    // 边缘手势最优先: 起点 x<24px 且非首页(否则按普通分页滑动处理)
-    const edge = t.clientX < 24 && page > 0;
-    // 横向自身滚动的容器不参与手势
-    const scroller = t.target.closest ? t.target.closest(".filters, .aglog, .termlog, select") : null;
-    if (scroller || !pages) return;
-    // 边缘手势(上文已判定)返回概览, 否则普通分页滑动
-    g = { kind: edge ? "edge" : "page", id: t.identifier, x0: t.clientX, y0: t.clientY,
-          t0: Date.now(), lastX: t.clientX, lockX: null, dx: 0 };
-    gesture.claimed = t.identifier;
-  }, { passive: true });
-
-  document.addEventListener("touchmove", (e) => {
-    if (!g) return;
-    const t = [...e.touches].find(x => x.identifier === g.id);
-    if (!t) return;
-    const dx = t.clientX - g.x0, dy = t.clientY - g.y0;
-    if (g.lockX === null) {
-      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return; // 未定轴
-      g.lockX = Math.abs(dx) > Math.abs(dy);
-      if (g.lockX) e.preventDefault(); // 横向手势: 阻断浏览器返回/前进导航
-    }
-    if (!g.lockX) return; // 纵向滚动交给浏览器
-    // 分页/边缘: 跟手(阻尼 0.55), 越界回弹
-    let d = (page > 0 || dx > 0) && (page < N_PAGES - 1 || dx < 0) ? dx * 0.55
-            : dx > 0 ? (page < N_PAGES - 1 ? 0 : Math.min(64, dx * 0.18))
-                     : (page > 0 ? 0 : Math.max(-64, dx * 0.18));
-    if (g.kind === "edge" && d < -20) { g.kind = "page"; } // 反向滑: 降级为分页
-    const pct = d / W() * 100;
-    g.dx = pct;
-    if (!trackEl) return;
-    trackEl.classList.add("stick");
-    trackEl.style.transform = `translate3d(calc(${-page * PAGE_W}% + ${pct}vw),0,0)`;
-    g.lastX = t.clientX;
-  }, { passive: false });
-
-  document.addEventListener("touchend", (e) => {
-    if (!g) return;
-    const t = [...e.changedTouches].find(x => x.identifier === g.id);
-    const done = () => { gesture.claimed = null; g = null; };
-    if (!t) { done(); return; }
-    const dx = (g.lockX ? g.lastX - g.x0 : 0);
-    const dt = Date.now() - g.t0;
-    trackEl && trackEl.classList.remove("stick");
-    if (g.kind === "edge" && g.lockX && dx > 56) {
-      console.log("[svc-dashboard] edge-swipe back to overview");
-      setPage(0); done(); return;
-    }
-    // 分页吸附: 位移超过 1/4 屏 或 快速轻扫
-    const fast = Math.abs(dx) > 40 && dt < 260;
-    if (g.lockX && (Math.abs(dx) > W() / 4 || fast)) {
-      const dir = dx < 0 ? 1 : -1; // 左滑下一页, 右滑上一页
-      if ((dir > 0 && page < N_PAGES - 1) || (dir < 0 && page > 0)) { setPage(page + dir); done(); return; }
-    }
-    applyPagesX(true); // 未达阈值: 弹回当前页
-    done();
-  }, { passive: true });
-  document.addEventListener("touchcancel", () => {
-    if (!g) return;
-    trackEl && trackEl.classList.remove("stick");
-    applyPagesX(true);
-    g = null; gesture.claimed = null;
-  }, { passive: true });
-})();
+// --- 触摸手势: 横向滑动不再用于切页(改由底部页签按钮切换),
+//     横向手势交给原生滚动, 让 .act-repos-scroll / .filters 等横向容器可滑动查看被裁剪的内容 ---
 
 // --- 负载/CPU 折线图(最近 24 采样存 localStorage, 捏合调时间窗) ---
 const chart = $("chart");

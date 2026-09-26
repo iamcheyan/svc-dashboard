@@ -859,7 +859,7 @@
     /* 两层结构: #pages(裁剪窗口) > #track(500% 轨道) > .pg(各 1/5 = 屏宽) */
     #pages { display: block; width: 100%; overflow: hidden; }
     body { overscroll-behavior-x: none; }
-    #pages { touch-action: pan-y; }
+    #pages { touch-action: pan-x pan-y; } /* 横向手势交给原生滚动, 可滑动被裁剪的横向内容(如活动页仓库标签条) */
     .filters { touch-action: pan-x; }
     #track { display: flex; align-items: flex-start; width: 500%;
              will-change: transform;
@@ -2428,6 +2428,7 @@
 .hp-portal-card {
   display: flex;
   flex-direction: column;
+  min-width: 0; /* 栅格/弹性子项: 阻止 nowrap 长文(如提交信息)撑宽轨道, 移动端右侧圆角不再被裁 */
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid var(--border-soft, rgba(255,255,255,.08));
