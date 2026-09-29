@@ -3004,3 +3004,236 @@
   color: var(--text-ghost);
   flex-wrap: wrap;
 }
+
+/* ---------------- Tmux 全屏/沉浸式实时终端滑层 (Tmux Terminal Sheet) ---------------- */
+.tmux-sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 75;
+  background: #080a0e;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.tmux-sheet[hidden] {
+  display: none !important;
+}
+.tmux-sheet.opening {
+  animation: agentSheetFade .18s ease;
+}
+.tmux-sheet-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
+  border-bottom: 1px solid var(--border-faint, rgba(255,255,255,.08));
+  background: rgba(13,17,23,.92);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+}
+.tmux-sheet-title-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tmux-sheet-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-title, #fff);
+  letter-spacing: -.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tmux-sheet-pane-badge {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, .15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, .25);
+}
+.tmux-sheet-sub {
+  font-size: 11px;
+  color: var(--text-ghost, rgba(255,255,255,.45));
+  font-family: ui-monospace, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tmux-sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.btn-tmux-sheet-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--border-faint, rgba(255,255,255,.08));
+  color: var(--text-soft, rgba(255,255,255,.75));
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all .15s ease;
+  user-select: none;
+}
+.btn-tmux-sheet-act:hover {
+  background: rgba(255,255,255,.1);
+  color: #fff;
+}
+.btn-tmux-sheet-act.active {
+  background: rgba(56, 189, 248, .15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, .3);
+}
+.tmux-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  display: inline-block;
+}
+.tmux-live-dot.on {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, .7);
+  animation: liveDotPulse 2s infinite ease-in-out;
+}
+@keyframes liveDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .4; transform: scale(.85); }
+}
+.tmux-sheet-select {
+  background: rgba(0,0,0,.35);
+  border: 1px solid var(--border-faint, rgba(255,255,255,.1));
+  color: var(--text-soft, rgba(255,255,255,.75));
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+}
+.tmux-sheet-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(0,0,0,.25);
+  border-bottom: 1px solid var(--border-faint, rgba(255,255,255,.06));
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  flex-shrink: 0;
+}
+.tmux-sheet-tabs:empty {
+  display: none;
+}
+.tmux-sheet-tab {
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--border-faint, rgba(255,255,255,.06));
+  color: var(--text-soft, rgba(255,255,255,.7));
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tmux-sheet-tab:hover {
+  background: rgba(255,255,255,.08);
+  color: #fff;
+}
+.tmux-sheet-tab.active {
+  background: rgba(56, 189, 248, .15);
+  border-color: rgba(56, 189, 248, .35);
+  color: #38bdf8;
+  font-weight: 600;
+}
+.tmux-sheet-body {
+  flex: 1 1 auto;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #06090e;
+  padding: 10px 14px calc(24px + env(safe-area-inset-bottom));
+}
+.tmux-fullscreen-pre {
+  margin: 0;
+  padding: 0;
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #e6edf3;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.tmux-fullscreen-pre code {
+  font-family: inherit;
+}
+.tmux-sheet-scroll-btn {
+  position: absolute;
+  right: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(15, 23, 42, .88);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, .4);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,.5);
+  backdrop-filter: blur(6px);
+  z-index: 10;
+  transition: all .15s ease;
+}
+.tmux-sheet-scroll-btn:hover {
+  background: rgba(56, 189, 248, .2);
+}
+
+/* 终端 ANSI 颜色着色类 */
+.ansi-bold { font-weight: 700; }
+.ansi-dim { opacity: 0.65; }
+.ansi-italic { font-style: italic; }
+.ansi-underline { text-decoration: underline; }
+.ansi-fg-black   { color: #484f58; }
+.ansi-fg-red     { color: #ff7b72; }
+.ansi-fg-green   { color: #7ee787; }
+.ansi-fg-yellow  { color: #d29922; }
+.ansi-fg-blue    { color: #58a6ff; }
+.ansi-fg-magenta { color: #bc8cff; }
+.ansi-fg-cyan    { color: #39c5cf; }
+.ansi-fg-white   { color: #d0d7de; }
+.ansi-fg-bright-black   { color: #6e7681; }
+.ansi-fg-bright-red     { color: #ffa198; }
+.ansi-fg-bright-green   { color: #56d364; }
+.ansi-fg-bright-yellow  { color: #e3b341; }
+.ansi-fg-bright-blue    { color: #79c0ff; }
+.ansi-fg-bright-magenta { color: #d2a8ff; }
+.ansi-fg-bright-cyan    { color: #56d4dd; }
+.ansi-fg-bright-white   { color: #f0f6fc; }
+.ansi-bg-black   { background-color: #21262d; }
+.ansi-bg-red     { background-color: rgba(255, 123, 114, 0.2); }
+.ansi-bg-green   { background-color: rgba(126, 231, 135, 0.2); }
+.ansi-bg-yellow  { background-color: rgba(210, 153, 34, 0.2); }
+.ansi-bg-blue    { background-color: rgba(88, 166, 255, 0.2); }
+.ansi-bg-magenta { background-color: rgba(188, 140, 255, 0.2); }
+.ansi-bg-cyan    { background-color: rgba(57, 197, 207, 0.2); }
+.ansi-bg-white   { background-color: rgba(208, 215, 222, 0.2); }
+

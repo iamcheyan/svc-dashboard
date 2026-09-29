@@ -277,6 +277,42 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <div class="gempty">{{T:st_loading}}</div>
   </div>
 </div>
+<!-- Tmux 全屏/大屏实时终端查看器 -->
+<div class="tmux-sheet" id="tmux-term-sheet" hidden>
+  <div class="tmux-sheet-top">
+    <span class="traj-iconbtn" id="tmux-sheet-back" role="button" tabindex="0" aria-label="{{T:m_close}}">{{ICO:back:20}}</span>
+    <div class="tmux-sheet-title-wrap">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="tmux-status-dot attached" id="tmux-sheet-dot"></span>
+        <h2 class="tmux-sheet-title" id="tmux-sheet-title">tmux</h2>
+        <span class="tmux-sheet-pane-badge" id="tmux-sheet-pane-badge"></span>
+      </div>
+      <span class="tmux-sheet-sub" id="tmux-sheet-sub"></span>
+    </div>
+    <div class="tmux-sheet-actions">
+      <button class="btn-tmux-sheet-act" id="btn-tmux-sheet-live" type="button" title="{{T:tmux_live_on}}">
+        <span class="tmux-live-dot on"></span>
+        <span id="tmux-live-text">{{T:tmux_live_on}}</span>
+      </button>
+      <button class="btn-tmux-sheet-act" id="btn-tmux-sheet-copy" type="button" title="{{T:tmux_copy_output}}">
+        {{ICO:copy:13}}
+      </button>
+      <select class="tmux-sheet-select" id="tmux-sheet-lines" aria-label="Lines">
+        <option value="100">100</option>
+        <option value="300" selected>300</option>
+        <option value="800">800</option>
+        <option value="1500">1500</option>
+      </select>
+    </div>
+  </div>
+  <div class="tmux-sheet-tabs" id="tmux-sheet-tabs"></div>
+  <div class="tmux-sheet-body" id="tmux-sheet-body">
+    <pre class="tmux-fullscreen-pre" id="tmux-fullscreen-pre"><code></code></pre>
+    <button class="tmux-sheet-scroll-btn" id="btn-tmux-sheet-scroll" type="button" hidden>
+      {{ICO:down:14}} <span>{{T:tmux_scroll_bottom}}</span>
+    </button>
+  </div>
+</div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
 <script src="/static/app.js?v=297cb5b4b059" defer></script>
 </body>

@@ -2020,13 +2020,106 @@ document.addEventListener("click", async (e) => {
 });
 
 // ==========================================================================
-// --- Tmux 会话中枢 ---
+// --- Tmux 会话中枢与全屏/沉浸式终端 ---
 // ==========================================================================
 let tmuxHubCache = { t: 0, data: null };
 let curTmuxFilter = "all";
 let curTmuxSearch = "";
 const tmuxActiveWins = {};  // session -> active window index
 const tmuxShowTerm = {};    // session -> boolean (default true)
+
+// 沉浸式终端状态
+let curTmuxSheet = {
+  sname: "",
+  target: "",
+  lines: 300,
+  live: true,
+  timer: null,
+  userScrolledUp: false
+};
+
+// 极轻量级 ANSI 终端转义序列解析器 (带状态重置与基础 16 色高保真还原)
+function parseAnsiToHtml(raw) {
+  if (!raw) return "";
+  const esc = escHtml(raw);
+  const re = /\x1b\[([0-9;]*)m/g;
+  let activeClasses = [];
+  let out = "";
+  let lastIdx = 0;
+  let match;
+
+  const codeMap = {
+    1: "ansi-bold", 2: "ansi-dim", 3: "ansi-italic", 4: "ansi-underline",
+    30: "ansi-fg-black", 31: "ansi-fg-red", 32: "ansi-fg-green", 33: "ansi-fg-yellow",
+    34: "ansi-fg-blue", 35: "ansi-fg-magenta", 36: "ansi-fg-cyan", 37: "ansi-fg-white",
+    90: "ansi-fg-bright-black", 91: "ansi-fg-bright-red", 92: "ansi-fg-bright-green", 93: "ansi-fg-bright-yellow",
+    94: "ansi-fg-bright-blue", 95: "ansi-fg-bright-magenta", 96: "ansi-fg-bright-cyan", 97: "ansi-fg-bright-white",
+    40: "ansi-bg-black", 41: "ansi-bg-red", 42: "ansi-bg-green", 43: "ansi-bg-yellow",
+    44: "ansi-bg-blue", 45: "ansi-bg-magenta", 46: "ansi-bg-cyan", 47: "ansi-bg-white"
+  };
+
+  while ((match = re.exec(esc)) !== null) {
+    const textChunk = esc.slice(lastIdx, match.index);
+    if (textChunk) {
+      if (activeClasses.length > 0) {
+        out += `<span class="${activeClasses.join(" ")}">${textChunk}</span>`;
+      } else {
+        out += textChunk;
+      }
+    }
+    lastIdx = re.lastIndex;
+
+    const codes = match[1] ? match[1].split(";").map(c => parseInt(c, 10)) : [0];
+    for (const code of codes) {
+      if (code === 0 || isNaN(code)) {
+        activeClasses = [];
+      } else if (code === 22) {
+        activeClasses = activeClasses.filter(c => c !== "ansi-bold" && c !== "ansi-dim");
+      } else if (code === 23) {
+        activeClasses = activeClasses.filter(c => c !== "ansi-italic");
+      } else if (code === 24) {
+        activeClasses = activeClasses.filter(c => c !== "ansi-underline");
+      } else if (code === 39) {
+        activeClasses = activeClasses.filter(c => !c.startsWith("ansi-fg-"));
+      } else if (code === 49) {
+        activeClasses = activeClasses.filter(c => !c.startsWith("ansi-bg-"));
+      } else if (codeMap[code]) {
+        if (code >= 30 && code <= 37 || code >= 90 && code <= 97) {
+          activeClasses = activeClasses.filter(c => !c.startsWith("ansi-fg-"));
+        } else if (code >= 40 && code <= 47) {
+          activeClasses = activeClasses.filter(c => !c.startsWith("ansi-bg-"));
+        }
+        activeClasses.push(codeMap[code]);
+      }
+    }
+  }
+
+  const remaining = esc.slice(lastIdx);
+  if (remaining) {
+    if (activeClasses.length > 0) {
+      out += `<span class="${activeClasses.join(" ")}">${remaining}</span>`;
+    } else {
+      out += remaining;
+    }
+  }
+
+  // 清除其他非常见控制序列如光标跳转等
+  return out.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+}
+
+async function fetchTmuxPaneCapture(target, lines) {
+  if (BOOT.static) {
+    return { ok: true, raw: "[公网静态只读视图：终端屏幕输出已安全屏蔽]", total_lines: 1 };
+  }
+  try {
+    const url = `/api/tmux/capture?target=${encodeURIComponent(target)}&lines=${encodeURIComponent(lines || 300)}&ansi=1`;
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } catch (err) {
+    return { ok: false, msg: err.message };
+  }
+}
 
 async function fetchTmuxData(force) {
   const now = Date.now();
@@ -2227,6 +2320,9 @@ async function renderTmuxPage() {
             <span class="tmux-badge tmux-badge-det">${s.windows_count} ${escHtml(t("tmux_total_windows"))}</span>
           </div>
           <div class="tmux-card-actions">
+            <button class="btn-tmux-act btn-tmux-fullscreen" data-sname="${escAttr(s.name)}" data-target="${escAttr(activePane.pane ? `${s.name}:${activePane.pane}` : s.name)}" title="${escAttr(t('tmux_fullscreen'))}">
+              ${icon("expand", 12)} <span>${escHtml(t("tmux_fullscreen"))}</span>
+            </button>
             <button class="btn-tmux-act btn-tmux-term-toggle ${showTerm ? 'active' : ''}" data-sname="${escAttr(s.name)}" title="${escAttr(t('tmux_term_toggle'))}">
               ${icon("term", 12)} <span>${escHtml(showTerm ? t("tmux_term_hide") : t("tmux_term_toggle"))}</span>
             </button>
@@ -2246,6 +2342,102 @@ async function renderTmuxPage() {
       </article>
     `;
   }).join("");
+}
+
+// 全屏沉浸式终端控制器
+async function openTmuxSheet(sname, target) {
+  const sheet = $("tmux-term-sheet");
+  if (!sheet) return;
+
+  const data = await fetchTmuxData();
+  const session = (data && data.sessions) ? data.sessions.find(s => s.name === sname) : null;
+  const initialTarget = target || (session ? `${session.name}:${session.windows?.[0]?.index || 1}` : sname);
+
+  curTmuxSheet.sname = sname;
+  curTmuxSheet.target = initialTarget;
+  curTmuxSheet.userScrolledUp = false;
+
+  const titleEl = $("tmux-sheet-title");
+  const subEl = $("tmux-sheet-sub");
+  const dotEl = $("tmux-sheet-dot");
+  const badgeEl = $("tmux-sheet-pane-badge");
+  const tabsEl = $("tmux-sheet-tabs");
+  const linesSel = $("tmux-sheet-lines");
+
+  if (titleEl) titleEl.textContent = sname;
+  if (subEl && session) subEl.textContent = `${session.main_cwd || ''} · ${session.main_command || ''}`;
+  if (dotEl) {
+    dotEl.className = "tmux-status-dot " + (session?.attached ? "attached" : (session?.is_agent ? "agent" : "detached"));
+  }
+  if (badgeEl) badgeEl.textContent = initialTarget;
+  if (linesSel) linesSel.value = String(curTmuxSheet.lines || 300);
+
+  // 渲染多窗口快速切换 Tabs
+  if (tabsEl && session && session.windows && session.windows.length > 0) {
+    tabsEl.innerHTML = session.windows.map(w => {
+      const wTarget = `${session.name}:${w.index}`;
+      const isActive = curTmuxSheet.target.startsWith(wTarget) || (curTmuxSheet.target === session.name && w.index === 1);
+      return `<span class="tmux-sheet-tab ${isActive ? 'active' : ''}" data-target="${escAttr(wTarget)}">
+        ${icon("term", 11)} <span>${w.index}: ${escHtml(w.name || 'win')}</span>
+      </span>`;
+    }).join("");
+  } else if (tabsEl) {
+    tabsEl.innerHTML = "";
+  }
+
+  sheet.hidden = false;
+  sheet.classList.add("opening");
+  document.documentElement.classList.add("traj-noscroll");
+
+  // 初始拉取并启动轮询
+  await refreshTmuxSheetOutput();
+  startTmuxSheetLive();
+}
+
+function closeTmuxSheet() {
+  const sheet = $("tmux-term-sheet");
+  if (!sheet) return;
+  sheet.hidden = true;
+  document.documentElement.classList.remove("traj-noscroll");
+  stopTmuxSheetLive();
+}
+
+async function refreshTmuxSheetOutput() {
+  if (!curTmuxSheet.target) return;
+  const pre = $("tmux-fullscreen-pre");
+  if (!pre) return;
+  const codeEl = pre.querySelector("code");
+
+  const res = await fetchTmuxPaneCapture(curTmuxSheet.target, curTmuxSheet.lines);
+  if (!res || !res.ok) {
+    if (codeEl) codeEl.innerHTML = `<span style="color:#f87171;">${escHtml(res?.msg || "Failed to capture terminal")}</span>`;
+    return;
+  }
+
+  const html = parseAnsiToHtml(res.raw || "");
+  if (codeEl) codeEl.innerHTML = html || `<span style="color:#6e7681;">(no output)</span>`;
+
+  const body = $("tmux-sheet-body");
+  if (body && !curTmuxSheet.userScrolledUp) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+function startTmuxSheetLive() {
+  stopTmuxSheetLive();
+  if (!curTmuxSheet.live) return;
+  curTmuxSheet.timer = setInterval(async () => {
+    const sheet = $("tmux-term-sheet");
+    if (!sheet || sheet.hidden || document.hidden) return;
+    await refreshTmuxSheetOutput();
+  }, 2500);
+}
+
+function stopTmuxSheetLive() {
+  if (curTmuxSheet.timer) {
+    clearInterval(curTmuxSheet.timer);
+    curTmuxSheet.timer = null;
+  }
 }
 
 // Tmux Hub 事件监听绑定 (一处绑定)
@@ -2274,6 +2466,12 @@ async function renderTmuxPage() {
   }
 
   tp.addEventListener("click", (e) => {
+    const fsBtn = e.target.closest(".btn-tmux-fullscreen");
+    if (fsBtn && fsBtn.dataset.sname) {
+      openTmuxSheet(fsBtn.dataset.sname, fsBtn.dataset.target);
+      return;
+    }
+
     const tabChip = e.target.closest(".tmux-tab-chip");
     if (tabChip && tabChip.dataset.sname && tabChip.dataset.widx) {
       tmuxActiveWins[tabChip.dataset.sname] = parseInt(tabChip.dataset.widx, 10);
@@ -2297,6 +2495,94 @@ async function renderTmuxPage() {
       return;
     }
   });
+
+  // 绑定 Tmux 全屏终端交互
+  const sheet = $("tmux-term-sheet");
+  if (sheet) {
+    const backBtn = $("tmux-sheet-back");
+    if (backBtn) backBtn.addEventListener("click", closeTmuxSheet);
+
+    const liveBtn = $("btn-tmux-sheet-live");
+    if (liveBtn) {
+      liveBtn.addEventListener("click", () => {
+        curTmuxSheet.live = !curTmuxSheet.live;
+        const dot = liveBtn.querySelector(".tmux-live-dot");
+        const txt = $("tmux-live-text");
+        if (curTmuxSheet.live) {
+          liveBtn.classList.remove("active");
+          if (dot) dot.classList.add("on");
+          if (txt) txt.textContent = t("tmux_live_on");
+          startTmuxSheetLive();
+          refreshTmuxSheetOutput();
+        } else {
+          liveBtn.classList.add("active");
+          if (dot) dot.classList.remove("on");
+          if (txt) txt.textContent = t("tmux_live_off");
+          stopTmuxSheetLive();
+        }
+      });
+    }
+
+    const copyBtn = $("btn-tmux-sheet-copy");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", () => {
+        const pre = $("tmux-fullscreen-pre");
+        if (pre) {
+          copyText(pre.innerText || "", copyBtn);
+          uiNotice(t("tmux_output_copied"));
+        }
+      });
+    }
+
+    const linesSel = $("tmux-sheet-lines");
+    if (linesSel) {
+      linesSel.addEventListener("change", (e) => {
+        curTmuxSheet.lines = parseInt(e.target.value, 10) || 300;
+        refreshTmuxSheetOutput();
+      });
+    }
+
+    const tabsEl = $("tmux-sheet-tabs");
+    if (tabsEl) {
+      tabsEl.addEventListener("click", (e) => {
+        const tab = e.target.closest(".tmux-sheet-tab");
+        if (!tab || !tab.dataset.target) return;
+        tabsEl.querySelectorAll(".tmux-sheet-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        curTmuxSheet.target = tab.dataset.target;
+        const badgeEl = $("tmux-sheet-pane-badge");
+        if (badgeEl) badgeEl.textContent = curTmuxSheet.target;
+        refreshTmuxSheetOutput();
+      });
+    }
+
+    const bodyEl = $("tmux-sheet-body");
+    const scrollBtn = $("btn-tmux-sheet-scroll");
+    if (bodyEl) {
+      bodyEl.addEventListener("scroll", () => {
+        const isNearBottom = (bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight) < 60;
+        curTmuxSheet.userScrolledUp = !isNearBottom;
+        if (scrollBtn) {
+          scrollBtn.hidden = isNearBottom;
+        }
+      });
+    }
+
+    if (scrollBtn && bodyEl) {
+      scrollBtn.addEventListener("click", () => {
+        bodyEl.scrollTop = bodyEl.scrollHeight;
+        curTmuxSheet.userScrolledUp = false;
+        scrollBtn.hidden = true;
+      });
+    }
+
+    // ESC 关闭
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !sheet.hidden) {
+        closeTmuxSheet();
+      }
+    });
+  }
 })();
 
 // --- 日志页: 全局事件时间线(筛选 chips + 同goal循环折叠 + 详情默认折叠) ---
