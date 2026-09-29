@@ -268,6 +268,13 @@ class Handler(BaseHTTPRequestHandler):
                                   "codex": agents.scan_codex()})
         elif path == "/api/tmux":
             self._send_json(200, agents.scan_tmux_full())
+        elif path == "/api/tmux/capture":
+            qs = parse_qs(urlparse(self.path).query)
+            target = (qs.get("target") or [""])[0]
+            lines = (qs.get("lines") or ["300"])[0]
+            ansi = (qs.get("ansi") or ["1"])[0] in ("1", "true")
+            res = agents.capture_tmux_pane(target, lines=lines, ansi=ansi)
+            self._send_json(200 if res.get("ok") else 400, res)
         elif path == "/api/manage":
             qs = parse_qs(urlparse(self.path).query)
             uid = (qs.get("unit") or [""])[0]

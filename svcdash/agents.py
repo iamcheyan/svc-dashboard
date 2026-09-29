@@ -553,6 +553,50 @@ def _tmux_capture(tmux_ref):
     return lines[-40:] if lines else None
 
 
+def capture_tmux_pane(target, lines=300, ansi=True):
+    """抓取指定 tmux 窗格/会话的终端输出。
+
+    target: 形如 session_name, session:win_idx, session:win_idx.pane_idx
+    lines: 抓取行数（默认 300，上限 2000）
+    ansi: 是否保留终端 ANSI 颜色转义代码
+    """
+    if not target or not isinstance(target, str):
+        return {"ok": False, "msg": "target required"}
+
+    # 安全清洗 target：只允许字母数字、点、冒号、下划线、减号
+    target = target.strip()
+    if not re.match(r'^[A-Za-z0-9_.:-]+$', target):
+        return {"ok": False, "msg": "invalid target"}
+
+    try:
+        lines = max(20, min(2000, int(lines)))
+    except (ValueError, TypeError):
+        lines = 300
+
+    cmd = ["capture-pane", "-t", target, "-p", "-S", f"-{lines}"]
+    if ansi:
+        cmd.append("-e")
+
+    raw = _tmux_run(cmd, timeout=3)
+    if not raw and os.geteuid() == 0:
+        # 降级尝试 sudo -u tetsuya
+        try:
+            full_cmd = ["sudo", "-n", "-u", "tetsuya", "tmux"] + cmd
+            raw = subprocess.run(full_cmd, capture_output=True, text=True, timeout=3).stdout
+        except (OSError, subprocess.SubprocessError):
+            raw = ""
+
+    out_lines = raw.splitlines() if raw else []
+    return {
+        "ok": True,
+        "target": target,
+        "lines_requested": lines,
+        "total_lines": len(out_lines),
+        "raw": raw,
+        "updated": time.time()
+    }
+
+
 def _tmux_by_cwd(cwd):
     """按 cwd 在全量 tmux 窗格里找 'session:pane'。"""
     if not cwd:
@@ -561,3 +605,4 @@ def _tmux_by_cwd(cwd):
         if p["cwd"] and (p["cwd"] == cwd or cwd.startswith(p["cwd"])):
             return f'{p["session"]}:{p["pane"]}'
     return None
+
