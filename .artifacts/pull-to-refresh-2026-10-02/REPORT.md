@@ -116,3 +116,12 @@ ALL TESTS PASSED: true
 - `svcdash/tailscale.py` (untracked)
 - `static/app.css`（仅提取了 `#ptr-indicator` 样式，其后 tailscale 与 manage 样式未提交）
 - `static/app.js`（仅提取了 `load` mutex 与 `ptrController` 模块，其他功能未提交）
+
+---
+
+## 五、提交与推送哈希核验
+
+- **本地提交 Commit**：`678668af36dc7a5055f5b0c69c89e2d79e33ab70`
+- **提交信息**：`fix(ui): 重构移动端下拉刷新手势状态机与全站防重入调度`
+- **远端引用验证**：`git ls-remote origin refs/heads/main` -> `678668af36dc7a5055f5b0c69c89e2d79e33ab70`
+- **核验结论**：本地 HEAD 与远端 `origin/main` 严格一致，零冲突，零泄露，工作区中全部既有未提交改动完整无损。
