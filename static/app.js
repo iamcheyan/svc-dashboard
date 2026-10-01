@@ -1008,41 +1008,81 @@ function applyApiData(data) {
   loadRepos();                    // 仓库面板(客户端 60s 缓存; 面板内按钮强制重算)
 }
 
+let refreshInFlight = null;
 async function load(alsoSys) {
+  if (refreshInFlight) return refreshInFlight;
   const btns = [$("refresh"), $("fab-refresh")].filter(Boolean);
   btns.forEach(b => { b.classList.add("spinning"); b.setAttribute("aria-disabled", "true"); });
-  if (BOOT.static) {
-    if (BOOT.apiData) applyApiData(BOOT.apiData);
-    if (alsoSys && BOOT.sysData) renderSys(BOOT.sysData);
-    btns.forEach(b => { b.classList.remove("spinning"); b.setAttribute("aria-disabled", "false"); });
-    return;
-  }
-  ompCache = null; tasksCache = null; tmuxCache = null; // 手动刷新清面板缓存,拿到最新 agent/tmux/任务状态
-  const snap = snapGet("api");
-  if (snap && snap.data) {                 // 快照先行: 不等网络
-    try { applyApiData(snap.data); } catch (e) { console.error("snapshot render failed", e); }
-  }
-  try {
-    const r = await fetch("/api", { cache: "no-store" });
-    const data = await r.json();
-    applyApiData(data);
-    snapSet("api", { data });
-  } catch (err) {
-    console.error("refresh failed", err);
-  }
-  if (alsoSys) {
-    const ss = snapGet("sys");
-    if (ss && ss.data) { try { renderSys(ss.data); } catch (e) {} }
+
+  refreshInFlight = (async () => {
     try {
-      const r = await fetch("/api/sys", { cache: "no-store" });
-      const d = await r.json();
-      renderSys(d);
-      snapSet("sys", { data: d });
-    } catch (err) {
-      console.error("sys refresh failed", err);
+      if (BOOT.static) {
+        if (BOOT.apiData) applyApiData(BOOT.apiData);
+        if (alsoSys && BOOT.sysData) renderSys(BOOT.sysData);
+        return;
+      }
+      ompCache = null; tasksCache = null; tmuxCache = null; // 手动刷新清面板缓存,拿到最新 agent/tmux/任务状态
+      const snap = snapGet("api");
+      if (snap && snap.data) {                 // 快照先行: 不等网络
+        try { applyApiData(snap.data); } catch (e) { console.error("snapshot render failed", e); }
+      }
+      try {
+        const r = await fetch("/api", { cache: "no-store" });
+        const data = await r.json();
+        applyApiData(data);
+        snapSet("api", { data });
+      } catch (err) {
+        console.error("refresh failed", err);
+      }
+      if (alsoSys) {
+        const ss = snapGet("sys");
+        if (ss && ss.data) { try { renderSys(ss.data); } catch (e) {} }
+        try {
+          const r = await fetch("/api/sys", { cache: "no-store" });
+          const d = await r.json();
+          renderSys(d);
+          snapSet("sys", { data: d });
+        } catch (err) {
+          console.error("sys refresh failed", err);
+        }
+      }
+    } finally {
+      btns.forEach(b => { b.classList.remove("spinning"); b.setAttribute("aria-disabled", "false"); });
+      refreshInFlight = null;
     }
+  })();
+  return refreshInFlight;
+}
+
+// 统一全站刷新调度器：防重入、联动当前页数据刷新，顶栏按钮与下拉刷新共享
+async function triggerSharedRefresh(opts = {}) {
+  const isPull = !!opts.isPull;
+  try {
+    await load(true);
+    if (typeof page !== "undefined") {
+      if (page === 1 && typeof renderActivityPage === "function") {
+        await renderActivityPage();
+      } else if (page === 2 && typeof renderTmuxPage === "function") {
+        await renderTmuxPage();
+      } else if (page === 3 && typeof initAgentsPage === "function") {
+        await initAgentsPage();
+      } else if (page === 4) {
+        if (typeof filter !== "undefined" && filter === "tailscale" && typeof renderNetworkPage === "function") {
+          await renderNetworkPage(true);
+        } else if (typeof filter !== "undefined" && filter === "omp" && typeof loadAgents === "function") {
+          await loadAgents().then(renderAgentPanel);
+        } else if (typeof filter !== "undefined" && filter === "watchdog" && typeof loadTasks === "function") {
+          await loadTasks().then(renderWatchdogPanel);
+        } else if (typeof filter !== "undefined" && filter === "tmux" && typeof loadTmux === "function") {
+          await loadTmux().then(renderTmuxPanel);
+        } else if (typeof filter !== "undefined" && filter === "manage" && typeof loadManage === "function") {
+          await loadManage();
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[svc-dashboard] shared refresh failed:", err);
   }
-  btns.forEach(b => { b.classList.remove("spinning"); b.setAttribute("aria-disabled", "false"); });
 }
 
 /* ================================================================
@@ -2658,58 +2698,200 @@ document.querySelectorAll("#log-filters .chip").forEach(c => c.addEventListener(
   renderLogTimeline();
 }));
 
-// 仅触摸设备启用：页面顶端向下拖动时复用现有手动刷新入口 load(true)。
-(function setupPullToRefresh() {
+// --- 原生 App 级移动端下拉刷新控制器 (Pull-to-Refresh Controller) ---
+const ptrController = (function setupPullToRefresh() {
   const touchCapable = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
-  if (!touchCapable) return;
   const indicator = $("ptr-indicator");
-  const ring = indicator.querySelector(".ptr-ring circle");
-  const CIRC = 2 * Math.PI * 16.5;   // 圆环周长(r=16.5)
-  const threshold = 70;
-  let startY = 0, pull = 0, rawDistance = 0, tracking = false, refreshing = false;
-  const setPull = (distance) => {
-    rawDistance = Math.max(0, distance);
-    pull = Math.min(110, rawDistance * 0.55);
-    indicator.style.transform = `translateY(${pull}px)`;
-    const prog = Math.min(1, rawDistance / threshold);
-    if (ring) ring.style.strokeDashoffset = String(CIRC * (1 - prog));
-    indicator.classList.toggle("on", rawDistance > 4);
-    indicator.classList.toggle("ready", rawDistance >= threshold);
+  const ring = indicator ? indicator.querySelector(".ptr-ring circle") : null;
+  const core = indicator ? indicator.querySelector(".ptr-core") : null;
+  const main = document.querySelector("main");
+
+  if (!indicator || !ring || !core) return null;
+
+  const CIRC = 2 * Math.PI * 16.5; // ~103.67
+  const THRESHOLD = 56;
+  const MAX_PULL = 78;
+  const HOLD_Y = 46;
+
+  // 状态机常量: 0=空闲, 1=判定死区, 2=下拉中, 3=刷新中
+  const STATE_IDLE = 0;
+  const STATE_PENDING = 1;
+  const STATE_PULLING = 2;
+  const STATE_REFRESHING = 3;
+
+  let state = STATE_IDLE;
+  let startX = 0, startY = 0;
+  let pull = 0, rawDistance = 0;
+  let hasHaptic = false;
+  let resetTimer = null;
+
+  const isAtTop = () => {
+    const mainTop = main ? main.scrollTop : 0;
+    return mainTop <= 0 && (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
   };
-  // 内部滚动布局: 判断「页面已滚下」要看 main 滚动容器, 不再是 window
-  const mainScroller = document.querySelector("main");
-  const pageScrolled = () => (mainScroller && mainScroller.scrollTop > 0) || window.scrollY > 0;
-  document.addEventListener("touchstart", (e) => {
-    if (refreshing || e.touches.length !== 1 || pageScrolled()) return;
-    startY = e.touches[0].clientY;
-    tracking = true;
-  }, { passive: true });
-  document.addEventListener("touchmove", (e) => {
-    if (!tracking || refreshing || pageScrolled()) return;
-    const distance = e.touches[0].clientY - startY;
-    if (distance <= 0) { tracking = false; setPull(0); return; }
-    e.preventDefault();
-    setPull(distance);
-  }, { passive: false });
-  document.addEventListener("touchend", async () => {
-    if (!tracking) return;
-    tracking = false;
-    if (rawDistance < threshold) { setPull(0); return; }
-    refreshing = true;
-    indicator.classList.remove("ready");
-    indicator.classList.add("loading");
-    indicator.style.transform = "translateY(48px)";
-    // 圆环满格进入 loading 旋转态(ptr-core 旋转动画由 .loading CSS 驱动)
-    console.log("[svc-dashboard] pull-to-refresh: load(true)");
-    try { await load(true); }
-    finally {
-      refreshing = false;
-      indicator.classList.remove("loading");
-      setPull(0);
-      haptic(10); // 刷新完成触觉反馈
-      console.log("[svc-dashboard] pull-to-refresh done, haptic(10)");
+
+  const isInteractiveTarget = (el) => {
+    if (!el || !el.closest) return false;
+    return !!el.closest("input, textarea, select, [contenteditable='true'], .ui-modal, .lightbox, pre, code");
+  };
+
+  const hasScrollableUpwardAncestor = (el) => {
+    let cur = el;
+    while (cur && cur !== main && cur !== document.body && cur !== document.documentElement) {
+      if (cur.scrollTop > 0) {
+        const style = window.getComputedStyle(cur);
+        const oy = style.overflowY;
+        if (oy === "auto" || oy === "scroll") return true;
+      }
+      cur = cur.parentElement;
     }
-  }, { passive: true });
+    return false;
+  };
+
+  const applyVisuals = (pullY) => {
+    pull = pullY;
+    const scale = Math.min(1, 0.72 + (pull / MAX_PULL) * 0.28);
+    indicator.style.transform = `translate3d(-50%, ${pull}px, 0) scale(${scale})`;
+    indicator.classList.toggle("on", pull > 4);
+
+    const isReady = pull >= THRESHOLD;
+    indicator.classList.toggle("ready", isReady);
+
+    if (isReady && !hasHaptic) {
+      haptic(10);
+      hasHaptic = true;
+    } else if (!isReady && hasHaptic) {
+      hasHaptic = false;
+    }
+
+    const prog = Math.min(1, pull / THRESHOLD);
+    ring.style.strokeDashoffset = String(CIRC * (1 - prog));
+    core.style.transform = `rotate(${prog * 180}deg)`;
+  };
+
+  const resetVisuals = (immediate = false) => {
+    clearTimeout(resetTimer);
+    pull = 0;
+    rawDistance = 0;
+    hasHaptic = false;
+    indicator.classList.remove("on", "pulling", "ready", "loading");
+
+    if (immediate) {
+      indicator.style.transition = "none";
+      indicator.style.transform = "";
+      ring.style.strokeDashoffset = String(CIRC);
+      core.style.transform = "";
+      state = STATE_IDLE;
+    } else {
+      indicator.style.transition = "transform .28s cubic-bezier(0.2, 0, 0, 1), opacity .2s ease";
+      indicator.style.transform = "translate3d(-50%, -46px, 0) scale(0.72)";
+      resetTimer = setTimeout(() => {
+        indicator.style.transition = "";
+        indicator.style.transform = "";
+        ring.style.strokeDashoffset = String(CIRC);
+        core.style.transform = "";
+        state = STATE_IDLE;
+      }, 300);
+    }
+  };
+
+  const onTouchStart = (e) => {
+    // 仅在触屏支持且视口为移动端时启用；桌面端完全放行
+    if (!touchCapable || !isMobile()) return;
+    if (state === STATE_REFRESHING || e.touches.length !== 1) return;
+    if (!isAtTop() || isInteractiveTarget(e.target) || hasScrollableUpwardAncestor(e.target)) return;
+
+    clearTimeout(resetTimer);
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    state = STATE_PENDING;
+    hasHaptic = false;
+  };
+
+  const onTouchMove = (e) => {
+    if (state !== STATE_PENDING && state !== STATE_PULLING) return;
+    if (e.touches.length !== 1 || !isAtTop()) {
+      resetVisuals(true);
+      return;
+    }
+
+    const curX = e.touches[0].clientX;
+    const curY = e.touches[0].clientY;
+    const dx = curX - startX;
+    const dy = curY - startY;
+
+    if (state === STATE_PENDING) {
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      // 判定死区：微小位移不干预
+      if (absX < 7 && absY < 7) return;
+
+      // 明确垂直向下判定为下拉刷新；否则放行给横向切卡或原生滚动
+      if (dy > 0 && dy > absX * 1.25) {
+        state = STATE_PULLING;
+        indicator.classList.add("pulling", "on");
+      } else {
+        state = STATE_IDLE;
+        resetVisuals(true);
+        return;
+      }
+    }
+
+    if (state === STATE_PULLING) {
+      if (e.cancelable) e.preventDefault();
+      rawDistance = Math.max(0, dy - 7);
+      // 真实对数阻尼公式
+      const pullY = Math.min(MAX_PULL, Math.pow(rawDistance, 0.82) * 1.55);
+      applyVisuals(pullY);
+    }
+  };
+
+  const onTouchEnd = async () => {
+    if (state !== STATE_PULLING) {
+      if (state === STATE_PENDING) resetVisuals(true);
+      return;
+    }
+
+    if (pull < THRESHOLD) {
+      resetVisuals(false);
+      return;
+    }
+
+    // 触发刷新
+    state = STATE_REFRESHING;
+    indicator.classList.remove("pulling", "ready");
+    indicator.classList.add("loading");
+    indicator.style.transition = "transform .28s cubic-bezier(0.2, 0, 0, 1)";
+    indicator.style.transform = `translate3d(-50%, ${HOLD_Y}px, 0) scale(1)`;
+
+    try {
+      await triggerSharedRefresh({ isPull: true });
+    } catch (_) {
+    } finally {
+      haptic(12);
+      resetVisuals(false);
+    }
+  };
+
+  const onTouchCancel = () => {
+    if (state !== STATE_REFRESHING) {
+      resetVisuals(false);
+    }
+  };
+
+  document.addEventListener("touchstart", onTouchStart, { passive: true });
+  document.addEventListener("touchmove", onTouchMove, { passive: false });
+  document.addEventListener("touchend", onTouchEnd, { passive: true });
+  document.addEventListener("touchcancel", onTouchCancel, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && state !== STATE_REFRESHING) resetVisuals(true);
+  });
+
+  return {
+    getState: () => state,
+    reset: resetVisuals,
+    isAtTop,
+  };
 })();
 
 document.querySelectorAll("#filters .chip").forEach(c =>
@@ -2720,20 +2902,18 @@ document.querySelectorAll(".tcol").forEach(b =>
     document.querySelectorAll(".tcol").forEach(x =>
       x.classList.toggle("active", x === b));
   }));
-// 刷新控件(topbar 圆钮 + 浮动圆钮共用): 点击=立即刷新, 长按(500ms)=锁定/解锁自动刷新
-// 锁定态=琥珀描边+锁形角标, 两个按钮视觉同步。
+// 刷新控件(topbar 圆钮): 点击=立即刷新, 长按(500ms)=锁定/解锁自动刷新
 let refreshHoldTimer = null, refreshHoldDone = false;
-function refreshBtns() { return [$("refresh"), $("fab-refresh")].filter(Boolean); }
+function refreshBtns() { return [$("refresh")].filter(Boolean); }
 function setAutoLocked(v) {
   autoLocked = v;
   refreshBtns().forEach(b => { b.classList.toggle("locked", v); b.setAttribute("aria-pressed", v); });
 }
 function bindRefreshCtl(btn) {
   btn.addEventListener("click", () => {
-    if (refreshHoldDone) return;   // 长按已处理, 吞掉后续 click
+    if (refreshHoldDone) return;
     haptic(8);
-    console.log("[svc-dashboard] manual refresh via " + btn.id);
-    load(true);
+    triggerSharedRefresh({ isPull: false });
   });
   ["pointerdown", "touchstart"].forEach(ev => btn.addEventListener(ev, () => {
     refreshHoldDone = false;

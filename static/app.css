@@ -214,31 +214,81 @@
                        border-radius: 50%; background: var(--c-warn); color: var(--bg);
                        display: none; align-items: center; justify-content: center; }
   #refresh.locked .ic-badge { display: inline-flex; }
-  /* 移动端下拉刷新指示器: iOS 风格圆形悬浮(36px), 圆环随进度描边, 加载时旋转。桌面端不注册事件。 */
-  #ptr-indicator { position: fixed; top: 8px; left: 50%; z-index: 30;
-    width: 36px; height: 36px; margin-left: -18px;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--bg-elev); border: 1px solid var(--border-strong, var(--chip-border));
-    border-radius: 50%; color: var(--text-soft);
-    box-shadow: 0 2px 10px rgba(0,0,0,.25);
-    opacity: 0; pointer-events: none;
-    transform: translateY(0) scale(.6); transition: transform .22s ease, opacity .18s ease, color .15s ease; }
+  /* 移动端下拉刷新指示器: 原生 App 悬浮环形 (38px), 毛玻璃材质 + 圆环进度与加载旋转 */
+  #ptr-indicator {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    z-index: 100;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-bd);
+    -webkit-backdrop-filter: blur(24px) saturate(1.8);
+    backdrop-filter: blur(24px) saturate(1.8);
+    border-radius: 50%;
+    color: var(--accent);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.32);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate3d(-50%, -46px, 0) scale(0.72);
+    transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease, box-shadow 0.2s ease;
+    will-change: transform, opacity;
+  }
   #ptr-indicator.on { opacity: 1; }
-  #ptr-indicator svg { display: block; }
-  #ptr-indicator .ptr-ring { position: absolute; inset: -1px; transform: rotate(-90deg); }
-  #ptr-indicator .ptr-ring circle { fill: none; stroke: var(--c-blue); stroke-width: 2.5;
-    stroke-linecap: round; }
-  #ptr-indicator.ready { color: var(--c-blue); border-color: var(--c-blue); }
-  #ptr-indicator.ready .ptr-ring circle { stroke-width: 3; }
-  #ptr-indicator .ptr-ring circle { fill: none; stroke: var(--c-blue); stroke-width: 2.5;
-    stroke-linecap: round; stroke-dasharray: 103.7; stroke-dashoffset: 103.7;
-    transition: stroke-dashoffset .08s linear; }
-  #ptr-indicator.loading .ptr-ring circle { stroke: var(--c-green); }
+  #ptr-indicator.pulling { transition: none; }
+  #ptr-indicator.ready {
+    box-shadow: 0 6px 22px rgba(97, 175, 239, 0.38);
+  }
+  #ptr-indicator.loading {
+    opacity: 1;
+  }
+  #ptr-indicator .ptr-core {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform;
+    color: var(--accent);
+    transition: transform 0.08s linear;
+  }
+  #ptr-indicator.loading .ptr-core {
+    animation: ptr-spin 0.75s linear infinite;
+    color: #10b981;
+  }
+  #ptr-indicator svg.ptr-ring {
+    position: absolute;
+    inset: -1px;
+    transform: rotate(-90deg);
+    width: 38px;
+    height: 38px;
+    pointer-events: none;
+  }
+  #ptr-indicator .ptr-ring circle {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 103.7;
+    stroke-dashoffset: 103.7;
+    transition: stroke-dashoffset 0.06s linear, stroke-width 0.15s ease, stroke 0.2s ease;
+  }
+  #ptr-indicator.ready .ptr-ring circle {
+    stroke-width: 3;
+    stroke: var(--accent);
+  }
+  #ptr-indicator.loading .ptr-ring circle {
+    stroke: #10b981;
+  }
   @keyframes ptr-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
-    #ptr-indicator { transition: none; }
-    #ptr-indicator.loading .ptr-core { animation: none; }
+    #ptr-indicator { transition: none !important; }
+    #ptr-indicator.loading .ptr-core { animation: none !important; }
   }
+  /* 全局移除右下角悬浮刷新按钮: 完全通过下拉手势与顶栏按钮刷新 */
+  .fab-refresh { display: none !important; }
   .btn[aria-disabled="true"], .btn.disabled { opacity: .5; cursor: default; pointer-events: none; }
   .btn:focus-visible, .chip:focus-visible, .tcol:focus-visible,
   .ctl-btn:focus-visible, .svctl-btn:focus-visible, .mbtn:focus-visible, .aglog-refresh:focus-visible {
