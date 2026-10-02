@@ -6,6 +6,7 @@ if (BOOT.readonly) {
 }
 const AUTO = BOOT.auto;
 const LANG = BOOT.lang;
+const LOCALE_TAG = { zh: "zh-CN", en: "en-US", ja: "ja-JP" }[LANG] || undefined;
 const TS_MODE = BOOT.tsMode;
 const TS_HOST = "100.76.219.104";
 const LAN_HOST = "192.168.3.82";
@@ -72,7 +73,8 @@ function initLanguageMenu() {
 // 页面不内嵌 token(匿名访客拿不到); 首次动作弹输入框, 存 sessionStorage(标签页会话级)。 ---
 let svcTok = (typeof BOOT !== "undefined" && BOOT.token) || sessionStorage.getItem("svcTok") || "";
 async function apiPost(url, body) {
-  const send = () => fetch(url, { method: "POST",
+  const withLang = (u) => u + (u.includes("?") ? "&" : "?") + "lang=" + encodeURIComponent(LANG);
+  const send = () => fetch(withLang(url), { method: "POST",
     headers: { "Content-Type": "application/json", "X-Svc-Token": svcTok },
     body: JSON.stringify(body), cache: "no-store" });
   let r = await send();
@@ -522,11 +524,11 @@ function taskRow(x) {
   let lastStr = "—";
   if (x.last) {
     const ago = agoStr(Date.now() / 1000 - x.last);
-    lastStr = `<span title="${new Date(x.last * 1000).toLocaleString()}">${ago ? ago + "前" : "刚刚"}</span>`;
+    lastStr = `<span title="${new Date(x.last * 1000).toLocaleString(LOCALE_TAG)}">${ago || t("ago_just_now")}</span>`;
   }
   let triggerBtn = "";
   if (x.kind === "timer") {
-    triggerBtn = `<button type="button" class="btn-ts-mini btn-task-trigger" data-name="${esc(x.name)}" data-kind="${esc(x.kind)}" data-scope="${esc(x.scope)}" title="立即触发一次">▶ 触发</button>`;
+    triggerBtn = `<button type="button" class="btn-ts-mini btn-task-trigger" data-name="${esc(x.name)}" data-kind="${esc(x.kind)}" data-scope="${esc(x.scope)}" title="${t("tac_trigger_title")}">▶ ${t("tac_trigger")}</button>`;
   }
   return `<tr>
     <td><span class='${cls}'>${label}</span><span class='tname'>${esc(x.name)}</span></td>
@@ -534,7 +536,7 @@ function taskRow(x) {
     <td class='tscope' data-label='${t("t_source")}'>${x.kind === "timer" ? "systemd" : "cron"} · ${x.scope === "user" ? t("t_scope_user") : t("t_scope_sys")}</td>
     <td class='tcmd' data-label='${t("t_cmd")}'>${esc(x.command)}</td>
     <td class='tnext' data-label='${t("t_lastrun")}'>${lastStr}</td>
-    <td class='tact' data-label='操作'>${triggerBtn}</td>
+    <td class='tact' data-label="${t("th_action")}">${triggerBtn}</td>
   </tr>`;
 }
 
@@ -582,13 +584,13 @@ function renderAgentPanel(agents) {
     if (x.tmx && x.tmx !== "—") {
       const sname = x.tmx.split(":")[0];
       wakeBtn = `
-        <button type="button" class="btn-ts-mini btn-tmux-wake" data-sname="${esc(sname)}" data-target="${esc(x.tmx)}" title="Hermes 智能唤醒推进">
-          ${icon("bolt", 11)} <span>推进</span>
+        <button type="button" class="btn-ts-mini btn-tmux-wake" data-sname="${esc(sname)}" data-target="${esc(x.tmx)}" title="${t("tac_wake_title")}">
+          ${icon("bolt", 11)} <span>${t("tac_wake")}</span>
         </button>
       `;
     }
 
-    const ago = (x.idle_seconds !== undefined && x.idle_seconds !== null) ? agoStr(x.idle_seconds) + "前" : "—";
+    const ago = (x.idle_seconds !== undefined && x.idle_seconds !== null) ? agoStr(x.idle_seconds) : "—";
     const fullDate = x.last_activity ? x.last_activity.replace("T", " ") : "";
 
     return `
@@ -616,7 +618,7 @@ function renderAgentPanel(agents) {
 
   const total = all.length;
   el.innerHTML = `
-    <h2>${t("a_title")} <span style="color:var(--text-dead);font-weight:400">${t("a_hint", { n: total })} · 最新活跃在最前</span></h2>
+    <h2>${t("a_title")} <span style="color:var(--text-dead);font-weight:400">${t("a_hint", { n: total })} · ${t("latest_active_first")}</span></h2>
     <table><thead><tr><th>${t("a_th_agent")}</th><th>${t("a_status")}</th><th>${t("a_loc")}</th><th>${t("a_active")}</th><th>${t("a_tool")}</th></tr></thead>
     <tbody>${rows || "<tr><td class='empty' colspan='5'>" + t("a_none") + "</td></tr>"}</tbody></table>
   `;
@@ -769,7 +771,7 @@ function renderTmuxPanel(panes) {
   });
 
   const rows = sorted.map(x => {
-    const ago = (x.idle_seconds !== undefined && x.idle_seconds !== null) ? agoStr(x.idle_seconds) + "前" : "—";
+    const ago = (x.idle_seconds !== undefined && x.idle_seconds !== null) ? agoStr(x.idle_seconds) : "—";
     return `
       <tr>
         <td class="tname">
@@ -779,14 +781,14 @@ function renderTmuxPanel(panes) {
         <td data-label="${t("t_cmd")}"><code>${esc(x.command)}</code> ${x.pid !== "—" ? `<span class="ghint">(${x.pid})</span>` : ""}</td>
         <td class="tscope" data-label="${t("tmux_th_title")}">${esc(x.title)}</td>
         <td class="tcmd" data-label="${t("th_cwd")}">${esc(x.cwd)}</td>
-        <td class="tsch" data-label="活跃时间">${ago}</td>
-        <td data-label="操作">
+        <td class="tsch" data-label="${t("th_active_time")}">${ago}</td>
+        <td data-label="${t("th_action")}">
           <div style="display:flex;align-items:center;gap:6px;">
-            <button type="button" class="btn-ts-mini btn-tmux-wake" data-sname="${esc(x.session)}" data-target="${esc(x.session + ':' + x.pane)}" title="Hermes 智能唤醒推进">
-              ${icon("bolt", 11)} <span>推进</span>
+            <button type="button" class="btn-ts-mini btn-tmux-wake" data-sname="${esc(x.session)}" data-target="${esc(x.session + ':' + x.pane)}" title="${t("tac_wake_title")}">
+              ${icon("bolt", 11)} <span>${t("tac_wake")}</span>
             </button>
-            <button type="button" class="btn-ts-mini btn-tmux-preview" data-target="${esc(x.session + ':' + x.pane)}" title="预览终端输出">
-              ${icon("play", 11)} <span>预览</span>
+            <button type="button" class="btn-ts-mini btn-tmux-preview" data-target="${esc(x.session + ':' + x.pane)}" title="${t("tac_preview_title")}">
+              ${icon("play", 11)} <span>${t("tac_preview")}</span>
             </button>
           </div>
         </td>
@@ -795,8 +797,8 @@ function renderTmuxPanel(panes) {
   }).join("");
 
   el.innerHTML = `
-    <h2>${t("tmux_panel")} <span style="color:var(--text-dead);font-weight:400">${t("tmux_panes", { n: sorted.length })} · 最新活跃优先</span></h2>
-    <table><thead><tr><th>${t("tmux_th_pane")}</th><th>${t("t_cmd")}</th><th>${t("tmux_th_title")}</th><th>${t("th_cwd")}</th><th>活跃时间</th><th>操作</th></tr></thead>
+    <h2>${t("tmux_panel")} <span style="color:var(--text-dead);font-weight:400">${t("tmux_panes", { n: sorted.length })} · ${t("latest_active_priority")}</span></h2>
+    <table><thead><tr><th>${t("tmux_th_pane")}</th><th>${t("t_cmd")}</th><th>${t("tmux_th_title")}</th><th>${t("th_cwd")}</th><th>${t("th_active_time")}</th><th>${t("th_action")}</th></tr></thead>
     <tbody>${rows || "<tr><td class='empty' colspan='6'>" + t("tmux_none") + "</td></tr>"}</tbody></table>
   `;
 }
@@ -841,8 +843,8 @@ function renderWatchdogPanel(tasks) {
     <span style='color:var(--ch-mem)'>${nwd} ${t("tbd_wd")}</span> ·
     <span style='color:var(--ch-cpu)'>${nrd} ${t("tbd_rd")}</span> ·
     <span style='color:var(--text-dim)'>${nsc} ${t("tbd_sc")}</span> ·
-    <span style='color:var(--text-dead);font-weight:400'>${t("t_total", { n: sorted.length })} · 最近执行优先</span></h2>
-    <table><thead><tr><th>${t("t_task")}</th><th>${t("t_cycle")}</th><th>${t("t_source")}</th><th>${t("t_cmd")}</th><th>${t("t_lastrun")}</th><th>操作</th></tr></thead>
+    <span style='color:var(--text-dead);font-weight:400'>${t("t_total", { n: sorted.length })} · ${t("recent_exec_first")}</span></h2>
+    <table><thead><tr><th>${t("t_task")}</th><th>${t("t_cycle")}</th><th>${t("t_source")}</th><th>${t("t_cmd")}</th><th>${t("t_lastrun")}</th><th>${t("th_action")}</th></tr></thead>
     <tbody>${sorted.length ? sorted.map(taskRow).join("") : "<tr><td class='empty' colspan='6'>" + t("t_none") + "</td></tr>"}</tbody></table>`;
 }
 
@@ -852,7 +854,7 @@ function renderWatchdogPanel(tasks) {
 const MANAGE_UNITS = [
   { id: "zircon-server", kind: "systemd", label: t("m_server"), desc: t("m_server_desc") },
   { id: "zircon-bots", kind: "systemd", label: t("m_bots"), desc: t("m_bots_desc") },
-  { id: "wsgateway", kind: "systemd", label: "Zircon WS 网关", desc: "ws:7001→tcp:7000, 随主服起停" },
+  { id: "wsgateway", kind: "systemd", label: t("mgr_zircon_ws"), desc: t("mgr_zircon_ws_desc") },
   { id: "tailscaled", kind: "systemd", label: t("m_ts"), desc: t("m_ts_desc") },
   { id: "wilviewer", kind: "proc", port: 8765, label: t("m_wilviewer"), desc: t("m_wilviewer_desc") },
   { id: "mapviewer", kind: "proc", port: 8899, label: t("m_mapviewer"), desc: t("m_mapviewer_desc") },
@@ -933,14 +935,14 @@ function renderManagePanel(unitStatuses, ctlData) {
   const pausedList = [...(ctlData.paused || [])].sort((a, b) => (b.ts || 0) - (a.ts || 0));
   let pausedHtml = "";
   if (!pausedList.length) {
-    pausedHtml = `<div class="gempty" style="padding:16px 0;">当前无被冻结的服务（所有监听端口均正常运行）</div>`;
+    pausedHtml = `<div class="gempty" style="padding:16px 0;">${t("sc_empty")}</div>`;
   } else {
     pausedHtml = `
       <table class="manage-paused-table">
-        <thead><tr><th>端口 / 服务</th><th>PID</th><th>冻结时间</th><th>命令</th><th>操作</th></tr></thead>
+        <thead><tr><th>${t("sc_th_port_svc")}</th><th>PID</th><th>${t("sc_th_frozen_at")}</th><th>${t("sc_th_command")}</th><th>${t("sc_th_action")}</th></tr></thead>
         <tbody>
           ${pausedList.map(p => {
-            const ago = p.ts ? agoStr(Date.now() / 1000 - p.ts) + "前" : "—";
+            const ago = p.ts ? agoStr(Date.now() / 1000 - p.ts) : "—";
             return `
               <tr>
                 <td><strong>:${p.port}</strong> <span class="tscope">${esc(p.name)}</span></td>
@@ -966,19 +968,19 @@ function renderManagePanel(unitStatuses, ctlData) {
     <div class="manage-audit-list">
       ${historyList.map(h => `<div class="manage-audit-item">${esc(h)}</div>`).join("")}
     </div>
-  ` : `<div class="gempty" style="padding:10px 0;">暂无操作记录</div>`;
+  ` : `<div class="gempty" style="padding:10px 0;">${t("sc_no_history")}</div>`;
 
   el.innerHTML = `
     <h2>${t("m_panel")} <span class="ghint">${t("m_hint")}</span></h2>
     <div class="manage-grid">${cardsHtml}</div>
 
     <div style="margin-top:20px;">
-      <h2>通用冻结服务台账 <span class="ghint">${pausedList.length} 个端口已挂起</span></h2>
+      <h2>${t("sc_panel_title")} <span class="ghint">${t("sc_panel_hint", { n: pausedList.length })}</span></h2>
       ${pausedHtml}
     </div>
 
     <div style="margin-top:20px;">
-      <h2>最近管理记录 <span class="ghint">Audit History (最新在最前)</span></h2>
+      ${t("sc_history_title")} + ${t("sc_history_hint")}
       ${historyHtml}
     </div>
   `;
@@ -1192,7 +1194,7 @@ async function hydrateFragments() {
 }
 
 function applyApiData(data) {
-  $("updated").textContent = new Date(data.updated * 1000).toLocaleString();
+  $("updated").textContent = new Date(data.updated * 1000).toLocaleString(LOCALE_TAG);
   lastUpdatedTs = data.updated * 1000;
   services = data.services;
   renderToolchips();
@@ -1495,17 +1497,17 @@ function renderPortalSvc(services) {
 }
 
 function formatQuotaBucketName(label) {
-  if (!label) return "额度";
+  if (!label) return t("quota_label_default");
   let s = String(label);
   s = s.replace(/^(Gemini Models|Claude and GPT models)\s*·\s*/i, "");
   s = s.replace(/^codex\s*·\s*/i, "");
-  s = s.replace(/^gpt-reserve\s*·\s*/i, "GPT 储备 · ");
+  s = s.replace(/^gpt-reserve\s*·\s*/i, t("quota_gpt_reserve") + " · ");
   s = s.replace(/\bprimary\b/i, "5h");
-  s = s.replace(/\bsecondary\b/i, "周额度");
+  s = s.replace(/\bsecondary\b/i, t("quota_weekly"));
   s = s.replace(/\bgemini-5h\b/i, "Gemini 5h");
-  s = s.replace(/\bgemini-weekly\b/i, "Gemini 周");
+  s = s.replace(/\bgemini-weekly\b/i, t("quota_gemini_weekly"));
   s = s.replace(/\b3p-5h\b/i, "Claude/3P 5h");
-  s = s.replace(/\b3p-weekly\b/i, "Claude/3P 周");
+  s = s.replace(/\b3p-weekly\b/i, t("quota_3p_weekly"));
   return s.trim();
 }
 
@@ -1818,26 +1820,13 @@ function formatBroadDate(ts) {
   const yest = new Date(now.getTime() - 86400000);
   const yestStr = `${yest.getFullYear()}-${yest.getMonth()+1}-${yest.getDate()}`;
   const curStr = `${y}-${m}-${day}`;
-
-  if (LANG === "en") {
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const mStr = months[d.getMonth()];
-    const dt = `${mStr} ${day}, ${y}`;
-    if (curStr === todayStr) return `Commits on ${dt} (Today)`;
-    if (curStr === yestStr) return `Commits on ${dt} (Yesterday)`;
-    return `Commits on ${dt}`;
-  } else if (LANG === "ja") {
-    const dt = `${y}年${m}月${day}日`;
-    if (curStr === todayStr) return `${dt} (今日)`;
-    if (curStr === yestStr) return `${dt} (昨日)`;
-    return dt;
-  } else {
-    // zh
-    const dt = `${y}年${m}月${day}日`;
-    if (curStr === todayStr) return `${dt} · 今天`;
-    if (curStr === yestStr) return `${dt} · 昨天`;
-    return dt;
-  }
+  const dt = (LANG === "en")
+    ? `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]} ${day}, ${y}`
+    : `${y}-${m}-${day}`;
+  const title = (LANG === "en") ? t("act_commits_on", { d: dt }) : dt;
+  if (curStr === todayStr) return title + " · " + t("act_date_today");
+  if (curStr === yestStr) return title + " · " + t("act_date_yest");
+  return title;
 }
 
 const GITHUB_NODE_SVG = `<svg class="act-node-svg" width="24" height="18" viewBox="0 0 24 18" fill="none" aria-hidden="true"><path d="M0 9h7M17 9h7" stroke="var(--border-subtle, rgba(128,128,128,.45))" stroke-width="2"/><circle cx="12" cy="9" r="4.5" fill="var(--bg, #0a0a0a)" stroke="var(--border-subtle, rgba(128,128,128,.7))" stroke-width="2"/><circle cx="12" cy="9" r="1.8" fill="currentColor"/></svg>`;
@@ -2109,7 +2098,7 @@ async function renderActivityPage() {
       }
 
       const subj = e.subject || e.text || "—";
-      const timeStr = e.time || (e.ts ? new Date(e.ts * 1000).toLocaleString() : '');
+      const timeStr = e.time || (e.ts ? new Date(e.ts * 1000).toLocaleString(LOCALE_TAG) : '');
       const author = e.author || "cheyan";
       const initial = (author.slice(0, 1) || "C").toUpperCase();
       const metaRow = `<div class="act-meta-row">
@@ -2147,7 +2136,7 @@ async function renderActivityPage() {
       const isDone = e.src === "done" || e.kind === "complete";
       const ico = isDone ? "ok" : (m.ico || "branch");
       const kindLabel = t(m.key);
-      const timeStr = e.time || (e.ts ? new Date(e.ts * 1000).toLocaleString() : '');
+      const timeStr = e.time || (e.ts ? new Date(e.ts * 1000).toLocaleString(LOCALE_TAG) : '');
       const resumeBtn = e.resume_cmd ? `<button class="btn-act-resume gcopy" data-copy="${escAttr(e.resume_cmd)}" title="${escAttr(t("act_copy_resume"))}">${icon("copy", 11)} <span>${t("g_resume")}</span></button>` : "";
       return `<div class="act-card act-card-event" data-pos="${pos}">
         ${nodeEl}
@@ -2384,7 +2373,7 @@ function parseAnsiToHtml(raw) {
 
 async function fetchTmuxPaneCapture(target, lines) {
   if (BOOT.static) {
-    return { ok: true, raw: "[公网静态只读视图：终端屏幕输出已安全屏蔽]", total_lines: 1 };
+    return { ok: true, raw: t("static_term_blocked"), total_lines: 1 };
   }
   try {
     const url = `/api/tmux/capture?target=${encodeURIComponent(target)}&lines=${encodeURIComponent(lines || 300)}&ansi=1`;
@@ -2476,7 +2465,7 @@ async function renderNetworkPage(force) {
           <div class="ts-serve-card">
             <div class="ts-serve-info">
               <div class="ts-serve-path" title="${escAttr(srv.url)}">${escHtml(srv.path || "/")}</div>
-              <div class="ts-serve-proxy">代理至 <code>${escHtml(srv.target)}</code> (${escHtml(srv.host_port || '')})</div>
+              <div class="ts-serve-proxy">${t("ts_serve_proxy_to")} <code>${escHtml(srv.target)}</code> (${escHtml(srv.host_port || '')})</div>
             </div>
             <div class="ts-serve-btns">
               <a href="${escAttr(srv.url)}" target="_blank" rel="noopener noreferrer" class="btn-ts-mini">
@@ -2568,7 +2557,7 @@ document.addEventListener("click", async (e) => {
     const card = $("ts-netcheck-card");
     if (!card) return;
     card.hidden = false;
-    card.innerHTML = `<div class="gempty">${icon("wait", 14)} 诊断穿透与 DERP 节点中…</div>`;
+    card.innerHTML = `<div class="gempty">${icon("wait", 14)} ${t("ts_diag_loading")}</div>`;
     haptic(8);
     try {
       const r = await tlPost("/api/tailscale/netcheck", {});
@@ -2579,28 +2568,28 @@ document.addEventListener("click", async (e) => {
           </div>
           <div class="ts-diag-grid">
             <div class="ts-diag-item">
-              <div class="ts-diag-label">UDP 穿透</div>
-              <div class="ts-diag-val ${r.udp ? 'ok' : 'warn'}">${r.udp ? '正常 (OK)' : '受限'}</div>
+              <div class="ts-diag-label">${t("ts_diag_udp")}</div>
+              <div class="ts-diag-val ${r.udp ? 'ok' : 'warn'}">${r.udp ? t("ts_diag_ok") : t("ts_diag_limited")}</div>
             </div>
             <div class="ts-diag-item">
               <div class="ts-diag-label">IPv4 / IPv6</div>
               <div class="ts-diag-val ok">${r.ipv4 ? 'v4' : ''} ${r.ipv6 ? '· v6' : ''}</div>
             </div>
             <div class="ts-diag-item">
-              <div class="ts-diag-label">UPnP 打洞</div>
-              <div class="ts-diag-val ${r.upnp ? 'ok' : ''}">${r.upnp ? '支持 (Yes)' : '未启用'}</div>
+              <div class="ts-diag-label">${t("ts_diag_upnp")}</div>
+              <div class="ts-diag-val ${r.upnp ? 'ok' : ''}">${r.upnp ? t("ts_diag_yes") : t("ts_diag_no")}</div>
             </div>
             <div class="ts-diag-item">
-              <div class="ts-diag-label">最优 DERP 中继</div>
+              <div class="ts-diag-label">${t("ts_diag_derp")}</div>
               <div class="ts-diag-val ok">Region ${r.preferred_derp || '-'} (${r.preferred_derp_latency_ms || '-'} ms)</div>
             </div>
           </div>
         `;
       } else {
-        card.innerHTML = `<div class="gempty" style="color:var(--c-red);">诊断失败: ${escHtml(r?.error || "Netcheck error")}</div>`;
+        card.innerHTML = `<div class="gempty" style="color:var(--c-red);">t("ts_diag_fail", { e: ... })${escHtml(r?.error || "Netcheck error")}</div>`;
       }
     } catch (err) {
-      card.innerHTML = `<div class="gempty" style="color:var(--c-red);">诊断失败: ${escHtml(err.message)}</div>`;
+      card.innerHTML = `<div class="gempty" style="color:var(--c-red);">${t("ts_diag_fail", { e: escHtml(err.message) })}</div>`;
     }
     return;
   }
@@ -2624,11 +2613,11 @@ document.addEventListener("click", async (e) => {
         resEl.textContent = `${r.rtt_ms} ms (${mode})`;
       } else {
         resEl.className = "ts-ping-res err";
-        resEl.textContent = "超时 / 失败";
+        resEl.textContent = t("ts_ping_timeout");
       }
     } catch (_) {
       resEl.className = "ts-ping-res err";
-      resEl.textContent = "错误";
+      resEl.textContent = t("ts_ping_error");
     } finally {
       pingBtn.disabled = false;
     }
@@ -2761,7 +2750,7 @@ async function renderTmuxPage() {
       <div class="tmux-tabs-bar">
         ${wins.map(w => {
           const isSelected = w.index === curWinIdx;
-          const star = w.active ? `<span class="tmux-tab-star" title="活跃窗口">*</span>` : "";
+          const star = w.active ? `<span class="tmux-tab-star" title="${t("tmux_active_win")}">*</span>` : "";
           return `<span class="tmux-tab-chip ${isSelected ? 'active' : ''}" data-sname="${escAttr(s.name)}" data-widx="${w.index}">
             ${w.index}: ${escHtml(w.name)}${star}
           </span>`;
@@ -2788,7 +2777,7 @@ async function renderTmuxPage() {
 
     const showTerm = tmuxShowTerm[s.name] !== false;
     const termLines = (activePane.preview || []).slice(-12);
-    const termText = termLines.length ? termLines.join("\n") : "(no terminal output captured)";
+    const termText = termLines.length ? termLines.join("\n") : t("tmux_no_output");
     const termHtml = showTerm ? `
       <div class="tmux-term-preview">
         <div class="tmux-term-topbar">
@@ -2811,7 +2800,7 @@ async function renderTmuxPage() {
           </div>
           ${g.resume_cmd ? `
             <div class="tmux-goal-banner-acts">
-              <button class="btn-tmux-act g-resume-btn" data-resume-cmd="${escAttr(g.resume_cmd)}" title="后台 Tmux 唤醒恢复该任务">
+              <button class="btn-tmux-act g-resume-btn" data-resume-cmd="${escAttr(g.resume_cmd)}" title="${t("tmux_resume_bg_title")}">
                 ${icon("play", 11)} <span>${escHtml(t("g_resume_run"))}</span>
               </button>
               <button class="btn-tmux-act gcopy" data-copy="${escAttr(g.resume_cmd)}" title="${escAttr(t("g_copy"))}">
@@ -2823,7 +2812,7 @@ async function renderTmuxPage() {
       `;
     }
 
-    const agoStr = s.activity_ago < 60 ? `${s.activity_ago}s ago` : `${Math.floor(s.activity_ago / 60)}m ago`;
+    const agoTxt = agoStr(s.activity_ago);
 
     return `
       <article class="tmux-session-card" data-sname="${escAttr(s.name)}">
@@ -2837,8 +2826,8 @@ async function renderTmuxPage() {
             <span class="tmux-badge tmux-badge-det">${s.windows_count} ${escHtml(t("tmux_total_windows"))}</span>
           </div>
           <div class="tmux-card-actions">
-            <button class="btn-tmux-act btn-tmux-wake" data-sname="${escAttr(s.name)}" data-target="${escAttr(activePane.pane ? `${s.name}:${activePane.pane}` : s.name)}" title="调用 Hermes 检查当前阻塞/选择状态并自动推进">
-              ${icon("bolt", 12)} <span>唤醒推进</span>
+            <button class="btn-tmux-act btn-tmux-wake" data-sname="${escAttr(s.name)}" data-target="${escAttr(activePane.pane ? `${s.name}:${activePane.pane}` : s.name)}" title="${escAttr(t("tmux_wake_title"))}">
+              ${icon("bolt", 12)} <span>${escHtml(t("tmux_wake"))}</span>
             </button>
             <button class="btn-tmux-act btn-tmux-fullscreen" data-sname="${escAttr(s.name)}" data-target="${escAttr(activePane.pane ? `${s.name}:${activePane.pane}` : s.name)}" title="${escAttr(t('tmux_fullscreen'))}">
               ${icon("expand", 12)} <span>${escHtml(t("tmux_fullscreen"))}</span>
@@ -2852,7 +2841,7 @@ async function renderTmuxPage() {
           </div>
         </div>
         <div class="tmux-meta-bar">
-          <span class="tmux-meta-item">${icon("clock", 12)} <span>${escHtml(s.created_str)} (${agoStr})</span></span>
+          <span class="tmux-meta-item">${icon("clock", 12)} <span>${escHtml(s.created_str)} (${agoTxt})</span></span>
           <span class="tmux-meta-item">${icon("folder", 12)} <code>${escHtml(s.main_cwd)}</code></span>
         </div>
         ${tabsHtml}
@@ -4444,7 +4433,7 @@ function renderAgentDetailContent(data, tab) {
     }
 
     return `<div style="display:flex;flex-direction:column;gap:16px;">
-      ${platHtml || `<div class="gempty">暂无外部接入平台</div>`}
+      ${platHtml || `<div class="gempty">${t("agent_no_platforms")}</div>`}
       ${toolsetsHtml}
       ${mcpHtml}
     </div>`;
@@ -4465,7 +4454,7 @@ function renderAgentDetailContent(data, tab) {
           return `<div class="ad-memory-box">
             <div class="ad-memory-head">
               <span class="ad-memory-title">${escHtml(k)}</span>
-              <span class="ad-memory-count">${m.count || 0} 条设定</span>
+              <span class="ad-memory-count">t("agent_mem_count", { n: m.count || 0 })</span>
             </div>
             ${m.preview ? `<div class="ad-skill-desc" style="color:var(--text-title);">${escHtml(m.preview)}</div>` : ""}
             <div class="ad-memory-items">
@@ -4745,13 +4734,13 @@ document.addEventListener("click", async (e) => {
   if (!sname) return;
   btn.disabled = true;
   const origHtml = btn.innerHTML;
-  btn.innerHTML = `${icon("bolt", 12)} <span>⚡ 分析推进中…</span>`;
+  btn.innerHTML = `${icon("bolt", 12)} <span>⚡ ${t("tac_wake_running")}</span>`;
   btn.classList.add("working");
   haptic(10);
   try {
     const r = await tlPost("/api/tmux/wake", { session: sname, pane: (btn.dataset.target || "").split(":")[1] || "" });
     if (r && r.ok) {
-      btn.innerHTML = `${icon("ok", 12)} <span>${escHtml(r.msg || "已推进")}</span>`;
+      btn.innerHTML = `${icon("ok", 12)} <span>${escHtml(r.msg || t("tac_wake_done"))}</span>`;
       btn.classList.remove("working");
       btn.classList.add("success");
       haptic(15);
@@ -4763,7 +4752,7 @@ document.addEventListener("click", async (e) => {
         } catch (_) {}
       }, 1500);
     } else {
-      btn.innerHTML = `<span>✗ ${escHtml((r && r.msg) || "推进失败")}</span>`;
+      btn.innerHTML = `<span>✗ ${escHtml((r && r.msg) || t("tac_wake_fail"))}</span>`;
     }
   } catch (err) {
     btn.innerHTML = `<span>✗ ${escHtml(err.message)}</span>`;
@@ -4789,14 +4778,14 @@ document.addEventListener("click", async (e) => {
   try {
     const r = await tlPost("/api/tasks/run", { name, kind, scope });
     if (r && r.ok) {
-      btn.innerHTML = `${icon("ok", 11)} <span>已触发</span>`;
+      btn.innerHTML = `${icon("ok", 11)} <span>${t("tac_triggered")}</span>`;
       btn.classList.add("ok");
       setTimeout(() => { tasksCache = null; loadTasks().then(renderWatchdogPanel); }, 1500);
     } else {
-      btn.textContent = "✗ " + ((r && r.msg) || "失败");
+      btn.textContent = "✗ " + ((r && r.msg) || t("tac_fail"));
     }
   } catch (err) {
-    btn.textContent = "✗ 错误";
+    btn.textContent = "✗ " + t("tac_error");
   }
   setTimeout(() => {
     btn.disabled = false;
@@ -4831,11 +4820,11 @@ document.addEventListener("click", async (e) => {
     const box = newRow.querySelector(".termlog");
     if (box) {
       if (d.ok && d.capture) box.innerHTML = ansiToHtml(d.capture);
-      else box.textContent = "无法获取终端输出: " + (d.msg || "未知");
+      else box.textContent = t("tmux_capture_fail", { e: d.msg || t("tmux_capture_unknown") });
     }
   } catch (err) {
     const box = newRow.querySelector(".termlog");
-    if (box) box.textContent = "获取失败: " + err.message;
+    if (box) box.textContent = t("tmux_capture_err", { e: err.message });
   }
 });
 
@@ -5143,7 +5132,8 @@ function fmtB(n) {
 }
 
 async function tlGet(url) {
-  const r = await fetch(url, { cache: "no-store" });
+  const withLang = (u) => u + (u.includes("?") ? "&" : "?") + "lang=" + encodeURIComponent(LANG);
+  const r = await fetch(withLang(url), { cache: "no-store" });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.msg || ("HTTP " + r.status));
   return d;

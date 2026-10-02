@@ -13,7 +13,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
 <link rel="stylesheet" href="/static/app.css?v=297cb5b4b059">
 <header>
   <!-- topbar: 左=品牌 Mikata(守护之眼纹 logo) · 服务器名(绿点=在线), 右=分类条+刷新。 -->
-  <h1 title="Mikata · {{T:title}}"><a class="h-home-link" href="./" aria-label="返回首页"><span class="h-logo" aria-hidden="true">{{ICO:mikata:23}}</span><span class="h-brand">Mikata</span></a><span class="h-sep" aria-hidden="true">·</span><span class="h-host"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</span></h1>
+  <h1 title="Mikata · {{T:title}}"><a class="h-home-link" href="./" aria-label="{{T:aria_back_home}}"><span class="h-logo" aria-hidden="true">{{ICO:mikata:23}}</span><span class="h-brand">Mikata</span></a><span class="h-sep" aria-hidden="true">·</span><span class="h-host"><span class="h-server" aria-hidden="true"></span>{{HOSTNAME}}</span></h1>
   <span class="h-conn" id="conn-grid"></span>
   <span class="meta" id="meta-line" hidden>
     <span id="updated">{{UPDATED}}</span> <span id="count">{{COUNT}}</span>
@@ -167,8 +167,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       <button class="btn-ts-action" id="btn-ts-netcheck" title="{{T:ts_netcheck}}">
         {{ICO:activity:13}} <span>{{T:ts_netcheck}}</span>
       </button>
-      <button class="btn-ts-action" id="btn-ts-refresh" title="{{T:g_refresh}}">
-        {{ICO:retry:13}} <span>{{T:g_refresh}}</span>
+      <button class="btn-ts-action" id="btn-ts-refresh" title="{{T:refresh}}">
+        {{ICO:retry:13}} <span>{{T:refresh}}</span>
       </button>
     </div>
   </div>
@@ -213,8 +213,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       <button class="btn-agent-top" id="btn-probe-all" title="{{T:agent_test_all}}">
         {{ICO:bolt:13}} <span>{{T:agent_test_all}}</span>
       </button>
-      <button class="btn-agent-top" id="btn-refresh-quota" title="{{T:agent_refresh_quota}}">
-        {{ICO:retry:13}} <span>{{T:agent_refresh_quota}}</span>
+      <button class="btn-agent-top" id="btn-refresh-quota" title="{{T:rt_refresh}}">
+        {{ICO:retry:13}} <span>{{T:rt_refresh}}</span>
       </button>
     </div>
   </div>
@@ -321,7 +321,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       <button class="btn-tmux-sheet-act" id="btn-tmux-sheet-copy" type="button" title="{{T:tmux_copy_output}}">
         {{ICO:copy:13}}
       </button>
-      <select class="tmux-sheet-select" id="tmux-sheet-lines" aria-label="Lines">
+      <select class="tmux-sheet-select" id="tmux-sheet-lines" aria-label="{{T:tmux_lines_aria}}">
         <option value="100">100</option>
         <option value="300" selected>300</option>
         <option value="800">800</option>
