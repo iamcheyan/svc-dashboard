@@ -9,21 +9,22 @@ from svcdash.procscan import _kill_tree, listen_sockets, inode_to_pid
 #                 状态按端口检测;「暂停」= 终止进程(释放端口),「启用」= 重新 detach 拉起。
 #                 dashboard 自身(监听 DEFAULT_PORT=80)绝不纳入,且 _proc_stop 有端口守卫。
 
+# label/desc 存 i18n 键（m_*），显示时按语言取；避免后端硬编码中文泄漏到 en/ja。
 MANAGE_UNITS = [
     {"id": "zircon-server", "kind": "systemd", "unit": "zircon-server.service",
-     "label": "Zircon 服务器 (ServerCore)", "desc": "Mir3 传奇3 服务器主进程"},
+     "label": "m_server", "desc": "m_server_desc"},
     {"id": "zircon-bots", "kind": "systemd", "unit": "zircon-bots.service",
-     "label": "Zircon 机器人 (BotRunner)", "desc": "AI 机器人运行器"},
+     "label": "m_bots", "desc": "m_bots_desc"},
     {"id": "wsgateway", "kind": "systemd", "unit": "wsgateway.service",
-     "label": "Zircon WS 网关 (wsgateway)", "desc": "ws:7001→tcp:7000, BindsTo 随 zircon-server 起停"},
+     "label": "mgr_zircon_ws", "desc": "mgr_zircon_ws_desc"},
     {"id": "wilviewer", "kind": "proc", "port": 8765,
-     "label": "WilViewer 图档服务", "desc": "Mir3 客户端图档浏览 (8765)",
+     "label": "m_wilviewer", "desc": "m_wilviewer_desc",
      "user": "tetsuya",
      "cwd": "/home/tetsuya/development/Mir3-Research",
      "cmd": ["/home/tetsuya/mir3-venv/bin/python", "Tools/web/wilviewer.py",
              "--root", "/tmp/nas_mnt/NAS/TMP/EI传奇3.0客户端", "--port", "8765"]},
     {"id": "mapviewer", "kind": "proc", "port": 8899,
-     "label": "MapViewer 地图服务", "desc": "Mir3 地图浏览 (8899)",
+     "label": "m_mapviewer", "desc": "m_mapviewer_desc",
      "user": "tetsuya",
      "cwd": "/home/tetsuya/development/Mir3-Research",
      "cmd": ["/home/tetsuya/mir3-venv/bin/python", "Tools/maps/mapviewer.py",
@@ -31,8 +32,18 @@ MANAGE_UNITS = [
              "--data", "/tmp/nas_mnt/NAS/TMP/EI传奇3.0客户端/Data", "--port", "8899"]},
 ]
 
-ACTION_LABELS = {"start": "启动", "stop": "停止", "restart": "重启",
-                 "pause": "暂停", "resume": "恢复"}
+
+def unit_label(cfg, lang=DEFAULT_LANG):
+    """MANAGE_UNITS 的 label/desc 存 i18n 键; 返回当前语言文案。"""
+    return t(lang, cfg.get("label") or cfg.get("id", ""))
+
+
+def unit_desc(cfg, lang=DEFAULT_LANG):
+    return t(lang, cfg.get("desc") or "")
+
+# 动作白名单 + 各语言动作名走 i18n（m_start/m_stop/m_restart/m_pause/m_resume）
+ACTION_LABELS = {"start": "m_start", "stop": "m_stop", "restart": "m_restart",
+                 "pause": "m_pause", "resume": "m_resume"}
 
 
 def _sysctl(*args, timeout=10):
@@ -94,14 +105,14 @@ def _proc_pid_on_port(port):
     return 0
 
 
-def _proc_status(cfg):
+def _proc_status(cfg, lang=DEFAULT_LANG):
     """手动进程服务状态: 端口有监听进程 => active,否则 inactive。"""
     pid = _proc_pid_on_port(cfg["port"])
     if pid:
         return {"ok": True, "active": "active", "sub": "running", "load": "loaded",
-                "pid": str(pid), "stopped": False, "desc": cfg["desc"]}
+                "pid": str(pid), "stopped": False, "desc": unit_desc(cfg, lang)}
     return {"ok": True, "active": "inactive", "sub": "not-running", "load": "not-found",
-            "pid": "", "stopped": False, "desc": cfg["desc"]}
+            "pid": "", "stopped": False, "desc": unit_desc(cfg, lang)}
 
 
 def _proc_stop(cfg, lang):
@@ -122,7 +133,7 @@ def _proc_stop(cfg, lang):
     except ProcessLookupError:
         return {"ok": True, "msg": t(lang, "m_done_stop")}
     except PermissionError:
-        return {"ok": False, "msg": t(lang, "m_fail", a=ACTION_LABELS["stop"], c="perm")}
+        return {"ok": False, "msg": t(lang, "m_fail", a=t(lang, ACTION_LABELS["stop"]), c="perm")}
     for _ in range(20):  # 最多等 2s
         time.sleep(0.1)
         if not _proc_pid_on_port(cfg["port"]):
@@ -188,7 +199,7 @@ def manage_status(unit_id, lang=DEFAULT_LANG):
     if not cfg:
         return {"id": unit_id, "ok": False, "msg": t(lang, "m_unknown_unit", id=unit_id)}
     if cfg["kind"] == "proc":
-        return _proc_status(cfg)
+        return _proc_status(cfg, lang)
     unit = cfg["unit"]
     code, out, err = _sysctl("show", unit, "-p", "LoadState", "-p", "ActiveState",
                              "-p", "SubState", "-p", "MainPID", "-p", "Description")
@@ -214,7 +225,7 @@ def manage_status(unit_id, lang=DEFAULT_LANG):
             "sub": info.get("SubState", "?"),
             "load": info.get("LoadState", "?"),
             "pid": pid, "stopped": stopped,
-            "desc": info.get("Description", cfg["desc"])}
+            "desc": info.get("Description") or unit_desc(cfg, lang)}
 
 
 def manage_action(unit_id, action, lang=DEFAULT_LANG):
@@ -243,4 +254,4 @@ def manage_action(unit_id, action, lang=DEFAULT_LANG):
         code, out, err = _sysctl(action, cfg["unit"])
     if code == 0:
         return {"ok": True, "msg": t(lang, "m_done_" + action)}
-    return {"ok": False, "msg": err or out or t(lang, "m_fail", a=ACTION_LABELS[action], c=code)}
+    return {"ok": False, "msg": err or out or t(lang, "m_fail", a=t(lang, ACTION_LABELS[action]), c=code)}

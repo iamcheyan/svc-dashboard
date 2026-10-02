@@ -383,7 +383,7 @@ def scan_goals():
     return cards
 
 
-def goal_detail(gid, session=""):
+def goal_detail(gid, session="", lang=DEFAULT_LANG):
     """Goal 详情: 当前状态、watchdog 配置、tmux 实时画面和近期 JSONL 活动。"""
     wd = watchdog_goals()
     g = wd.get(gid or "", {})
@@ -421,7 +421,7 @@ def goal_detail(gid, session=""):
                 event = json.loads(raw)
             except (ValueError, TypeError):
                 continue
-            row = _event_text(event, DEFAULT_LANG)
+            row = _event_text(event, lang)
             if row and row[0] != "evt":
                 activities.append({"kind": row[0], "text": row[1]})
             if len(activities) >= 40:
@@ -452,7 +452,7 @@ _SAFE_PREFIXES = ("/home/", "omp ", "agy ", "codex ", "~/.bun/", "/root/")
 _RESUME_USER = "tetsuya"
 _RESUME_UID  = 1000
 
-def goal_resume(resume_cmd: str, hint_session: str = "") -> tuple:
+def goal_resume(resume_cmd: str, hint_session: str = "", lang=DEFAULT_LANG) -> tuple:
     """在用户 tmux session 里执行 resume_cmd。
     服务以 root 运行，通过 sudo -u tetsuya 在用户的 tmux socket 里创建 session。
     安全校验: 只允许已知路径前缀的 agent 命令。
@@ -460,12 +460,12 @@ def goal_resume(resume_cmd: str, hint_session: str = "") -> tuple:
     """
     cmd = (resume_cmd or "").strip()
     if not cmd:
-        return False, "empty resume_cmd"
+        return False, t(lang, "mm_goal_empty")
     # 安全校验：拒绝 shell 注入特征
     if any(c in cmd for c in (";", "&&", "||", "`", "$(")):
-        return False, "unsafe characters in resume_cmd"
+        return False, t(lang, "mm_goal_unsafe")
     if not any(cmd.startswith(p) for p in _SAFE_PREFIXES):
-        return False, f"resume_cmd must start with a known prefix: {_SAFE_PREFIXES}"
+        return False, t(lang, "mm_goal_prefix")
     # 从 --resume UUID 中提取短 ID 作为 session 名
     m = re.search(r"--resume\s+([0-9a-f-]{8,})", cmd)
     sid_short = m.group(1)[:8] if m else "goal"
@@ -491,7 +491,7 @@ def goal_resume(resume_cmd: str, hint_session: str = "") -> tuple:
                 capture_output=True, timeout=12,
             )
             if r.returncode == 0:
-                return True, f"tmux session '{sname}' started"
+                return True, t(lang, "mm_goal_started", s=sname)
         # fallback: 直接 tmux（不指定 socket）
         for sname in [session_name, session_name + "-b2"]:
             r = subprocess.run(
@@ -500,10 +500,10 @@ def goal_resume(resume_cmd: str, hint_session: str = "") -> tuple:
                 capture_output=True, timeout=12,
             )
             if r.returncode == 0:
-                return True, f"tmux session '{sname}' started (default socket)"
-        return False, f"tmux new-session failed: {r.stderr.decode()[:120]}"
+                return True, t(lang, "mm_goal_started_default", s=sname)
+        return False, t(lang, "mm_goal_tmux_fail", e=r.stderr.decode()[:120])
     # fallback: nohup 后台（不会出现在 tmux，但进程会跑）
     log_path = f"/tmp/resume-{sid_short}.log"
     inner = f"nohup bash -c {repr(cmd)} > {log_path} 2>&1 &"
     os.system(f"sudo -u {_RESUME_USER} bash -c {repr(inner)}")
-    return True, f"started in background (log: {log_path})"
+    return True, t(lang, "mm_goal_bg", p=log_path)

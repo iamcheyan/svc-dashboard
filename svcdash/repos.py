@@ -1,6 +1,7 @@
 import json, os, re, subprocess, time
 from svcdash.goals import watchdog_goals, parse_completed_goals
 from svcdash.agents import scan_omp, scan_codex
+from svcdash.i18n import t, DEFAULT_LANG
 # ---------------- 仓库层: agent/goal 改动过的 git 仓库 ----------------
 # 仓库集合来自现成数据源(watchdog GOALS workdir / 完成台账 workdir /
 # 在跑 omp/codex 的 cwd),逐级向上找 .git 定位仓库根,不做全盘扫描。
@@ -440,21 +441,21 @@ def _traj_data(repo):
     return data
 
 
-def repo_trajectory(name):
+def repo_trajectory(name, lang=DEFAULT_LANG):
     """/api/trajectory?repo=NAME -> 单仓库完整轨迹(strip + 事件流)。"""
     for repo in agent_repos():
         if os.path.basename(repo.rstrip("/")) == name:
             d = _traj_data(repo)
             return {"ok": True, "repo": name, "path": repo, "days": _TRAJ_DAYS, **d}
-    return {"ok": False, "msg": "unknown repo"}
+    return {"ok": False, "msg": t(lang, "mm_traj_unknown_repo")}
 
 
-def repo_commit_diff(repo_name, commit_sha, max_bytes=100 * 1024):
+def repo_commit_diff(repo_name, commit_sha, max_bytes=100 * 1024, lang=DEFAULT_LANG):
     """获取指定仓库特定提交的 diff (含安全过滤与截断防护)"""
     if not repo_name or not commit_sha:
-        return {"ok": False, "error": "Missing repo or sha"}
+        return {"ok": False, "error": t(lang, "mm_diff_missing")}
     if not re.match(r"^[A-Za-z0-9_.-]+$", repo_name) or not re.match(r"^[0-9a-fA-F]{4,40}$", commit_sha):
-        return {"ok": False, "error": "Invalid repo name or sha format"}
+        return {"ok": False, "error": t(lang, "mm_diff_invalid")}
 
     target_repo = None
     for r in agent_repos():
@@ -464,11 +465,11 @@ def repo_commit_diff(repo_name, commit_sha, max_bytes=100 * 1024):
             break
 
     if not target_repo:
-        return {"ok": False, "error": f"Repository '{repo_name}' not found locally"}
+        return {"ok": False, "error": t(lang, "mm_diff_repo_notfound", repo=repo_name)}
 
     raw = _git(target_repo, ["show", "--stat", "-p", "--color=never", commit_sha])
     if not raw:
-        return {"ok": False, "error": f"Commit '{commit_sha}' not found in '{repo_name}'"}
+        return {"ok": False, "error": t(lang, "mm_diff_commit_notfound", sha=commit_sha, repo=repo_name)}
 
     truncated = False
     if len(raw) > max_bytes:

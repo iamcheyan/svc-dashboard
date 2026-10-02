@@ -20,6 +20,7 @@ import subprocess
 import urllib.error
 import urllib.request
 import threading
+from svcdash.i18n import t, DEFAULT_LANG
 import time
 from datetime import datetime
 
@@ -666,7 +667,7 @@ def _http_json(url, key, payload=None, timeout=20):
         return False, int((time.time() - t0) * 1000), 0, str(e)[:120]
 
 
-def model_test_start(provider_id, model_id):
+def model_test_start(provider_id, model_id, lang=DEFAULT_LANG):
     """后台线程测一个模型: chat_allowed → 1-token chat; 否则 GET /models 探活。"""
     env = _load_env()
     try:
@@ -682,7 +683,7 @@ def model_test_start(provider_id, model_id):
     if provider_id == "zai":
         base, key = ZAI_BASE, env.get("ZAI_API_KEY") or ""
     if not base or not key:
-        return False, "no base url or key"
+        return False, t(lang, "mm_model_no_key")
 
     def _work():
         with _model_lock:
@@ -696,7 +697,7 @@ def model_test_start(provider_id, model_id):
                     "detail": str(e)[:120], "t": time.time()}
 
     threading.Thread(target=_work, daemon=True).start()
-    return True, "test started"
+    return True, t(lang, "mm_model_started")
 
 
 def _run_model_test(provider_id, model_id, base, key):
@@ -750,17 +751,17 @@ def agentctl_status():
                 "history": _ctl["log"][-12:] + _ledger_read()[-12:]}
 
 
-def agentctl_start(agent_id, action):
+def agentctl_start(agent_id, action, lang=DEFAULT_LANG):
     """安装/卸载白名单 agent。同一时刻仅一个动作。返回 (ok, msg)。"""
     if action == "quota":
         refresh_quota(force=True)
-        return True, "quota refresh started"
+        return True, t(lang, "mm_ctl_quota")
     reg = next((r for r in REGISTRY if r["id"] == agent_id), None)
     if not reg or action not in ("install", "uninstall"):
-        return False, "unknown agent or action"
+        return False, t(lang, "mm_ctl_unknown")
     with _ctl_lock:
         if _ctl["running"]:
-            return False, f"busy: {_ctl['running']['agent']} {_ctl['running']['action']}"
+            return False, t(lang, "mm_ctl_busy", a=f"{_ctl['running']['agent']} {_ctl['running']['action']}")
         _ctl["running"] = {"agent": agent_id, "action": action, "since": time.time()}
 
 
@@ -775,7 +776,7 @@ def agentctl_start(agent_id, action):
                     rc, detail = _runuser_tetsuya(f"bash {w} --version", timeout=600)
                     installed = bool(find_bin(reg["bins"]))
                     ok = installed
-                    msg = "installed" if ok else f"install failed (exit {rc})"
+                    msg = t(lang, "mm_ctl_installed") if ok else t(lang, "mm_ctl_install_fail", rc=rc)
             else:
                 pkg = reg.get("npm_pkg")
                 if pkg:
@@ -795,7 +796,7 @@ def agentctl_start(agent_id, action):
                             detail.append(f"rm {p}: {e}")
                     detail = "; ".join(detail)
                     ok = not find_bin(reg["bins"])
-                msg = "uninstalled" if ok else "uninstall incomplete"
+                msg = t(lang, "mm_ctl_uninstalled") if ok else t(lang, "mm_ctl_uninstall_incomplete")
         finally:
             with _ctl_lock:
                 _ctl["running"] = None
@@ -809,7 +810,7 @@ def agentctl_start(agent_id, action):
             _ver_cache.clear()
             _rt_cache.update({"t": 0.0, "data": None})
     threading.Thread(target=_work, daemon=True).start()
-    return True, f"{action} started: {agent_id}"
+    return True, t(lang, "mm_ctl_started", action=action, agent=agent_id)
 
 
 # ---------------- 聚合 ----------------
@@ -955,11 +956,11 @@ def _extract_skills(base_dir):
     return skills
 
 
-def inspect_agent_detail(agent_id: str, for_public: bool = False) -> dict:
+def inspect_agent_detail(agent_id: str, for_public: bool = False, lang=DEFAULT_LANG) -> dict:
     """深度自省指定 Agent 的配置、运行状态、技能矩阵、MCP、通讯平台与记忆。"""
     reg = next((r for r in REGISTRY if r["id"] == agent_id), None)
     if not reg:
-        return {"ok": False, "msg": f"unknown agent: {agent_id}"}
+        return {"ok": False, "msg": t(lang, "mm_unknown_agent", id=agent_id)}
 
     binpath = find_bin(reg["bins"])
     ver = agent_version(binpath) if binpath else ""
@@ -1133,7 +1134,7 @@ def inspect_agent_detail(agent_id: str, for_public: bool = False) -> dict:
     # 深度脱敏与隐私保护过滤
     from svcdash.privacy import deep_sanitize, sanitize_agent_detail_for_public
     if for_public:
-        return sanitize_agent_detail_for_public(detail)
+        return sanitize_agent_detail_for_public(detail, lang)
     else:
         # 本地模式脱敏：仍清洗关键凭证，保留完整记忆结构与配置
         return deep_sanitize(detail, mask_ips=False, mask_paths=False)

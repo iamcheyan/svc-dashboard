@@ -42,27 +42,27 @@ def _public_session_id(value):
     return f"session-{digest}"
 
 
-def sanitize_public_payload(data):
+def sanitize_public_payload(data, lang="zh"):
     """清除静态公网版中的对话/日志/命令语义，同时保留结构和统计字段。"""
     if isinstance(data, dict):
         clean = {}
         for key, value in data.items():
             key_lower = str(key).lower()
             if key_lower in PUBLIC_CONTENT_KEYS:
-                clean[key] = "[内容已脱敏]"
+                clean[key] = red("content", lang)
             elif key_lower in PUBLIC_PATH_KEYS:
-                clean[key] = "[路径已脱敏]"
+                clean[key] = red("path", lang)
             elif key_lower in ("session", "session_name", "tmux") and value:
                 clean[key] = _public_session_id(value)
             else:
-                clean[key] = sanitize_public_payload(value)
+                clean[key] = sanitize_public_payload(value, lang)
         return clean
     if isinstance(data, list):
-        return [sanitize_public_payload(item) for item in data]
+        return [sanitize_public_payload(item, lang) for item in data]
     if isinstance(data, str):
         # 兜底处理未被字段名识别的 home 路径和 URL。
-        value = HOME_REL_RE.sub("[路径已脱敏]", data)
-        value = re.sub(r'https?://[^\s<>"\']+', "[链接已脱敏]", value)
+        value = HOME_REL_RE.sub(red("path", lang), data)
+        value = re.sub(r'https?://[^\s<>"\']+', red("link", lang), value)
         return sanitize_text(value, mask_ips=True, mask_paths=True)
     return data
 
@@ -122,12 +122,12 @@ def deep_sanitize(data, mask_ips: bool = True, mask_paths: bool = True):
     return data
 
 
-def sanitize_runtimes_for_public(data):
+def sanitize_runtimes_for_public(data, lang="zh"):
     """静态 Agent 总览保留可公开的额度水位，其他内容仍按通用规则脱敏。
 
     额度名称/百分比/重置时间/用量是用户明确需要的状态；账号邮箱不导出。
     """
-    clean = sanitize_public_payload(data)
+    clean = sanitize_public_payload(data, lang)
 
     def quota_view(quota):
         out = {}
@@ -169,7 +169,7 @@ def sanitize_runtimes_for_public(data):
         if isinstance(value, dict):
             for key, item in list(value.items()):
                 if str(key).lower() in {"account", "email", "email_address", "username"} and item:
-                    value[key] = "[账号已隐藏]"
+                    value[key] = red("account", lang)
                 else:
                     hide_account_identity(item)
         elif isinstance(value, list):
@@ -180,7 +180,7 @@ def sanitize_runtimes_for_public(data):
     return clean
 
 
-def sanitize_tmux_for_public(tmux_data: dict) -> dict:
+def sanitize_tmux_for_public(tmux_data: dict, lang: str = "zh") -> dict:
     """对 Tmux 会话数据进行公网安全脱敏。
     核心安全红线：彻底清除/屏蔽实际终端输出 (preview)，防止命令回显与对话敏感信息泄露！
     """
@@ -198,7 +198,7 @@ def sanitize_tmux_for_public(tmux_data: dict) -> dict:
         for w in s.get("windows") or []:
             for p in w.get("panes") or []:
                 # 终端输出: 公网只读模式下完全屏蔽终端捕获文本
-                p["preview"] = [" [公网只读视图：终端屏幕输出已安全屏蔽] "]
+                p["preview"] = [" " + red("term", lang) + " "]
                 if p.get("cwd"):
                     p["cwd"] = HOME_DIR_RE.sub("~", p["cwd"])
                 if p.get("command"):
@@ -218,14 +218,14 @@ def sanitize_tmux_for_public(tmux_data: dict) -> dict:
     return clean
 
 
-def sanitize_services_for_public(services: list) -> list:
+def sanitize_services_for_public(services: list, lang: str = "zh") -> list:
     """对服务列表进行公网安全脱敏。"""
     out = []
     for s in services or []:
         svc = dict(s)
         # 公网服务页只展示服务/端口/资源，不把可复制的启动命令和工作目录带出去。
-        svc["cmdline"] = "[命令已隐藏]"
-        svc["cwd"] = "[路径已隐藏]" if svc.get("cwd") else None
+        svc["cmdline"] = red("cmd", lang)
+        svc["cwd"] = red("path_hidden", lang) if svc.get("cwd") else None
         # 对 IP 进行脱敏: 私有 IP 和 Tailscale IP 脱敏为 127.0.0.1 或 0.0.0.0
         ip = svc.get("ip") or ""
         if PRIVATE_IP_RE.search(ip) or TAILSCALE_IP_RE.search(ip):
@@ -238,7 +238,7 @@ def sanitize_services_for_public(services: list) -> list:
     return out
 
 
-def sanitize_tools_conf_for_public(tools_conf_data: dict) -> dict:
+def sanitize_tools_conf_for_public(tools_conf_data: dict, lang: str = "zh") -> dict:
     """对工具配置进行公网脱敏，抹除局域网 IP 与 Tailscale 真实地址。"""
     if not isinstance(tools_conf_data, dict):
         return {}
@@ -252,7 +252,7 @@ def sanitize_tools_conf_for_public(tools_conf_data: dict) -> dict:
     return conf
 
 
-def sanitize_agent_detail_for_public(detail: dict) -> dict:
+def sanitize_agent_detail_for_public(detail: dict, lang: str = "zh") -> dict:
     """对 Agent 详细信息进行公网安全脱敏。
     保护:
     - 个人记忆/人设完全脱敏（公网视图只保留条数与脱敏占位）
@@ -287,18 +287,18 @@ def sanitize_agent_detail_for_public(detail: dict) -> dict:
                         or key_norm.endswith("_id")
                         or key_norm.endswith("_path")
                         or any(part in key_norm for part in ("token", "password", "secret", "private_key"))):
-                    result[key] = "[已隐藏]"
+                    result[key] = red("hidden", lang)
                 elif key_norm in command_keys or "command" in key_norm or key_norm.startswith("cmd_"):
-                    result[key] = "[命令已隐藏]"
+                    result[key] = red("cmd", lang)
                 elif key_norm in path_keys or key_norm.endswith("_path"):
-                    result[key] = "[路径已隐藏]" if item else ""
+                    result[key] = red("path_hidden", lang) if item else ""
                 else:
                     result[key] = scrub(item)
             return result
         if isinstance(value, list):
             return [scrub(item) for item in value]
         if isinstance(value, str):
-            return sanitize_public_payload(value)
+            return sanitize_public_payload(value, lang)
         return value
 
     # 顶层 Agent id/name 是 UI 必需的产品标签，不是机器或账户标识。
@@ -309,7 +309,7 @@ def sanitize_agent_detail_for_public(detail: dict) -> dict:
     if top_name is not None:
         clean["name"] = top_name
     if detail.get("bin"):
-        clean["bin"] = "[路径已隐藏]"
+        clean["bin"] = red("path_hidden", lang)
 
     # 私人技能名/描述、MCP 服务名/命令和定时任务标题可能包含项目或用户信息；
     # 保留数量、状态与调度数据，避免详情页完全失去运行概况。
@@ -319,13 +319,13 @@ def sanitize_agent_detail_for_public(detail: dict) -> dict:
                 skill["name"] = f"Skill {i}"
                 skill["category"] = "custom"
                 if skill.get("description"):
-                    skill["description"] = "[技能描述已脱敏]"
+                    skill["description"] = red("skill", lang)
     if isinstance(clean.get("mcp_servers"), list):
         for i, server in enumerate(clean["mcp_servers"], 1):
             if isinstance(server, dict):
                 server["name"] = f"MCP Server {i}"
                 if server.get("command"):
-                    server["command"] = "[命令已隐藏]"
+                    server["command"] = red("cmd", lang)
 
     if isinstance(clean.get("cron"), list):
         for i, job in enumerate(clean["cron"], 1):
@@ -342,8 +342,8 @@ def sanitize_agent_detail_for_public(detail: dict) -> dict:
                 count = mems[key].get("count", 0)
                 mems[key] = {
                     "count": count,
-                    "preview": f"[公网视图记忆已脱敏 (共 {count} 条设定)]",
-                    "topics": ["[设定已脱敏]"] if count > 0 else []
+                    "preview": red("memory", lang, n=count),
+                    "topics": [red("setting", lang)] if count > 0 else []
                 }
 
     # 定时任务处理 (如 Hermes cron)
@@ -351,7 +351,7 @@ def sanitize_agent_detail_for_public(detail: dict) -> dict:
         for job in clean["cron"]:
             if isinstance(job, dict):
                 if job.get("prompt"):
-                    job["prompt"] = "[公网视图提示词已安全脱敏]"
+                    job["prompt"] = red("prompt", lang)
                 if "origin" in job and isinstance(job["origin"], dict):
                     orig = job["origin"]
                     if "chat_id" in orig: orig["chat_id"] = "******"
@@ -391,3 +391,28 @@ def scan_for_secrets(content: str) -> list:
             found.append((name, snip))
 
     return found
+
+# ---------------- 本地化脱敏占位符 ----------------
+# 静态导出按语言生成三语页面; 占位符文案必须跟随页面语言, 否则 en/ja 页面会混入中文。
+_RED_L10N = {
+    "content": ("[内容已脱敏]", "[content redacted]", "[内容は非公開]"),
+    "path": ("[路径已脱敏]", "[path redacted]", "[パスは非公開]"),
+    "link": ("[链接已脱敏]", "[link redacted]", "[リンクは非公開]"),
+    "account": ("[账号已隐藏]", "[account hidden]", "[アカウント非表示]"),
+    "cmd": ("[命令已隐藏]", "[command hidden]", "[コマンド非表示]"),
+    "path_hidden": ("[路径已隐藏]", "[path hidden]", "[パス非表示]"),
+    "hidden": ("[已隐藏]", "[hidden]", "[非表示]"),
+    "skill": ("[技能描述已脱敏]", "[skill description redacted]", "[スキル説明は非公開]"),
+    "prompt": ("[公网视图提示词已安全脱敏]", "[prompt redacted for public view]", "[プロンプトは非公開]"),
+    "memory": ("[公网视图记忆已脱敏 (共 {n} 条设定)]", "[memory redacted for public view ({n} entries)]", "[記憶は非公開 ({n} 件)]"),
+    "setting": ("[设定已脱敏]", "[setting redacted]", "[設定は非公開]"),
+    "term": ("[公网静态只读视图：终端屏幕输出已安全屏蔽]", "[Public static read-only view: terminal output hidden]", "[公開静的ビュー：端末出力は非表示]"),
+}
+_RED_INDEX = {"zh": 0, "en": 1, "ja": 2}
+
+
+def red(kind, lang="zh", **kw):
+    """按语言取脱敏占位符; kind 未知时回退 content。"""
+    vals = _RED_L10N.get(kind) or _RED_L10N["content"]
+    s = vals[_RED_INDEX.get(lang, 0)]
+    return s.format(**kw) if kw else s

@@ -620,7 +620,7 @@ def _tmux_by_cwd(cwd):
     return None
 
 
-def tmux_wake_session(session_name: str, pane: str = "") -> tuple:
+def tmux_wake_session(session_name: str, pane: str = "", lang=DEFAULT_LANG) -> tuple:
     """智能唤醒 / 推进指定的 Tmux 会话。
     1. 抓取终端末尾输出。
     2. 快速判断是否有常见确认提示（y/n、回车确认、选项选择）。
@@ -640,10 +640,10 @@ def tmux_wake_session(session_name: str, pane: str = "") -> tuple:
     lower_tail = tail_text.lower()
     if any(k in lower_tail for k in ["[y/n]", "(y/n)", "[y/n]?", "continue? [y/n]", "allow? [y/n]", "approve?"]):
         _tmux_run(["send-keys", "-t", target, "y", "Enter"])
-        return True, "已自动输入确认 (y + Enter) 推进任务"
+        return True, t(lang, "mm_wake_y")
     elif any(k in lower_tail for k in ["press enter", "press [enter]", "hit enter", "press return"]):
         _tmux_run(["send-keys", "-t", target, "Enter"])
-        return True, "已自动发送回车 (Enter) 继续执行"
+        return True, t(lang, "mm_wake_enter")
 
     # 3. 关联 Goal 检查：如果退回到了 shell 且有 resume 命令
     if any(prompt in lower_tail[-100:] for prompt in ["$ ", "# ", "❯ ", "> "]):
@@ -654,7 +654,7 @@ def tmux_wake_session(session_name: str, pane: str = "") -> tuple:
             if g_info and g_info.get("gid"):
                 resume_cmd = f"/home/tetsuya/.bun/bin/omp --resume {g_info['gid']} --auto-approve"
                 _tmux_run(["send-keys", "-t", target, resume_cmd, "Enter"])
-                return True, "检测到进程中断，已自动注入恢复命令重启任务"
+                return True, t(lang, "mm_wake_resume")
         except Exception:
             pass
 
@@ -676,16 +676,16 @@ def tmux_wake_session(session_name: str, pane: str = "") -> tuple:
             cmd = ["sudo", "-n", "-u", "tetsuya", hermes_bin, "-z", prompt]
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
             out_lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
-            summary_msg = out_lines[-1] if out_lines else (proc.stderr.strip()[:100] or "Hermes 已完成分析并发送按键")
-            return True, f"Hermes: {summary_msg}"
+            summary_msg = out_lines[-1] if out_lines else (proc.stderr.strip()[:100] or t(lang, "mm_wake_hermes", msg="—"))
+            return True, f"Hermes: {summary_msg}"  # Hermes 为专有名词, 前缀保留
         except subprocess.TimeoutExpired:
             _tmux_run(["send-keys", "-t", target, "Enter"])
-            return True, "已注入回车推进"
+            return True, t(lang, "mm_wake_enter2")
         except Exception as e:
             pass
 
     # 5. 兜底推进：发送一个 Enter
     _tmux_run(["send-keys", "-t", target, "Enter"])
-    return True, "已向终端发送 Enter 推进执行"
+    return True, t(lang, "mm_wake_enter3")
 
 

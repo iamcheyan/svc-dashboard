@@ -82,11 +82,13 @@ def _tmux_summary_html(lang=DEFAULT_LANG):
                 f'<pre>{escape(summary)}</pre></div>')
         cards.append(
             f'<article class="tmux-session-card"><div class="tmux-session-head">'
-            f'<b>{escape(session)}</b><span>{len(rows)} pane(s)</span></div>'
+            f'<b>{escape(session)}</b><span>{t(lang, "tmux_panes", n=len(rows))}</span></div>'
             f'{"".join(pane_html)}</article>')
     if not cards:
-        return '<div class="tmux-goals"><div class="gempty">暂无 tmux session</div></div>'
-    return f'<div class="tmux-goals"><div class="tmux-goals-meta">tmux sessions: {len(groups)} · panes: {len(panes)}</div>{"".join(cards)}</div>'
+        return f'<div class="tmux-goals"><div class="gempty">{t(lang, "tmux_none")}</div></div>'
+    return (f'<div class="tmux-goals"><div class="tmux-goals-meta">'
+            f'{t(lang, "tmux_total_sessions")}: {len(groups)} · {t(lang, "tmux_total_panes")}: {len(panes)}'
+            f'</div>{"".join(cards)}</div>')
 
 
 def render_goal_cards(cards, lang=DEFAULT_LANG):
@@ -391,7 +393,7 @@ def render_fragment(frag, lang, host_header, ts_mode=False):
                 parse_watchdog_events(), parse_completed_goals(),
                 parse_repo_commits()), lang)
         elif frag == "toolchips":
-            html = render_toolchips(gather(), host_header, lang)
+            html = render_toolchips(gather(lang), host_header, lang)
         else:
             return None
         with _frag_lock:

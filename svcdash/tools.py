@@ -5,6 +5,10 @@ from svcdash.config import SERVER_VER
 from svcdash.procscan import read, gather
 from svcdash.sysinfo import sys_info
 from svcdash.goals import WATCHDOG_LOG
+from svcdash.i18n import t, DEFAULT_LANG
+
+# 清理扫描的目标家目录(与 runtimes.HOME 同一约定)。
+HOME_DIR = "/home/tetsuya"
 # ================= 工具页: 健康检查 / 垃圾清理 / 网络速测 / 用户服务 =================
 # 全部纯标准库; 写操作只限下方枚举路径(红线: 用户媒体/System.db/git 历史/.env 永不触碰)。
 
@@ -247,7 +251,7 @@ def _dir_size(path, deadline, cap=8000):
     return total
 
 
-def _scan_journal():
+def _scan_journal(lang=DEFAULT_LANG):
     rc, out, err = _run(["sudo", "-n", "journalctl", "--disk-usage"], timeout=10)
     used = _parse_size(out) if rc == 0 else 0
     over = max(0, used - 200 * 1024 ** 2)
@@ -255,7 +259,7 @@ def _scan_journal():
             "detail": (out or err).splitlines()[0][:120] if (out or err) else "—"}
 
 
-def _scan_apt():
+def _scan_apt(lang=DEFAULT_LANG):
     total = n = 0
     d = "/var/cache/apt/archives"
     try:
@@ -345,40 +349,41 @@ def _binobj_paths():
     return found
 
 
-def _scan_docker():
+def _scan_docker(lang=DEFAULT_LANG):
     rc, out, err = _run(["docker", "system", "df"], timeout=10)
     return {"size": 0, "count": 0, "display_only": True, "raw": (out or err)[:1500],
-            "detail": "docker system df(只读, prune 单独按钮)"}
+            "detail": t(lang, "cl_docker_detail")}
 
 
-def _wrap_scan(sid, paths_fn, detail_fmt):
-    def scan():
+def _wrap_scan(sid, paths_fn, detail_key):
+    def scan(lang=DEFAULT_LANG):
         items = paths_fn()
         return {"size": sum(sz for _p, sz in items), "count": len(items),
-                "detail": detail_fmt.format(n=len(items))}
+                "detail": t(lang, detail_key, n=len(items))}
     return scan
 
 
+# detail 存 i18n 键, 扫描时按语言取; 避免 en/ja 页面混入中文。
 CLEANUP_SCANS = [
-    ("journal", _scan_journal, "journalctl 占用超 200M 的部分"),
-    ("apt", _scan_apt, "apt 下载缓存(.deb)"),
-    ("tmp_old", _wrap_scan("tmp_old", _tmp_old_paths, "/tmp 超 7 天旧文件({n} 项, 已排除 in-use)"), None),
+    ("journal", _scan_journal, "cl_journal"),
+    ("apt", _scan_apt, "cl_apt"),
+    ("tmp_old", _wrap_scan("tmp_old", _tmp_old_paths, "cl_tmp_old"), None),
     ("hermes_cache", _wrap_scan("hermes_cache", lambda: _aged_paths(
         os.path.join(HOME_DIR, ".hermes", "cache", "terminal-output"), HERMES_OLD_DAYS),
-        "~/.hermes 终端输出缓存 >3 天({n} 项)"), None),
+        "cl_hermes"), None),
     ("omp_jsonl", _wrap_scan("omp_jsonl", lambda: _aged_paths(
         os.path.join(HOME_DIR, ".omp", "agent"), OMP_JSONL_OLD_DAYS, suffix=".jsonl", recursive=True),
-        "~/.omp 会话 jsonl >30 天({n} 个)"), None),
-    ("binobj", _wrap_scan("binobj", _binobj_paths, "仓库构建产物 bin/obj({n} 个, 清后触发重建)"), None),
-    ("docker", _scan_docker, "docker 磁盘占用(只读)"),
+        "cl_omp_jsonl"), None),
+    ("binobj", _wrap_scan("binobj", _binobj_paths, "cl_binobj"), None),
+    ("docker", _scan_docker, "cl_docker_readonly"),
 ]
 
 
-def cleanup_scan():
+def cleanup_scan(lang=DEFAULT_LANG):
     items = []
     for sid, scan, _lbl in CLEANUP_SCANS:
         try:
-            it = scan()
+            it = scan(lang)
         except Exception as ex:
             it = {"size": 0, "count": 0, "error": str(ex)[:120]}
         it["id"] = sid
@@ -403,7 +408,7 @@ def _clean_apt():
     return freed, (err or out or f"rc={rc}")[-160:]
 
 
-def _make_path_cleaner(paths_fn):
+def _make_path_cleaner(paths_fn, lang=DEFAULT_LANG):
     def run():
         """执行时服务端重扫(绝不信任客户端路径), 逐路径删除, 单个失败继续。"""
         freed, errs = 0, 0
@@ -418,33 +423,33 @@ def _make_path_cleaner(paths_fn):
                 freed += sz
             except OSError:
                 errs += 1
-        return freed, ("done" if not errs else f"done, {errs} 项失败(权限)")
+        return freed, ("done" if not errs else t(lang, "mm_cleanup_done_perm", n=errs))
     return run
 
 
 CLEANUP_RUNNERS = {
-    "journal": _clean_journal,
-    "apt": _clean_apt,
-    "tmp_old": _make_path_cleaner(_tmp_old_paths),
-    "hermes_cache": _make_path_cleaner(lambda: _aged_paths(
-        os.path.join(HOME_DIR, ".hermes", "cache", "terminal-output"), HERMES_OLD_DAYS)),
-    "omp_jsonl": _make_path_cleaner(lambda: _aged_paths(
-        os.path.join(HOME_DIR, ".omp", "agent"), OMP_JSONL_OLD_DAYS, suffix=".jsonl", recursive=True)),
-    "binobj": _make_path_cleaner(_binobj_paths),
+    "journal": lambda lang=DEFAULT_LANG: _clean_journal(),
+    "apt": lambda lang=DEFAULT_LANG: _clean_apt(),
+    "tmp_old": lambda lang=DEFAULT_LANG: _make_path_cleaner(_tmp_old_paths, lang)(),
+    "hermes_cache": lambda lang=DEFAULT_LANG: _make_path_cleaner(lambda: _aged_paths(
+        os.path.join(HOME_DIR, ".hermes", "cache", "terminal-output"), HERMES_OLD_DAYS), lang)(),
+    "omp_jsonl": lambda lang=DEFAULT_LANG: _make_path_cleaner(lambda: _aged_paths(
+        os.path.join(HOME_DIR, ".omp", "agent"), OMP_JSONL_OLD_DAYS, suffix=".jsonl", recursive=True), lang)(),
+    "binobj": lambda lang=DEFAULT_LANG: _make_path_cleaner(_binobj_paths, lang)(),
 }
 
 
-def cleanup_run(ids):
+def cleanup_run(ids, lang=DEFAULT_LANG):
     """逐项真清: 任何一项失败不影响其他项; 附 df 前后对比。"""
     free_before = shutil.disk_usage("/").free
     results = []
     for sid in ids:
         fn = CLEANUP_RUNNERS.get(sid)
         if not fn:
-            results.append({"id": sid, "ok": False, "freed": 0, "msg": "unknown item"})
+            results.append({"id": sid, "ok": False, "freed": 0, "msg": t(lang, "mm_cleanup_unknown_item")})
             continue
         try:
-            freed, msg = fn()
+            freed, msg = fn(lang)
             results.append({"id": sid, "ok": True, "freed": freed, "msg": msg})
         except Exception as ex:
             results.append({"id": sid, "ok": False, "freed": 0, "msg": str(ex)[:160]})
@@ -453,7 +458,7 @@ def cleanup_run(ids):
             "df_freed": max(0, free_after - free_before)}
 
 
-def docker_prune():
+def docker_prune(lang=DEFAULT_LANG):
     """docker system prune -f(悬空资源; prune 按钮单独, 前端二次确认)。"""
     rc, out, err = _run(["docker", "system", "prune", "-f"], timeout=120)
     return {"ok": rc == 0, "msg": (out or err or f"rc={rc}")[-400:]}
@@ -472,7 +477,7 @@ def _tailscale(cmd, timeout=8):
     return rc, out, err
 
 
-def ts_ping():
+def ts_ping(lang=DEFAULT_LANG):
     """tailscale status 取对端, tailscale ping 测对端延迟。"""
     rc, out, err = _tailscale(["tailscale", "status"])
     if rc != 0:
@@ -484,7 +489,7 @@ def ts_ping():
             peer = parts[0].split(":")[0]
             break
     if not peer:
-        return {"ok": True, "peer": None, "rtt_ms": None, "msg": "no peers"}
+        return {"ok": True, "peer": None, "rtt_ms": None, "msg": t(lang, "mm_net_no_peers")}
     rc, out, err = _tailscale(["tailscale", "ping", "--timeout", "3s", "-c", "1", peer])
     m = re.search(r"in ([\d.]+)\s*(ms|s)\b", out)
     if m:
@@ -493,7 +498,7 @@ def ts_ping():
     return {"ok": False, "peer": peer, "rtt_ms": None, "msg": (out or err or f"rc={rc}")[:120]}
 
 
-def net_test():
+def net_test(lang=DEFAULT_LANG):
     """外网 HEAD 延迟(3 次取最小) + tailscale 对端 ping。"""
     import urllib.request
     lat, err = [], ""
@@ -510,7 +515,7 @@ def net_test():
             err = str(ex)[:120]
             break
     return {"ok": bool(lat), "latency_ms": min(lat) if lat else None,
-            "samples": lat, "error": err, "tailscale": ts_ping()}
+            "samples": lat, "error": err, "tailscale": ts_ping(lang)}
 
 
 
@@ -536,13 +541,13 @@ def user_services():
     return units
 
 
-def user_service_action(unit, action):
+def user_service_action(unit, action, lang=DEFAULT_LANG):
     if action not in ("restart", "start", "stop"):
-        return {"ok": False, "msg": "bad action"}
+        return {"ok": False, "msg": t(lang, "mm_usvc_bad_action")}
     if not unit.endswith(".service") or "svc-dashboard" in unit:
-        return {"ok": False, "msg": "unit not allowed"}
+        return {"ok": False, "msg": t(lang, "mm_usvc_not_allowed")}
     if unit not in {u["unit"] for u in user_services()}:
-        return {"ok": False, "msg": "unknown unit"}
+        return {"ok": False, "msg": t(lang, "mm_usvc_unknown")}
     rc, out, err = _usvc_cmd(["systemctl", "--user", action, unit], timeout=20)
     return {"ok": rc == 0, "msg": (out or err or ("ok" if rc == 0 else f"rc={rc}"))[:200]}
 

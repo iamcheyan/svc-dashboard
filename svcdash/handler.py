@@ -223,7 +223,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path.startswith("/static/"):
             self._send_static(path[len("/static/"):])
         elif path == "/api":
-            self._send_json(200, {"updated": time.time(), "services": procscan.gather()})
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
+            self._send_json(200, {"updated": time.time(), "services": procscan.gather(lang)})
         elif path == "/api/sys":
             self._send_json(200, sysinfo.sys_info())
         elif path == "/api/fragment":
@@ -240,10 +241,11 @@ class Handler(BaseHTTPRequestHandler):
             qs = parse_qs(urlparse(self.path).query)
             gid = (qs.get("gid") or [""])[0]
             session = (qs.get("session") or [""])[0]
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             if not gid and not session:
-                self._send_json(400, {"ok": False, "msg": "gid or session required"})
+                self._send_json(400, {"ok": False, "msg": t(lang, "mm_gid_required")})
             else:
-                self._send_json(200, goals.goal_detail(gid, session))
+                self._send_json(200, goals.goal_detail(gid, session, lang))
         elif path == "/api/goals":
             qs = parse_qs(urlparse(self.path).query)
             try:
@@ -280,8 +282,9 @@ class Handler(BaseHTTPRequestHandler):
             uid = (qs.get("unit") or [""])[0]
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             if not uid:
-                self._send_json(200, {"units": [{"id": u["id"], "label": u["label"], "desc": u["desc"]}
-                                       for u in manage.MANAGE_UNITS]})
+                self._send_json(200, {"units": [
+                    {"id": u["id"], "label": manage.unit_label(u, lang), "desc": manage.unit_desc(u, lang)}
+                    for u in manage.MANAGE_UNITS]})
             else:
                 self._send_json(200, manage.manage_status(uid, lang))
         elif path == "/api/svcctl":
@@ -289,12 +292,14 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/trajectory":
             qs = parse_qs(urlparse(self.path).query)
             repo = (qs.get("repo") or [""])[0]
-            self._send_json(200, repos.repo_trajectory(repo))
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
+            self._send_json(200, repos.repo_trajectory(repo, lang))
         elif path == "/api/commitdiff":
             qs = parse_qs(urlparse(self.path).query)
             repo = (qs.get("repo") or [""])[0]
             sha = (qs.get("sha") or [""])[0]
-            self._send_json(200, repos.repo_commit_diff(repo, sha))
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
+            self._send_json(200, repos.repo_commit_diff(repo, sha, lang=lang))
         elif path.startswith("/api/agentlog"):
             qs = parse_qs(urlparse(self.path).query)
             sid = (qs.get("sid") or [""])[0]
@@ -308,16 +313,18 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/health":
             self._send_json(200, tools.health_check())
         elif path == "/api/nettest":
-            self._send_json(200, tools.net_test())
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
+            self._send_json(200, tools.net_test(lang))
         elif path == "/api/agentdetail":
             qs = parse_qs(urlparse(self.path).query)
             agent_id = (qs.get("agent") or [""])[0]
+            lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             if not agent_id:
                 self._send_json(400, {"ok": False, "msg": "agent required"})
             else:
                 # 实时在线版是私有运维界面，保留本机完整详情；公开静态导出
                 # 在 export.py 中单独使用 for_public=True 做严格脱敏。
-                self._send_json(200, runtimes.inspect_agent_detail(agent_id, for_public=False))
+                self._send_json(200, runtimes.inspect_agent_detail(agent_id, for_public=False, lang=lang))
         elif path == "/api/runtimes":
             # 额度后台刷新(过期 5 分钟且无任务在跑时触发), 本响应返回缓存快照
             if not runtimes.quota_snapshot()["running"]:
@@ -402,7 +409,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._token_ok():
             self._send_json(403, {"ok": False, "needToken": True,
-                                  "msg": "invalid or missing X-Svc-Token"})
+                                  "msg": t(detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query), "mm_token_invalid")})
             return
         try:
             body = json.loads(raw.decode("utf-8") or "{}")
@@ -428,18 +435,18 @@ class Handler(BaseHTTPRequestHandler):
             self.log_message("cleanup action=%s dry_run=%s items=%s", action, dry, items)
             try:
                 if action == "docker_prune":
-                    self._send_json(200, tools.docker_prune())
+                    self._send_json(200, tools.docker_prune(lang))
                 elif dry:
-                    self._send_json(200, tools.cleanup_scan())
+                    self._send_json(200, tools.cleanup_scan(lang))
                 else:
-                    self._send_json(200, tools.cleanup_run(items))
+                    self._send_json(200, tools.cleanup_run(items, lang))
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
         elif path == "/api/aicleanup":
             from . import aicleanup
             self.log_message("aicleanup %s", body)
             try:
-                ok, msg = aicleanup.aicleanup_start()
+                ok, msg = aicleanup.aicleanup_start(lang)
                 self._send_json(200, {"ok": ok, "msg": msg})
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
@@ -448,7 +455,7 @@ class Handler(BaseHTTPRequestHandler):
             action = str(body.get("action") or "")
             self.log_message("uservice %s %s", unit, action)
             try:
-                self._send_json(200, tools.user_service_action(unit, action))
+                self._send_json(200, tools.user_service_action(unit, action, lang))
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
         elif path == "/api/svcctl":
@@ -464,7 +471,7 @@ class Handler(BaseHTTPRequestHandler):
             model = str(body.get("model") or "")
             self.log_message("modeltest %s %s", provider, model)
             try:
-                ok, msg = runtimes.model_test_start(provider, model)
+                ok, msg = runtimes.model_test_start(provider, model, lang)
                 self._send_json(200, {"ok": ok, "msg": msg})
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
@@ -473,7 +480,7 @@ class Handler(BaseHTTPRequestHandler):
             action = str(body.get("action") or "")
             self.log_message("agentctl %s %s", agent, action)
             try:
-                ok, msg = runtimes.agentctl_start(agent, action)
+                ok, msg = runtimes.agentctl_start(agent, action, lang)
                 self._send_json(200, {"ok": ok, "msg": msg})
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
@@ -482,7 +489,7 @@ class Handler(BaseHTTPRequestHandler):
             hint_session = str(body.get("session") or "")
             self.log_message("goalresume cmd=%s", resume_cmd[:60])
             try:
-                ok, msg = goals.goal_resume(resume_cmd, hint_session)
+                ok, msg = goals.goal_resume(resume_cmd, hint_session, lang)
                 self._send_json(200, {"ok": ok, "msg": msg})
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
@@ -491,7 +498,7 @@ class Handler(BaseHTTPRequestHandler):
             pane = str(body.get("pane") or "")
             self.log_message("tmux_wake session=%s pane=%s", session, pane)
             try:
-                ok, msg = agents.tmux_wake_session(session, pane)
+                ok, msg = agents.tmux_wake_session(session, pane, lang)
                 self._send_json(200, {"ok": ok, "msg": msg})
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
@@ -529,12 +536,12 @@ class Handler(BaseHTTPRequestHandler):
                         cmd = ["sudo", "-n", "systemctl", "start", svc_unit]
                     p = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
                     if p.returncode == 0:
-                        self._send_json(200, {"ok": True, "msg": f"{name} 已触发"})
+                        self._send_json(200, {"ok": True, "msg": t(lang, "mm_task_triggered", name=name)})
                     else:
                         err = p.stderr.strip() or f"code {p.returncode}"
-                        self._send_json(200, {"ok": False, "msg": f"触发失败: {err[:120]}"})
+                        self._send_json(200, {"ok": False, "msg": t(lang, "mm_task_trigger_fail", e=err[:120])})
                 else:
-                    self._send_json(200, {"ok": True, "msg": f"{name} cron 任务状态正常"})
+                    self._send_json(200, {"ok": True, "msg": t(lang, "mm_task_cron_ok", name=name)})
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
 

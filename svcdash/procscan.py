@@ -1,4 +1,5 @@
 import glob, os, re, signal, socket, subprocess, threading, time
+from svcdash.i18n import t, DEFAULT_LANG
 def read(path):
     try:
         with open(path, "rb") as f:
@@ -348,7 +349,7 @@ def service_resources(pids):
     up_sec = int(now - (_BOOT_TIME + start2 / _CLK_TCK)) if start2 else 0
     return {"cpu": round(cpu_pct, 1), "mem_mb": round(mem / 1048576.0, 1),
             "up_sec": max(0, up_sec)}
-def gather():
+def gather(lang=DEFAULT_LANG):
     """扫描一次,返回服务列表(按端口排序,同端口合并)。
 
     只在用户访问页面时调用 —— 没有后台自动刷新,没人访问时 dashboard
@@ -435,7 +436,7 @@ def gather():
             continue
         entries.append({
             "ip": "0.0.0.0", "port": u["port"], "pids": [],
-            "name": u.get("label", u["id"]) + " (paused)",
+            "name": t(lang, u.get("label", u["id"])) + " (" + t(lang, "badge_paused") + ")",
             "cmdline": "—", "cwd": None,
             "type": "direct", "unit": None, "container_id": None,
             "scope": "user", "docker_proxy": False, "is_self": False,

@@ -11,7 +11,7 @@ from svcdash.render import _render_shell_core, _svc_rows
 from svcdash.tools import tools_conf
 
 
-from svcdash.privacy import (
+from svcdash.privacy import (  # noqa: F401
     sanitize_services_for_public,
     sanitize_tmux_for_public,
     sanitize_tools_conf_for_public,
@@ -65,10 +65,11 @@ def _static_chart_history(sysdata, limit=24):
     return history
 
 
-def _collect_static_snapshot():
+def _collect_static_snapshot(lang=DEFAULT_LANG):
     now = time.time()
-    raw_services = procscan.gather()
-    clean_services = sanitize_services_for_public(raw_services)
+    raw_services = {lg: procscan.gather(lg) for lg in LANG_KEYS}
+    # 脱敏占位符随语言变化: 三语页面共用同一采集快照, 因此按语言各脱敏一份。
+    clean_services = {lg: sanitize_services_for_public(raw_services[lg], lg) for lg in LANG_KEYS}
     sysdata = deep_sanitize(sysinfo.sys_info(), mask_ips=True, mask_paths=True)
     chart_data = _static_chart_history(sysdata)
 
@@ -88,7 +89,7 @@ def _collect_static_snapshot():
 
     # Tmux 会话全量拓扑脱敏：彻底抹除实际终端输出预览与私有路径
     raw_tmux = agents.scan_tmux_full()
-    clean_tmux = sanitize_tmux_for_public(raw_tmux)
+    clean_tmux = {lg: sanitize_tmux_for_public(raw_tmux, lg) for lg in LANG_KEYS}
 
     # Agent 智能体状态脱敏与详情收集
     clean_agent_details = {}
@@ -102,15 +103,20 @@ def _collect_static_snapshot():
         quota_deadline = time.monotonic() + 110
         while quota_snapshot().get("running") and time.monotonic() < quota_deadline:
             time.sleep(0.25)
-        clean_runtimes = sanitize_runtimes_for_public(scan_runtimes())
+        _rt_raw = scan_runtimes()
+        clean_runtimes = {lg: sanitize_runtimes_for_public(_rt_raw, lg) for lg in LANG_KEYS}
+        # 脱敏占位符是语言相关的: 三个语言页面共用同一快照, 因此每个 agent
+        # 需要按三种语言各脱敏一份, 供对应语言页面取用。
         for a in REGISTRY:
             aid = a["id"]
-            clean_agent_details[aid] = inspect_agent_detail(aid, for_public=True)
+            for page_lang in LANG_KEYS:
+                clean_agent_details.setdefault(page_lang, {})[aid] = inspect_agent_detail(
+                    aid, for_public=True, lang=page_lang)
     except Exception:
         clean_runtimes = {}
         clean_agent_details = {}
 
-    clean_tl = sanitize_tools_conf_for_public(tools_conf())
+    clean_tl = {lg: sanitize_tools_conf_for_public(tools_conf(), lg) for lg in LANG_KEYS}
 
     return {
         "now": now, "clean_services": clean_services, "sysdata": sysdata,
@@ -125,16 +131,16 @@ def gather_static_payload(lang=DEFAULT_LANG, snapshot=None):
     """收集并脱敏全量监控与活动数据，生成独立静态 HTML 内容。
     对命令、内部私有 IP、家目录路径、Tmux 终端屏幕输出进行全方位隐私保护脱敏。
     """
-    snapshot = snapshot or _collect_static_snapshot()
+    snapshot = snapshot or _collect_static_snapshot(lang)
     now = snapshot["now"]
-    clean_services = snapshot["clean_services"]
+    clean_services = (snapshot["clean_services"] or {}).get(lang, [])
     sysdata = snapshot["sysdata"]
     chart_data = snapshot["chart_data"]
     goals_data = snapshot["goals_data"]
     repos_data = snapshot["repos_data"]
-    clean_tmux = snapshot["clean_tmux"]
-    clean_runtimes = snapshot["clean_runtimes"]
-    clean_tl = snapshot["clean_tl"]
+    clean_tmux = (snapshot["clean_tmux"] or {}).get(lang, {})
+    clean_runtimes = (snapshot["clean_runtimes"] or {}).get(lang, {})
+    clean_tl = (snapshot["clean_tl"] or {}).get(lang, {})
     tasks_data = deep_sanitize({"tasks": tasks.scan_tasks(lang)}, mask_ips=True, mask_paths=True)
 
     # 生成预渲染骨架与完整 DOM (传空 entries 触发 lite 模式，避免服务端把内部数据硬编码到 HTML)
@@ -164,11 +170,11 @@ def gather_static_payload(lang=DEFAULT_LANG, snapshot=None):
 
     # 公开仓库活动是用户明确要查看的公开信号：保留提交评论、文件路径和
     # 仓库轨迹；Goal/Agent/Tmux/任务等仍走严格内容脱敏。
-    public_goals = sanitize_public_payload(goals_data)
+    public_goals = sanitize_public_payload(goals_data, lang)
     public_goals["events"] = [
         deep_sanitize(event, mask_ips=True, mask_paths=True)
         if event.get("kind") == "commit"
-        else sanitize_public_payload(event)
+        else sanitize_public_payload(event, lang)
         for event in goals_data.get("events", [])
     ]
 
@@ -186,12 +192,12 @@ def gather_static_payload(lang=DEFAULT_LANG, snapshot=None):
         "chartData": chart_data,
         "goalsData": public_goals,
         "reposData": deep_sanitize(repos_data, mask_ips=True, mask_paths=True),
-        "tasksData": sanitize_public_payload(tasks_data),
-        "tmuxData": sanitize_public_payload(clean_tmux),
+        "tasksData": sanitize_public_payload(tasks_data, lang),
+        "tmuxData": sanitize_public_payload(clean_tmux, lang),
         # clean_runtimes 已由 sanitize_runtimes_for_public 处理；不要再次套用
         # 通用内容规则，否则 quota.bucket.label 会被误判为私密文本。
         "runtimesData": clean_runtimes,
-        "agentDetails": snapshot.get("clean_agent_details", {}),
+        "agentDetails": (snapshot.get("clean_agent_details") or {}).get(lang, {}),
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
     }
 
@@ -226,7 +232,7 @@ def export_static(output_dir, lang=DEFAULT_LANG, cname=None):
             shutil.copy2(src, os.path.join(out_static, fn))
 
     # 各语言页面共用同一份采集快照，避免语言版本之间数据不一致或重复采样。
-    snapshot = _collect_static_snapshot()
+    snapshot = _collect_static_snapshot(DEFAULT_LANG)
     # GitHub Pages/CDN 会长时间缓存静态资源；固定版本号会让旧 JS 继续运行，
     # 即使 index.html 已经更新。用本次实际资源内容生成 cache-busting 版本。
     asset_bytes = b"".join(

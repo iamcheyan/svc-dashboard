@@ -14,6 +14,7 @@
 import os
 import subprocess
 import threading
+from svcdash.i18n import t, DEFAULT_LANG
 import time
 
 _OMP = "/home/tetsuya/.bun/bin/omp"
@@ -103,13 +104,13 @@ def _work():
         _STATE.update(status="idle" if rc == 0 else "error", pid=None)
 
 
-def aicleanup_start():
+def aicleanup_start(lang=DEFAULT_LANG):
     with _LOCK:
         if _STATE["status"] == "running":
-            return False, f"busy: 已有清理在跑 (started {time.strftime('%H:%M:%S', time.localtime(_STATE['started']))})"
+            return False, t(lang, "mm_clean_busy", t=time.strftime('%H:%M:%S', time.localtime(_STATE['started'])))
         _STATE.update(status="running", started=time.time(), pid=None)
     threading.Thread(target=_work, daemon=True).start()
-    return True, "cleanup agent started"
+    return True, t(lang, "mm_clean_started")
 
 
 def aicleanup_status():

@@ -113,9 +113,9 @@ def svcctl_action(port, action, lang=DEFAULT_LANG):
     try:
         port = int(port)
     except (TypeError, ValueError):
-        return {"ok": False, "msg": "bad port"}
+        return {"ok": False, "msg": t(lang, "mm_bad_port")}
     if action not in ("pause", "resume"):
-        return {"ok": False, "msg": "bad action"}
+        return {"ok": False, "msg": t(lang, "mm_bad_action")}
     self_port = int(os.environ.get("SVC_PORT", "80"))
     return pause(port, lang, self_port=self_port) if action == "pause" else resume(port, lang)
 
@@ -148,7 +148,7 @@ def pause(port, lang=DEFAULT_LANG, self_port=None):
         cname, cid = dmap[port]
         ok, err = _docker(cid, "pause")
         if not ok:
-            return {"ok": False, "msg": "docker pause: " + err}
+            return {"ok": False, "msg": t(lang, "mm_docker_err", e=err)}
         rec.update({"kind": "docker", "container_id": cid, "name": cname})
     else:
         if not pids:
@@ -183,7 +183,7 @@ def resume(port, lang=DEFAULT_LANG):
     if rec.get("kind") == "docker" and rec.get("container_id"):
         ok, err = _docker(rec["container_id"], "unpause")
         if not ok:
-            return {"ok": False, "msg": "docker unpause: " + err}
+            return {"ok": False, "msg": t(lang, "mm_docker_err", e=err)}
     else:
         for p in rec.get("pids", []):
             try:
