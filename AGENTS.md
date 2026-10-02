@@ -21,16 +21,17 @@ svcdash/              后端：config/i18n/icons/procscan/sysinfo/tasks/manage/
 static/               前端：index.html(壳+占位) app.css app.js
 ```
 
-## 二、页面结构（四页签，移动优先）
+## 二、页面结构（五页签，移动优先）
 
-四页：概览/服务/Goal/管理（i18n 三语 zh/en/ja，按 Accept-Language 自动切换，
+五页：概览 / 活动 / Tmux / Agent / 服务（i18n 三语 zh/en/ja，按 Accept-Language 自动切换，
 `?lang=` 可强制）。
 
-- **概览**：状态大字卡、关键资源、常用服务、Goal 摘要、仓库轨迹与少量最近活动；空告警/空 Goal/空事件区块默认隐藏。
-- **服务**：监听端口表与服务分类；默认只显示服务名、端口、状态、CPU/内存/时长，命令/工作目录/PID 放入详情。
-- **Goal**：运行中、异常、最近完成的 Goal 与详情，原始事件流不铺在首页。
-- **管理**：模型检测、Agent 运行时、日志、定时任务、网络/健康检查、垃圾清理、工具直达与偏好设置。
-- 桌面端用顶部分类条 `[data-cat]`，移动端用底部页签 `[data-p=0..4]`；已移除左右滑动切页手势，横向滑动仅用于页内可横滑内容。
+- **概览**：状态大字卡、关键资源、四大中枢直达入口、额度进度、仓库轨迹与最近活动。
+- **活动**：聚合提交、远程同步与 Goal 生命周期事件流，支持项目快速过滤与纯净极简流模式。
+- **Tmux**：Tmux 活跃会话与终端实时预览、Goal 任务卡片，带「⚡ 唤醒推进」（调用 Hermes 自动推断处理并恢复堵塞任务）与「▶ 恢复运行」。
+- **Agent**：Agent 运行时状态、模型检测（1-token 探活）、环境与工具中枢。
+- **服务**：监听端口表与分类（用户/Web/Docker/系统/All/Tailscale/看门狗/管理）；移动端导航放最后；内嵌 Tailscale 网络拓扑卡片（连接机器、Serve 代理服务、Ping 延迟测速与网络体检 Netcheck）。
+- 桌面端用顶部分类条 `[data-cat]`（概览/活动/Tmux/Agent/服务），移动端用底部页签 `[data-p=0..4]`；支持跟手弹性左右滑动切卡，且横向滑动仅在页首或无内部横滚干扰时生效。
 
 ## 三、API 端点表（svcdash/handler.py 路由，均已实现）
 
@@ -40,6 +41,10 @@ static/               前端：index.html(壳+占位) app.css app.js
 | `/static/*` | GET | CSS/JS（ETag + immutable 缓存，304） |
 | `/api` | GET | 服务列表 JSON（ip/port/pids/cmdline/cwd/type/unit） |
 | `/api/sys` | GET | 负载/CPU/内存/磁盘/开机时长 + 水位 + top 进程 |
+| `/api/tailscale` | GET | Tailscale 节点状态、Serve 代理、已连机器与外网检测 |
+| `POST /api/tailscale/ping` | POST | `{peer}` Tailscale 节点 ping 延迟测速 |
+| `POST /api/tailscale/netcheck` | POST | 触发 Tailscale 完整网络体检（DERP 延迟/UDP 连通） |
+| `POST /api/tmux/wake` | POST | `{session,pane}` 一键唤醒推进 Tmux 任务（智能调用 Hermes 探查处理阻塞） |
 | `/api/fragment?p=goals\|events\|toolchips` | GET | 渲染好的 HTML 片段（5s 缓存，首屏异步填充） |
 | `/api/goals?limit=` | GET | goal 状态聚合 + 已完成台账 + 事件时间线 |
 | `/api/goaldetail?gid=&session=` | GET | 单 goal 详情 |

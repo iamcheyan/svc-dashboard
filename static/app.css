@@ -877,39 +877,65 @@
            padding: 10px max(12px, env(safe-area-inset-right)) 16px
                     max(12px, env(safe-area-inset-left)); }
     /* 每页底部留出 悬浮底栏(64px)+悬浮空隙(12px)+余量(24px)+safe-area: 末条完整露出 */
-    #track > .pg { padding-bottom: calc(64px + 12px + 24px + env(safe-area-inset-bottom)); }
+    #track > .pg { padding-bottom: calc(52px + 12px + env(safe-area-inset-bottom, 0px)); }
 
-    /* 底部悬浮胶囊栏(iOS Liquid Glass): fixed 脱离文档流, 左右 20px 边距,
-       圆角 28px + 玻璃材质 + 细边框 + 柔和阴影; 选中=内嵌深色胶囊+强调蓝 */
-    #tabbar { display: flex; position: fixed; left: 20px; right: 20px;
-              bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 40;
-              border-radius: 28px; padding: 6px;
+    /* 底部导航栏: 更沉底、紧凑贴手、单手操作更顺畅, 带下滑隐藏动效 */
+    #tabbar { display: flex; position: fixed; left: 10px; right: 10px;
+              bottom: calc(4px + env(safe-area-inset-bottom, 0px)); z-index: 40;
+              border-radius: 20px; padding: 4px 6px;
               background: var(--glass-bg);
-              -webkit-backdrop-filter: blur(20px) saturate(1.8);
-              backdrop-filter: blur(20px) saturate(1.8);
+              -webkit-backdrop-filter: blur(24px) saturate(1.8);
+              backdrop-filter: blur(24px) saturate(1.8);
               border: 1px solid var(--glass-bd);
-              box-shadow: var(--glass-shadow); }
-    #tabbar .tab { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
-                   padding: 6px 0 4px; min-height: 52px; border-radius: 22px;
-                   color: var(--text-faint); font-size: 10.5px;
+              box-shadow: 0 4px 24px rgba(0, 0, 0, 0.38);
+              transition: transform .28s cubic-bezier(0.2, 0, 0, 1), opacity .22s ease;
+              will-change: transform, opacity; }
+    #tabbar.tabbar-hidden {
+      transform: translateY(calc(100% + 24px));
+      opacity: 0;
+      pointer-events: none;
+    }
+    #tabbar .tab { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+                   padding: 4px 0 2px; min-height: 44px; border-radius: 16px;
+                   color: var(--text-faint); font-size: 10px;
                    cursor: pointer; user-select: none; -webkit-user-select: none;
                    -webkit-tap-highlight-color: transparent;
                    transition: background .18s ease, color .18s ease; }
     #tabbar .tab.active { background: var(--nav-pill); color: var(--accent); }
-    #tabbar .tab svg { width: 22px; height: 22px; }
+    #tabbar .tab svg { width: 19px; height: 19px; }
     /* 概要页签未处理告警徽章: 红点+数字 */
-    .tbadge-dot { position: absolute; top: 2px; left: calc(50% + 12px); min-width: 17px; height: 17px;
+    .tbadge-dot { position: absolute; top: 1px; left: calc(50% + 10px); min-width: 16px; height: 16px;
                   padding: 0 4px; border-radius: 999px; background: #c04848; color: #fff;
-                  font-size: 10.5px; font-weight: 700; display: flex; align-items: center;
+                  font-size: 10px; font-weight: 700; display: flex; align-items: center;
                   justify-content: center; border: 1.5px solid var(--glass-bg); }
 
-    /* 浮动刷新圆钮基础样式在全局(桌面同款): 移动端抬高到悬浮底栏上方 */
-    .fab-refresh { bottom: calc(96px + env(safe-area-inset-bottom)); }
+    /* 浮动刷新圆钮基础样式在全局(桌面同款): 移动端适度下移 */
+    .fab-refresh { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+
+    /* 移动端活动页深度精简: 隐藏多余的标题、介绍、仓库选择胶囊、筛选芯片，直奔全部提交流 */
+    #activity-page .act-header,
+    #activity-page #act-repos-bar,
+    #activity-page #act-filters {
+      display: none !important;
+    }
+    #activity-page {
+      padding: 0 !important;
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+    .act-group-card {
+      margin-bottom: 8px !important;
+      padding: 6px 8px !important;
+    }
+    .act-card {
+      padding: 8px 6px !important;
+    }
 
     /* 两层结构: #pages(裁剪窗口) > #track(500% 轨道) > .pg(各 1/5 = 屏宽) */
     #pages { display: block; width: 100%; overflow: hidden; }
     body { overscroll-behavior-x: none; }
-    #pages { touch-action: pan-x pan-y; } /* 横向手势交给原生滚动, 可滑动被裁剪的横向内容(如活动页仓库标签条) */
+    #pages { touch-action: pan-y; } /* 纵向保留原生高速滚动，横向交由左右滑动切页手势接管 */
     .filters { touch-action: pan-x; }
     #track { display: flex; align-items: flex-start; width: 500%;
              will-change: transform;
@@ -918,8 +944,8 @@
     #track.stick { transition: none; }
     #track > .pg { flex: 0 0 20%; min-width: 20%; max-width: 20%; }
     .skel { display: block; }
-    #chart-wrap, #logpage, #agents-page, #toolspage, #activity-page { display: block; }  /* 移动专用面板 */
-    #logpage[hidden], #agents-page[hidden], #toolspage[hidden], #activity-page[hidden] { display: none !important; }
+    #chart-wrap, #logpage, #agents-page, #toolspage, #activity-page, #network-page { display: block; }  /* 移动专用面板 */
+    #logpage[hidden], #agents-page[hidden], #toolspage[hidden], #activity-page[hidden], #network-page[hidden] { display: none !important; }
     /* 概要摘要组件(状态卡+指标2×2+需要处理+最近活动) */
     .statuscard { display: block; margin-bottom: var(--gap-panel); }
     .mgrid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: var(--gap-panel); }
@@ -3286,4 +3312,675 @@
 .ansi-bg-magenta { background-color: rgba(188, 140, 255, 0.2); }
 .ansi-bg-cyan    { background-color: rgba(57, 197, 207, 0.2); }
 .ansi-bg-white   { background-color: rgba(208, 215, 222, 0.2); }
+
+/* ================================================================
+   概览 Agent 卡片组 (多维度额度进度条)
+   ================================================================ */
+.hp-ag-item {
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--bd);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+.hp-ag-item:last-child {
+  border-bottom: none;
+}
+.hp-ag-item:hover, .hp-ag-item:focus-visible {
+  background: var(--bg2);
+  outline: none;
+}
+.hp-ag-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.hp-ag-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.hp-ag-name {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hp-ag-procs {
+  font-size: 11px;
+  color: var(--text-soft);
+  background: var(--bg);
+  border: 1px solid var(--bd);
+  padding: 1px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.hp-ag-cwds {
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+}
+.hp-ag-cwd {
+  font-size: 11px;
+  color: var(--text-soft);
+  background: var(--bg2);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+.hp-ag-buckets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 7px 16px;
+}
+.hp-bucket-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.hp-bucket-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.hp-bucket-name {
+  color: var(--text-soft);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+}
+.hp-bucket-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.hp-bucket-reset {
+  font-size: 10px;
+  color: var(--text-dead);
+}
+.hp-bucket-val {
+  font-weight: 700;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.hp-bucket-val.high { color: var(--green); }
+.hp-bucket-val.mid { color: #f59e0b; }
+.hp-bucket-val.low { color: var(--red); }
+.hp-bucket-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(125, 125, 125, 0.16);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.hp-bucket-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.hp-bucket-fill.high { background: #22c55e; }
+.hp-bucket-fill.mid { background: #f59e0b; }
+.hp-bucket-fill.low { background: #ef4444; }
+.hp-ag-noquota {
+  font-size: 11px;
+  color: var(--text-dead);
+  padding: 2px 0;
+}
+
+
+/* ================================================================
+   Goal 「▶ 恢复运行」按钮 (Plan C)
+   ================================================================ */
+.g-resume-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 6px; border: none; cursor: pointer;
+  background: #16a34a; color: #fff;
+  font-size: 12.5px; font-weight: 600; line-height: 1.2;
+  transition: background .15s, opacity .15s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.g-resume-btn:hover { background: #15803d; }
+.g-resume-btn:active { background: #14532d; }
+.g-resume-btn:disabled { opacity: .5; cursor: not-allowed; }
+.g-resume-btn.ok { background: #374151; }
+@media (max-width: 480px) {
+  .g-resume-btn { padding: 6px 14px; font-size: 13px; }
+}
+
+/* ================================================================
+   Tmux 会话与智能体任务中枢扩展样式 (融合 Goal 与独立后台进程)
+   ================================================================ */
+.tmux-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.tmux-section-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bd);
+}
+.tmux-goal-banner-acts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.tmux-resumable-card {
+  border-left: 3px solid #f97316;
+  background: linear-gradient(180deg, rgba(249, 115, 22, 0.03) 0%, transparent 100%);
+}
+.tmux-resumable-desc {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--bg2);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--text-soft);
+  line-height: 1.4;
+  word-break: break-all;
+}
+.tmux-standalone-card {
+  border-left: 3px solid #ec4899;
+}
+.tmux-proc-cmd-box {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: var(--bg2);
+  border-radius: 6px;
+  font-size: 11.5px;
+  overflow-x: auto;
+}
+.tmux-proc-cmd-box code {
+  color: #f472b6;
+  font-family: monospace;
+}
+
+/* 智能推进唤醒按钮高亮样式 */
+.btn-tmux-wake {
+  background: rgba(245, 158, 11, 0.16) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.38) !important;
+  font-weight: 600 !important;
+}
+.btn-tmux-wake:hover {
+  background: rgba(245, 158, 11, 0.28) !important;
+  border-color: rgba(245, 158, 11, 0.6) !important;
+}
+.btn-tmux-wake.working {
+  opacity: 0.75;
+  cursor: wait;
+}
+.btn-tmux-wake.success {
+  background: rgba(34, 197, 94, 0.22) !important;
+  color: #4ade80 !important;
+  border-color: rgba(34, 197, 94, 0.5) !important;
+}
+
+/* 提交卡片作者头像与评论紧凑布局 */
+.act-author-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.act-avatar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+/* --- Tailscale 网络与服务中枢样式 --- */
+.ts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.ts-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.ts-header-actions {
+  display: flex;
+  gap: 6px;
+}
+.btn-ts-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft, rgba(255,255,255,0.08));
+  background: var(--bg-card, rgba(30,34,42,0.6));
+  color: var(--fg, #e2e8f0);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-ts-action:active {
+  transform: scale(0.96);
+  opacity: 0.8;
+}
+
+.ts-card {
+  background: var(--bg-card, rgba(26,29,36,0.7));
+  border: 1px solid var(--border-soft, rgba(255,255,255,0.08));
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  backdrop-filter: blur(12px);
+}
+.ts-self-card {
+  border-left: 3px solid #3b82f6;
+}
+.ts-self-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.ts-self-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.ts-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.ts-badge.running {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+.ts-self-ips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+.ts-ip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0,0,0,0.25);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+}
+.ts-ip-chip:hover {
+  background: rgba(255,255,255,0.08);
+}
+.ts-dns-text {
+  font-size: 11px;
+  color: var(--fg-dim, #94a3b8);
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  word-break: break-all;
+}
+
+.ts-sec-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg-dim, #cbd5e1);
+  margin: 14px 0 8px 2px;
+}
+
+/* Serve 代理网格 */
+.ts-serve-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+.ts-serve-card {
+  background: var(--bg-card, rgba(26,29,36,0.6));
+  border: 1px solid var(--border-soft, rgba(255,255,255,0.07));
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ts-serve-info {
+  min-width: 0;
+  flex: 1;
+}
+.ts-serve-path {
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #60a5fa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ts-serve-proxy {
+  font-size: 10.5px;
+  color: var(--fg-dim, #94a3b8);
+  margin-top: 2px;
+}
+.ts-serve-btns {
+  display: flex;
+  gap: 5px;
+  margin-left: 8px;
+}
+.btn-ts-mini {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-soft, rgba(255,255,255,0.1));
+  background: rgba(255,255,255,0.06);
+  color: var(--fg, #f8fafc);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.btn-ts-mini:active {
+  transform: scale(0.95);
+}
+
+/* Peers 设备卡片列表 */
+.ts-peers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ts-peer-card {
+  background: var(--bg-card, rgba(26,29,36,0.6));
+  border: 1px solid var(--border-soft, rgba(255,255,255,0.07));
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: border-color 0.2s;
+}
+.ts-peer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.ts-peer-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.ts-os-badge {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.ts-conn-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ts-conn-pill.direct {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+.ts-conn-pill.relay {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+.ts-conn-pill.offline {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+}
+
+.ts-peer-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.ts-peer-ip {
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: #cbd5e1;
+}
+.ts-peer-traffic {
+  font-size: 10.5px;
+  color: var(--fg-dim, #64748b);
+}
+.ts-peer-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+}
+.ts-ping-res {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  margin-left: 4px;
+}
+.ts-ping-res.err {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+/* Netcheck 诊断卡片 */
+.ts-netcheck-panel {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  animation: fadeIn 0.2s ease-out;
+}
+.ts-diag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.ts-diag-item {
+  background: rgba(255,255,255,0.04);
+  padding: 8px;
+  border-radius: 6px;
+  text-align: center;
+}
+.ts-diag-label {
+  font-size: 10px;
+  color: var(--fg-dim, #94a3b8);
+  margin-bottom: 2px;
+}
+.ts-diag-val {
+  font-size: 12px;
+  font-weight: 700;
+}
+.ts-diag-val.ok { color: #10b981; }
+.ts-diag-val.warn { color: #f59e0b; }
+
+/* --- 服务管理面板 (Manage Panel) --- */
+.manage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.manage-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.manage-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.manage-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+.manage-card-desc {
+  color: var(--text-soft);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.manage-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-faint);
+}
+.manage-card-status {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: ui-monospace, monospace;
+}
+.manage-card-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.manage-card-btns .danger {
+  color: var(--c-red, #e06c6c);
+}
+.manage-card-btns .primary {
+  color: var(--c-green, #6ec89a);
+}
+.manage-audit-list {
+  background: rgba(0, 0, 0, .25);
+  border: 1px solid var(--border-faint);
+  border-radius: 8px;
+  padding: 8px 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.manage-audit-item {
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 2px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, .05);
+}
+.manage-audit-item:last-child {
+  border-bottom: none;
+}
+.manage-paused-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.manage-paused-table th {
+  text-align: left;
+  color: var(--text-ghost);
+  font-weight: 400;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.manage-paused-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-faint);
+  vertical-align: middle;
+}
+.st-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.st-badge.running { background: rgba(110, 200, 154, .18); color: #6ec89a; }
+.st-badge.blocked { background: rgba(229, 192, 123, .18); color: #e5c07b; }
+.st-badge.idle { background: rgba(150, 150, 150, .14); color: #888; }
+.st-badge.completed { background: rgba(97, 175, 239, .18); color: #61afef; }
+.btn-task-trigger {
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.btn-tmux-preview.active {
+  background: var(--bg-hover);
+  color: var(--c-blue);
+}
+
+
+
+
 

@@ -444,3 +444,66 @@ def goal_detail(gid, session=""):
 # 快捷工具入口: 端口存活才显示(chips)
 TOOL_LINKS = [("dbeditor", 8810), ("dbviewer", 8800),
               ("wilviewer", 8765), ("mapviewer", 8899)]
+
+
+# ---- Goal 恢复执行 ----
+_SAFE_PREFIXES = ("/home/", "omp ", "agy ", "codex ", "~/.bun/", "/root/")
+# 服务以 root 运行，目标用户是 tetsuya（UID 1000），tmux socket 在 /tmp/tmux-1000/default
+_RESUME_USER = "tetsuya"
+_RESUME_UID  = 1000
+
+def goal_resume(resume_cmd: str, hint_session: str = "") -> tuple:
+    """在用户 tmux session 里执行 resume_cmd。
+    服务以 root 运行，通过 sudo -u tetsuya 在用户的 tmux socket 里创建 session。
+    安全校验: 只允许已知路径前缀的 agent 命令。
+    返回 (ok: bool, msg: str)。
+    """
+    cmd = (resume_cmd or "").strip()
+    if not cmd:
+        return False, "empty resume_cmd"
+    # 安全校验：拒绝 shell 注入特征
+    if any(c in cmd for c in (";", "&&", "||", "`", "$(")):
+        return False, "unsafe characters in resume_cmd"
+    if not any(cmd.startswith(p) for p in _SAFE_PREFIXES):
+        return False, f"resume_cmd must start with a known prefix: {_SAFE_PREFIXES}"
+    # 从 --resume UUID 中提取短 ID 作为 session 名
+    m = re.search(r"--resume\s+([0-9a-f-]{8,})", cmd)
+    sid_short = m.group(1)[:8] if m else "goal"
+    session_name = hint_session or f"resume-{sid_short}"
+    # 找用户的 tmux socket
+    import stat as _stat
+    socket_path = f"/tmp/tmux-{_RESUME_UID}/default"
+    if not os.path.exists(socket_path):
+        # 尝试找到任何可用的 socket
+        for f in os.listdir(f"/tmp/tmux-{_RESUME_UID}"):
+            socket_path = f"/tmp/tmux-{_RESUME_UID}/{f}"
+            break
+    has_tmux = subprocess.run(["which", "tmux"], capture_output=True).returncode == 0
+    if has_tmux and os.path.exists(os.path.dirname(socket_path)):
+        for sname in [session_name, session_name + "-b"]:
+            # 用 sudo -u 在用户上下文里创建 tmux session（避免 root tmux 与用户 tmux 隔离问题）
+            inner_cmd = (
+                f"tmux -S {socket_path} new-session -d -s {sname} "
+                f"-x 220 -y 50 -- bash -c {repr(cmd)}"
+            )
+            r = subprocess.run(
+                ["sudo", "-u", _RESUME_USER, "bash", "-c", inner_cmd],
+                capture_output=True, timeout=12,
+            )
+            if r.returncode == 0:
+                return True, f"tmux session '{sname}' started"
+        # fallback: 直接 tmux（不指定 socket）
+        for sname in [session_name, session_name + "-b2"]:
+            r = subprocess.run(
+                ["sudo", "-u", _RESUME_USER, "tmux", "new-session", "-d", "-s", sname,
+                 "-x", "220", "-y", "50", "--", "bash", "-c", cmd],
+                capture_output=True, timeout=12,
+            )
+            if r.returncode == 0:
+                return True, f"tmux session '{sname}' started (default socket)"
+        return False, f"tmux new-session failed: {r.stderr.decode()[:120]}"
+    # fallback: nohup 后台（不会出现在 tmux，但进程会跑）
+    log_path = f"/tmp/resume-{sid_short}.log"
+    inner = f"nohup bash -c {repr(cmd)} > {log_path} 2>&1 &"
+    os.system(f"sudo -u {_RESUME_USER} bash -c {repr(inner)}")
+    return True, f"started in background (log: {log_path})"

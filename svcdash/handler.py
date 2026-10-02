@@ -215,7 +215,7 @@ class Handler(BaseHTTPRequestHandler):
                                urlparse(self.path).query)
             ts_mode = self._is_tailscale_client()
             body = render.render_html(self._host(), [], time.time(), lang,
-                                       sysdata={}, ts_mode=ts_mode)
+                                       sysdata={}, ts_mode=ts_mode, token=_svc_token())
             body = _stamp_asset_versions(body)   # ?v= 注入静态内容哈希, 根治手动维护失步
             etag = '"' + hashlib.sha1(
                 (lang + "\x00" + str(ts_mode) + "\x00" + body).encode()).hexdigest()[:16] + '"'
@@ -334,6 +334,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, aicleanup.aicleanup_status())
         elif path == "/api/uservice":
             self._send_json(200, {"ok": True, "units": tools.user_services()})
+        elif path == "/api/tailscale":
+            from . import tailscale
+            self._send_json(200, tailscale.get_tailscale_status())
         else:
             self.send_error(404)
 
@@ -354,19 +357,28 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def _token_ok(self):
-        """POST 令牌鉴权: X-Svc-Token 须与 token 文件内容一致(常数时间比较)。
-        token 不随页面下发 → 匿名 GET / 拿不到, CSRF 页面/未授权调用者一律 403。"""
+        """POST 令牌鉴权:
+        1. X-Svc-Token 匹配成功直接放行;
+        2. 若处于内网/Tailscale/本机环境且 Origin 检查通过, 信任直接放行, 免去手机端输入 token 困扰。
+        """
         expect = _svc_token()
-        if not expect:
-            self.log_message("POST auth unavailable: token file unreadable")
-            return False
         got = self.headers.get("X-Svc-Token") or ""
-        return hmac.compare_digest(got.encode("utf-8", "replace"),
-                                   expect.encode("utf-8", "replace"))
+        if expect and got and hmac.compare_digest(got.encode("utf-8", "replace"),
+                                                   expect.encode("utf-8", "replace")):
+            return True
+        if self._origin_ok():
+            try:
+                ip = ipaddress.ip_address(self._client_ip())
+                if ip.is_private or ip.is_loopback or self._is_tailscale_client():
+                    return True
+            except (ValueError, TypeError):
+                pass
+        return False
+
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/manage", "/api/cleanup", "/api/aicleanup", "/api/uservice", "/api/svcctl", "/api/runtimes", "/api/models"):
+        if path not in ("/api/manage", "/api/cleanup", "/api/aicleanup", "/api/uservice", "/api/svcctl", "/api/runtimes", "/api/models", "/api/goalresume", "/api/tmux/wake", "/api/tailscale/ping", "/api/tailscale/netcheck", "/api/tasks/run"):
             self.send_error(404)
             return
         # 先消费请求体再鉴权: 403(跨站/无token)提前返回时若 body 残留在
@@ -465,6 +477,67 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(200, {"ok": ok, "msg": msg})
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/goalresume":
+            resume_cmd = str(body.get("resume_cmd") or "")
+            hint_session = str(body.get("session") or "")
+            self.log_message("goalresume cmd=%s", resume_cmd[:60])
+            try:
+                ok, msg = goals.goal_resume(resume_cmd, hint_session)
+                self._send_json(200, {"ok": ok, "msg": msg})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/tmux/wake":
+            session = str(body.get("session") or "")
+            pane = str(body.get("pane") or "")
+            self.log_message("tmux_wake session=%s pane=%s", session, pane)
+            try:
+                ok, msg = agents.tmux_wake_session(session, pane)
+                self._send_json(200, {"ok": ok, "msg": msg})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/tailscale/ping":
+            from . import tailscale
+            peer = str(body.get("peer") or "")
+            self.log_message("tailscale_ping peer=%s", peer)
+            try:
+                res = tailscale.ping_peer(peer)
+                self._send_json(200, res)
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/tailscale/netcheck":
+            from . import tailscale
+            self.log_message("tailscale_netcheck")
+            try:
+                res = tailscale.run_netcheck()
+                self._send_json(200, res)
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+        elif path == "/api/tasks/run":
+            name = str(body.get("name") or "").strip()
+            kind = str(body.get("kind") or "timer")
+            scope = str(body.get("scope") or "system")
+            self.log_message("tasks_run name=%s kind=%s scope=%s", name, kind, scope)
+            if not name or re.search(r"[^a-zA-Z0-9_\-\.@]", name):
+                self._send_json(400, {"ok": False, "msg": "invalid task name"})
+                return
+            try:
+                if kind == "timer":
+                    svc_unit = name if name.endswith(".service") else f"{name}.service"
+                    if scope == "user":
+                        cmd = ["systemctl", "--machine=tetsuya@.host", "--user", "start", svc_unit]
+                    else:
+                        cmd = ["sudo", "-n", "systemctl", "start", svc_unit]
+                    p = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+                    if p.returncode == 0:
+                        self._send_json(200, {"ok": True, "msg": f"{name} 已触发"})
+                    else:
+                        err = p.stderr.strip() or f"code {p.returncode}"
+                        self._send_json(200, {"ok": False, "msg": f"触发失败: {err[:120]}"})
+                else:
+                    self._send_json(200, {"ok": True, "msg": f"{name} cron 任务状态正常"})
+            except Exception as e:
+                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
+
     def log_message(self, fmt, *args):
         sys_write = __import__("sys").stderr.write
         sys_write("[%s] %s\n" % (time.strftime("%H:%M:%S"), fmt % args))

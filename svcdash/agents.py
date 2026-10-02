@@ -101,7 +101,7 @@ def scan_omp():
             "last_activity": datetime.fromtimestamp(last_ts).isoformat(timespec="seconds"),
             "idle_seconds": max(0, int(now - last_ts)), "tool": last_tool or "—",
         })
-    results.sort(key=lambda x: (x["health"] not in ("running", "blocked"), -x["idle_seconds"]))
+    results.sort(key=lambda x: (x["health"] not in ("running", "blocked"), x["idle_seconds"]))
     _omp_cache.update({"t": now, "data": results})
     return results
 
@@ -220,7 +220,7 @@ def scan_codex():
                        "title": title[:180], "last_event": last_event,
                        "last_activity": datetime.fromtimestamp(mtime).isoformat(timespec="seconds"),
                        "idle_seconds": idle})
-    agents.sort(key=lambda x: (x["health"] != "running", -x["idle_seconds"]))
+    agents.sort(key=lambda x: (x["health"] != "running", x["idle_seconds"]))
     _codex_cache.update({"t": now, "data": agents})
     return agents
 
@@ -252,21 +252,34 @@ def scan_tmux():
     if _tmux_cache["data"] is not None and now - _tmux_cache["t"] < 5:
         return _tmux_cache["data"]
     panes = []
+    act_map = {}
+    try:
+        w_raw = _tmux_run(["list-windows", "-a", "-F", "#{session_name}|#{window_index}|#{window_activity}"])
+        for line in w_raw.splitlines():
+            parts = line.split("|")
+            if len(parts) >= 3 and parts[2].isdigit():
+                act_map[(parts[0], parts[1])] = int(parts[2])
+    except Exception:
+        pass
+
     fmt = ("#{session_name}|#{window_index}.#{pane_index}|#{pane_current_command}|"
            "#{pane_title}|#{pane_current_path}|#{pane_width}x#{pane_height}|#{pane_active}|"
-           "#{pane_pid}")
+           "#{pane_pid}|#{window_index}")
     out = _tmux_run(["list-panes", "-a", "-F", fmt])
     for line in out.splitlines():
-        p = line.split("|", 7)
-        if len(p) != 8:
+        p = line.split("|", 8)
+        if len(p) != 9:
             continue
-        session, winpane, cmdline, title, path, size, active, pid = p
+        session, winpane, cmdline, title, path, size, active, pid, win_idx = p
+        act_ts = act_map.get((session, win_idx), 0)
         panes.append({
             "session": session, "pane": winpane, "command": cmdline or "—",
             "title": title or "—", "cwd": path or "—", "size": size or "—",
             "active": active == "1", "pid": pid or "—",
+            "activity": act_ts,
+            "idle_seconds": max(0, int(now - act_ts)) if act_ts else None,
         })
-    panes.sort(key=lambda x: (not x["active"], x["session"], x["pane"]))
+    panes.sort(key=lambda x: (not x["active"], -(x.get("activity") or 0), x["session"], x["pane"]))
     _tmux_cache.update({"t": now, "data": panes})
     return panes
 
@@ -605,4 +618,74 @@ def _tmux_by_cwd(cwd):
         if p["cwd"] and (p["cwd"] == cwd or cwd.startswith(p["cwd"])):
             return f'{p["session"]}:{p["pane"]}'
     return None
+
+
+def tmux_wake_session(session_name: str, pane: str = "") -> tuple:
+    """智能唤醒 / 推进指定的 Tmux 会话。
+    1. 抓取终端末尾输出。
+    2. 快速判断是否有常见确认提示（y/n、回车确认、选项选择）。
+    3. 调用 Hermes 对当前终端情境进行深度分析并直接注入操作推进。
+    返回 (ok: bool, msg: str)。
+    """
+    if not session_name or not re.match(r"^[a-zA-Z0-9_.-]+$", session_name):
+        return False, "invalid session name"
+
+    target = f"{session_name}:{pane}" if (pane and re.match(r"^[0-9.]+$", str(pane))) else session_name
+
+    # 1. 抓取终端末尾 45 行
+    capture = _tmux_run(["capture-pane", "-p", "-t", target, "-S", "-45"], timeout=3)
+    tail_text = "\n".join([line for line in capture.splitlines() if line.strip()][-30:])
+
+    # 2. 启发式快速推进 (Instant Nudge)
+    lower_tail = tail_text.lower()
+    if any(k in lower_tail for k in ["[y/n]", "(y/n)", "[y/n]?", "continue? [y/n]", "allow? [y/n]", "approve?"]):
+        _tmux_run(["send-keys", "-t", target, "y", "Enter"])
+        return True, "已自动输入确认 (y + Enter) 推进任务"
+    elif any(k in lower_tail for k in ["press enter", "press [enter]", "hit enter", "press return"]):
+        _tmux_run(["send-keys", "-t", target, "Enter"])
+        return True, "已自动发送回车 (Enter) 继续执行"
+
+    # 3. 关联 Goal 检查：如果退回到了 shell 且有 resume 命令
+    if any(prompt in lower_tail[-100:] for prompt in ["$ ", "# ", "❯ ", "> "]):
+        try:
+            from svcdash.goals import watchdog_goals
+            wd = watchdog_goals()
+            g_info = wd.get(session_name)
+            if g_info and g_info.get("gid"):
+                resume_cmd = f"/home/tetsuya/.bun/bin/omp --resume {g_info['gid']} --auto-approve"
+                _tmux_run(["send-keys", "-t", target, resume_cmd, "Enter"])
+                return True, "检测到进程中断，已自动注入恢复命令重启任务"
+        except Exception:
+            pass
+
+    # 4. 调用 Hermes 进行智能诊断与操作注入
+    hermes_bin = "/home/tetsuya/.local/bin/hermes"
+    if os.path.exists(hermes_bin):
+        prompt = (
+            f"目标 tmux 会话 '{target}' 当前疑似卡住、中断或正在等待人类确认/选择。\n"
+            f"以下是该会话当前终端的最后输出：\n"
+            f"```\n{tail_text}\n```\n\n"
+            f"用户原则：\n"
+            f"1. 绝不要让人类做选择！如果有选项（如 1/2/3 或多选），优先选第 1 个默认推进选项；如果有不清楚的问题，不要等待人类，先做能做的事情，将疑问记录到工作日志或文档中。\n"
+            f"2. 如果终端在等待授权、批准或确认（如 y/n、approve、permission），发送确认让其继续执行。\n"
+            f"3. 检查完后，直接通过 shell 命令 tmux send-keys -t '{target}' <按键或命令> Enter 解除阻塞！\n"
+            f"最后只输出一行中文简报，说明你执行了什么操作。"
+        )
+        try:
+            # 以 tetsuya 用户运行 hermes
+            cmd = ["sudo", "-n", "-u", "tetsuya", hermes_bin, "-z", prompt]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+            out_lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+            summary_msg = out_lines[-1] if out_lines else (proc.stderr.strip()[:100] or "Hermes 已完成分析并发送按键")
+            return True, f"Hermes: {summary_msg}"
+        except subprocess.TimeoutExpired:
+            _tmux_run(["send-keys", "-t", target, "Enter"])
+            return True, "已注入回车推进"
+        except Exception as e:
+            pass
+
+    # 5. 兜底推进：发送一个 Enter
+    _tmux_run(["send-keys", "-t", target, "Enter"])
+    return True, "已向终端发送 Enter 推进执行"
+
 

@@ -249,7 +249,7 @@ def scan_tasks(lang=DEFAULT_LANG):
     for t in tasks:
         if t["kind"] == "cron":
             t["last"] = last_runs.get(_cmd_key(t["command"]))
-    tasks.sort(key=lambda t: (t["type"] != "watchdog", t["name"]))
+    tasks.sort(key=lambda t: (-(t.get("last") or 0), -(t.get("next") or 0), t["name"]))
     d = _tasks_cache["data"]
     if not isinstance(d, dict):
         d = {}

@@ -154,10 +154,34 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   <span class="chip" data-f="system" role="button" tabindex="0">{{T:chip_system}} <span id="n-system"></span></span>
   <span class="chip" data-f="all" role="button" tabindex="0">{{T:chip_all}} <span id="n-all"></span></span>
   <span class="spacer"></span>
+  <span class="chip" data-f="tailscale" role="button" tabindex="0">{{ICO:network:13}} Tailscale <span id="n-tailscale"></span></span>
   <span class="chip" data-f="omp" role="button" tabindex="0">{{T:chip_omp}} <span id="n-omp"></span></span>
   <span class="chip" data-f="watchdog" role="button" tabindex="0">{{T:chip_watchdog}} <span id="n-watchdog"></span></span>
   <span class="chip" data-f="tmux" role="button" tabindex="0">{{T:chip_tmux}} <span id="n-tmux"></span></span>
   <span class="chip" data-f="manage" role="button" tabindex="0">{{T:chip_manage}} <span id="n-manage"></span></span>
+</div>
+<div class="gpanel" id="network-page" hidden>
+  <div class="ts-header">
+    <h2>{{T:ts_title}} <span class="ghint">{{T:ts_hint}}</span></h2>
+    <div class="ts-header-actions">
+      <button class="btn-ts-action" id="btn-ts-netcheck" title="{{T:ts_netcheck}}">
+        {{ICO:activity:13}} <span>{{T:ts_netcheck}}</span>
+      </button>
+      <button class="btn-ts-action" id="btn-ts-refresh" title="{{T:g_refresh}}">
+        {{ICO:retry:13}} <span>{{T:g_refresh}}</span>
+      </button>
+    </div>
+  </div>
+  <div id="ts-netcheck-card" class="ts-netcheck-panel" hidden></div>
+  <div id="ts-self-card" class="ts-card ts-self-card"></div>
+  <div class="ts-section" id="ts-serve-section">
+    <div class="ts-sec-title">{{ICO:ext:14}} <span>{{T:ts_serve}}</span> <span class="ghint" id="ts-serve-count"></span></div>
+    <div class="ts-serve-grid" id="ts-serve-grid"></div>
+  </div>
+  <div class="ts-section" id="ts-peers-section">
+    <div class="ts-sec-title">{{ICO:network:14}} <span>{{T:ts_peers}}</span> <span class="ghint" id="ts-peers-count"></span></div>
+    <div class="ts-peers-list" id="ts-peers-list"><div class="gempty">{{T:a_loading}}</div></div>
+  </div>
 </div>
 <div id="tasks" hidden></div>
 <div class="gpanel svc-panel" id="svc-panel">
@@ -214,12 +238,12 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8.5 8 3l6 5.5V14H9.5v-4h-5v4H2z"/></svg><span class="tlabel">{{T:tab_home}}</span><span class="tbadge-dot" id="tab-alert-badge" hidden></span></span>
   <span class="tab" data-p="1" role="button" tabindex="0" aria-label="{{T:tab_activity}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.5 8.5h3l2.2-5.5 3 10.5 2-6.5h2.8"/></svg><span class="tlabel">{{T:tab_activity}}</span></span>
-  <span class="tab" data-p="2" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg><span class="tlabel">{{T:tab_svc}}</span></span>
-  <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_tmux}}">
+  <span class="tab" data-p="2" role="button" tabindex="0" aria-label="{{T:tab_tmux}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="m5 6.5 2 1.5-2 1.5M9 10h2"/></svg><span class="tlabel">{{T:tab_tmux}}</span></span>
-  <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_agent}}">
+  <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_agent}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="10" height="9" rx="2"/><circle cx="6" cy="8.5" r="1" fill="currentColor"/><circle cx="10" cy="8.5" r="1" fill="currentColor"/><path d="M8 1.5v2.5M6 1.5h4M5 11h6"/></svg><span class="tlabel">{{T:tab_agent}}</span></span>
+  <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg><span class="tlabel">{{T:tab_svc}}</span></span>
 </nav>
 <div class="ui-modal" id="ui-modal" hidden role="presentation">
   <div class="ui-dialog" role="dialog" aria-modal="true" aria-labelledby="ui-dialog-title">

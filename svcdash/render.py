@@ -144,6 +144,9 @@ def render_goal_cards(cards, lang=DEFAULT_LANG):
         # paused/lost 卡额外给"标记忽略"处置(前端接 ignoredSet, key 与 goalAlerts 一致)
         foot = ['<div class="gfoot">']
         if c["resume_cmd"]:
+            foot.append(f'<button class="g-resume-btn" type="button" '
+                        f'data-resume-cmd="{escape(c["resume_cmd"], quote=True)}">'
+                        f'{icon("play", 12)} {t(lang, "g_resume_run")}</button>')
             foot.append(f'<span class="gcopy" role="button" tabindex="0" '
                         f'data-cmd="{escape(c["resume_cmd"], quote=True)}">{icon("copy", 13)} {t(lang, "g_copy")}</span>')
         else:
@@ -245,6 +248,8 @@ _LITE_TMUX = (
     '<div class="filters tmux-filters" id="tmux-filters">'
     '<span class="chip active" data-tf="all" role="button" tabindex="0">{{T:act_all}} <span id="n-tf-all"></span></span>'
     '<span class="chip" data-tf="agent" role="button" tabindex="0">{{ICO:bot:13}} {{T:tmux_filter_agent}} <span id="n-tf-agent"></span></span>'
+    '<span class="chip" data-tf="resumable" role="button" tabindex="0">{{ICO:target:13}} {{T:tmux_filter_resumable}} <span id="n-tf-resumable"></span></span>'
+    '<span class="chip" data-tf="standalone" role="button" tabindex="0">{{ICO:cpu:13}} {{T:tmux_filter_standalone}} <span id="n-tf-standalone"></span></span>'
     '<span class="chip" data-tf="attached" role="button" tabindex="0">{{T:tmux_filter_attached}} <span id="n-tf-attached"></span></span>'
     '<span class="chip" data-tf="detached" role="button" tabindex="0">{{T:tmux_filter_detached}} <span id="n-tf-detached"></span></span>'
     '</div>'
@@ -353,12 +358,13 @@ def _render_shell_core(host_header, entries, updated_ts, lang, sysdata):
     return body
 
 
-def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=None, ts_mode=False):
+def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=None, ts_mode=False, token=""):
     body = _render_shell_core(host_header, entries, updated_ts, lang, sysdata)
     boot = {"auto": AUTO_REFRESH_SEC, "lang": lang, "tsMode": bool(ts_mode),
             "t": L10N.get(lang, L10N[DEFAULT_LANG]),
             "icons": ICONS,
-            "tl": tools_conf()}
+            "tl": tools_conf(),
+            "token": token}
     return body.replace("{{BOOT_JSON}}", json.dumps(boot, ensure_ascii=False), 1)
 
 

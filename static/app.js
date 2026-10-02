@@ -70,7 +70,7 @@ function initLanguageMenu() {
 }
 // --- POST 令牌: 管理动作需 X-Svc-Token(服务器 /etc/svc-dashboard/token 内容)。
 // 页面不内嵌 token(匿名访客拿不到); 首次动作弹输入框, 存 sessionStorage(标签页会话级)。 ---
-let svcTok = sessionStorage.getItem("svcTok") || "";
+let svcTok = (typeof BOOT !== "undefined" && BOOT.token) || sessionStorage.getItem("svcTok") || "";
 async function apiPost(url, body) {
   const send = () => fetch(url, { method: "POST",
     headers: { "Content-Type": "application/json", "X-Svc-Token": svcTok },
@@ -113,6 +113,8 @@ const FILTERS = {
   system: (e) => e.scope === "system",
   omp:     () => false, // OMP 走独立面板,不混进服务表
   watchdog: () => false, // 看门狗走独立面板
+  tmux:    () => false, // tmux 走独立面板
+  tailscale: () => false, // tailscale 走独立面板
   manage:  () => false, // 服务管理走独立面板
   all:    () => true,
 };
@@ -197,49 +199,97 @@ function renderSvcRows(tbody, shown, mobile) {
   for (const [k, ent] of svcRows)
     if (!want.has(k)) { ent.node.remove(); svcRows.delete(k); }
 }
+function hideAllServiceSubviews() {
+  const np = $("network-page"); if (np) np.hidden = true;
+  const tasks = $("tasks"); if (tasks) tasks.hidden = true;
+  const sp = $("svc-panel"); if (sp) sp.style.display = "none";
+  const svc = $("svc"); if (svc) svc.style.display = "none";
+  const cp = $("cron-panel"); if (cp) { cp.style.display = "none"; cp.hidden = true; }
+  const lp = $("logpage"); if (lp) { lp.style.display = "none"; lp.hidden = true; }
+}
+
 function applyFilter() {
   const shown = FILTERS[filter] ? services.filter(FILTERS[filter]) : [];
-  ["user", "web", "docker", "system", "all"].forEach(f =>
-    $("n-" + f).textContent = services.filter(FILTERS[f]).length);
+  ["user", "web", "docker", "system", "all"].forEach(f => {
+    const el = $("n-" + f);
+    if (el) el.textContent = services.filter(FILTERS[f]).length;
+  });
   document.querySelectorAll("#filters .chip").forEach(c =>
     c.classList.toggle("active", c.dataset.f === filter));
+
+  // 严格隔离：切换任何分类时，其他所有画面一律彻底隐藏
+  hideAllServiceSubviews();
+
+  if (filter === "tailscale") {
+    const np = $("network-page");
+    if (np) {
+      np.hidden = false;
+      renderNetworkPage();
+    }
+    $("count").textContent = "Tailscale";
+    return;
+  }
   if (filter === "omp") {
-    $("svc").style.display = "none";
-    // 先亮面板显示「加载中」,再等数据 —— 冷扫描需数秒,
-    // 之前面板一直 hidden,数据回来前用户看到的是一片空白。
     const tasksEl = $("tasks");
-    tasksEl.hidden = false; tasksEl.className = "watchdog-panel";
-    tasksEl.innerHTML = "<h2>" + t("a_title") + " <span style='color:var(--text-dead);font-weight:400'>" + t("a_loading") + "</span></h2>";
-    loadAgents().then(renderAgentPanel);
+    if (tasksEl) {
+      tasksEl.hidden = false;
+      tasksEl.className = "watchdog-panel";
+      tasksEl.innerHTML = `<h2>${t("a_title")} <span style="color:var(--text-dead);font-weight:400">${t("a_loading")}</span></h2>`;
+      loadAgents().then(renderAgentPanel);
+    }
     $("count").textContent = t("chip_omp");
     return;
   }
   if (filter === "tmux") {
-    $("svc").style.display = "none";
-    loadTmux().then(renderTmuxPanel);
+    const tasksEl = $("tasks");
+    if (tasksEl) {
+      tasksEl.hidden = false;
+      tasksEl.className = "watchdog-panel";
+      tasksEl.innerHTML = `<h2>${t("tmux_panel")} <span style="color:var(--text-dead);font-weight:400">${t("a_loading")}</span></h2>`;
+      loadTmux().then(renderTmuxPanel);
+    }
     $("count").textContent = t("chip_tmux");
     return;
   }
   if (filter === "watchdog") {
-    // 看门狗模式:隐藏服务表,显示看门狗面板
-    $("svc").style.display = "none";
-    loadTasks().then(renderWatchdogPanel);
+    const tasksEl = $("tasks");
+    if (tasksEl) {
+      tasksEl.hidden = false;
+      tasksEl.className = "watchdog-panel";
+      tasksEl.innerHTML = `<h2>${t("panel_watchdog")} <span style="color:var(--text-dead);font-weight:400">${t("a_loading")}</span></h2>`;
+      loadTasks().then(renderWatchdogPanel);
+    }
     $("count").textContent = t("chip_watchdog");
     return;
   }
   if (filter === "manage") {
-    $("svc").style.display = "none";
-    loadManage();
+    const tasksEl = $("tasks");
+    if (tasksEl) {
+      tasksEl.hidden = false;
+      tasksEl.className = "watchdog-panel manage-panel";
+      tasksEl.innerHTML = `<h2>${t("m_panel")} <span style="color:var(--text-dead);font-weight:400">${t("a_loading")}</span></h2>`;
+      loadManage();
+    }
     $("count").textContent = t("chip_manage");
     return;
   }
-  $("svc").style.display = "";
-  $("tasks").hidden = true;
-  const tbody = $("svc").querySelector("tbody");
-  renderSvcRows(tbody, shown, isMobile());
+
+  // 常规服务端口过滤 (user, web, docker, system, all)
+  const sp = $("svc-panel"); if (sp) sp.style.display = "";
+  const svc = $("svc"); if (svc) svc.style.display = "";
+  const cp = $("cron-panel"); if (cp) { cp.style.display = ""; cp.hidden = false; }
+  const lp = $("logpage"); if (lp) { lp.style.display = ""; lp.hidden = false; }
+  const tbody = $("svc")?.querySelector("tbody");
+  if (tbody) renderSvcRows(tbody, shown, isMobile());
   $("count").textContent = shown.length;
   fillCtl(); // 服务表行尾 暂停/继续 按钮状态
-  fillSvcDots(); // P0-6: 行首状态点按受管单元状态上色
+  fillSvcDots(); // 行首状态点
+  if (typeof fetchTailscaleData === "function") {
+    fetchTailscaleData().then(d => {
+      const el = $("n-tailscale");
+      if (el && d && d.peers) el.textContent = d.peers.length ? String(d.peers.length) : "";
+    });
+  }
 }
 
 function renderSys(s) {
@@ -468,14 +518,23 @@ const TASK_COLS = ["name", "schedule", "scope", "command"];
 
 function taskRow(x) {
   const [label, cls] = TYPE_BADGE[x.type] || [t("tbd_sc"), "tbadge sc"];
-  const esc = (s) => s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const next = x.next ? new Date(x.next * 1000).toLocaleString() : (x.last ? t("t_last") + new Date(x.last * 1000).toLocaleString() : "—");
+  const esc = (s) => String(s || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  let lastStr = "—";
+  if (x.last) {
+    const ago = agoStr(Date.now() / 1000 - x.last);
+    lastStr = `<span title="${new Date(x.last * 1000).toLocaleString()}">${ago ? ago + "前" : "刚刚"}</span>`;
+  }
+  let triggerBtn = "";
+  if (x.kind === "timer") {
+    triggerBtn = `<button type="button" class="btn-ts-mini btn-task-trigger" data-name="${esc(x.name)}" data-kind="${esc(x.kind)}" data-scope="${esc(x.scope)}" title="立即触发一次">▶ 触发</button>`;
+  }
   return `<tr>
     <td><span class='${cls}'>${label}</span><span class='tname'>${esc(x.name)}</span></td>
     <td class='tsch' data-label='${t("t_cycle")}'>${esc(x.schedule)}</td>
     <td class='tscope' data-label='${t("t_source")}'>${x.kind === "timer" ? "systemd" : "cron"} · ${x.scope === "user" ? t("t_scope_user") : t("t_scope_sys")}</td>
     <td class='tcmd' data-label='${t("t_cmd")}'>${esc(x.command)}</td>
-    <td class='tnext' data-label='${t("t_lastrun")}'>${esc(next)}</td>
+    <td class='tnext' data-label='${t("t_lastrun")}'>${lastStr}</td>
+    <td class='tact' data-label='操作'>${triggerBtn}</td>
   </tr>`;
 }
 
@@ -497,25 +556,71 @@ function renderAgentPanel(agents) {
   el.hidden = false; el.className = "watchdog-panel";
   const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const labels = {running:t("a_running"), blocked:t("a_blocked"), idle:t("a_idle"), completed:t("a_done")};
-  let rows = "";
-  // OMP agents
-  agents.omp.forEach(x => {
-    rows += "<tr><td><span class='tbadge wd'>OMP</span><span class='tname tlink' data-sid='" + esc(x.id) +
-      "' data-cwd='" + esc(x.cwd) + "' data-tmux='" + esc(x.tmux) + "' title='" + t("a_openlog", { g: esc(x.goal) }) + "'>" +
-      esc(stripMd(x.goal || x.cwd).slice(0, 60)) + "</span></td><td data-label='" + t("a_status") + "'>" + (labels[x.health] || esc(x.status)) +
-      "</td><td class='tscope' data-label='" + t("a_loc") + "'>" + esc(x.tmux) + "<br>" + esc(x.cwd) + "</td><td class='tsch' data-label='" + t("a_active") + "'>" +
-      esc(x.last_activity) + "<br>" + agoStr(x.idle_seconds) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>" + esc(x.tool) + "</td></tr>";
+
+  // 1. 合并 OMP 与 Codex agents
+  const all = [
+    ...(agents.omp || []).map(x => ({ ...x, kind: "omp", key: x.id, title: x.goal || x.cwd, tmx: x.tmux })),
+    ...(agents.codex || []).map(x => ({ ...x, kind: "codex", key: x.session_id, title: x.title || x.session_id, tmx: "" }))
+  ];
+
+  // 2. 严格按活跃时间从新到旧排序 (idle_seconds 越小越新)
+  all.sort((a, b) => {
+    const ta = (a.idle_seconds !== undefined && a.idle_seconds !== null) ? a.idle_seconds : 99999999;
+    const tb = (b.idle_seconds !== undefined && b.idle_seconds !== null) ? b.idle_seconds : 99999999;
+    return ta - tb;
   });
-  // Codex agents
-  agents.codex.forEach(x => {
-    rows += "<tr><td><span class='tbadge rd'>Codex</span><span class='tname tlink' data-sid='" + esc(x.session_id) + "' data-cwd='" +
-      esc(x.cwd) + "' data-tmux='' title='" + t("a_openlog", { g: esc(x.title) }) + "'>" +
-      esc(x.title || x.session_id) + "</span></td><td data-label='" + t("a_status") + "'>" + (labels[x.health] || esc(x.health)) + "</td><td class='tscope' data-label='" + t("a_loc") + "'>session " + esc(x.session_id) + "<br>" + esc(x.cwd) + "</td><td class='tsch' data-label='" + t("a_active") + "'>" +
-      esc(x.last_activity) + "<br>" + agoStr(x.idle_seconds) + "</td><td class='tcmd' data-label='" + t("a_tool") + "'>" + esc(x.last_event || (x.pid !== "—" ? "pid " + x.pid : "—")) + "</td></tr>";
-  });
-  const total = agents.omp.length + agents.codex.length;
-  el.innerHTML = "<h2>" + t("a_title") + " <span style='color:var(--text-dead);font-weight:400'>" + t("a_hint", { n: total }) + "</span></h2><table><thead><tr><th>" + t("a_th_agent") + "</th><th>" + t("a_status") + "</th><th>" + t("a_loc") + "</th><th>" + t("a_active") + "</th><th>" + t("a_tool") + "</th></tr></thead><tbody>" +
-    (rows || "<tr><td class='empty' colspan='5'>" + t("a_none") + "</td></tr>") + "</tbody></table>";
+
+  const rows = all.map(x => {
+    const isOmp = x.kind === "omp";
+    const badgeCls = isOmp ? "wd" : "rd";
+    const badgeText = isOmp ? "OMP" : "Codex";
+    const hCls = x.health || "idle";
+    const statusPill = `<span class="st-badge ${hCls}">${labels[hCls] || esc(x.status || x.health)}</span>`;
+    const loc = x.tmx ? `tmux: ${esc(x.tmx)}` : esc(x.cwd || "—");
+
+    let wakeBtn = "";
+    if (x.tmx && x.tmx !== "—") {
+      const sname = x.tmx.split(":")[0];
+      wakeBtn = `
+        <button type="button" class="btn-ts-mini btn-tmux-wake" data-sname="${esc(sname)}" data-target="${esc(x.tmx)}" title="Hermes 智能唤醒推进">
+          ${icon("bolt", 11)} <span>推进</span>
+        </button>
+      `;
+    }
+
+    const ago = (x.idle_seconds !== undefined && x.idle_seconds !== null) ? agoStr(x.idle_seconds) + "前" : "—";
+    const fullDate = x.last_activity ? x.last_activity.replace("T", " ") : "";
+
+    return `
+      <tr>
+        <td>
+          <span class="tbadge ${badgeCls}">${badgeText}</span>
+          <span class="tname tlink" data-sid="${esc(x.key)}" data-cwd="${esc(x.cwd)}" data-tmux="${esc(x.tmx || "")}" title="${t("a_openlog", { g: esc(x.title) })}">
+            ${esc(stripMd(x.title || "").slice(0, 60))}
+          </span>
+        </td>
+        <td data-label="${t("a_status")}">${statusPill}</td>
+        <td class="tscope" data-label="${t("a_loc")}">${loc}</td>
+        <td class="tsch" data-label="${t("a_active")}">
+          <strong>${ago}</strong><br><span class="ghint">${esc(fullDate)}</span>
+        </td>
+        <td class="tcmd" data-label="${t("a_tool")}">
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${wakeBtn}
+            <span>${esc(x.tool || x.last_event || (x.pid !== "—" ? "pid " + x.pid : "—"))}</span>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  const total = all.length;
+  el.innerHTML = `
+    <h2>${t("a_title")} <span style="color:var(--text-dead);font-weight:400">${t("a_hint", { n: total })} · 最新活跃在最前</span></h2>
+    <table><thead><tr><th>${t("a_th_agent")}</th><th>${t("a_status")}</th><th>${t("a_loc")}</th><th>${t("a_active")}</th><th>${t("a_tool")}</th></tr></thead>
+    <tbody>${rows || "<tr><td class='empty' colspan='5'>" + t("a_none") + "</td></tr>"}</tbody></table>
+  `;
+
   el.querySelectorAll(".tlink").forEach(a => a.addEventListener("click", () => toggleAgentLog(a)));
 }
 
@@ -656,13 +761,44 @@ function renderTmuxPanel(panes) {
   if (filter !== "tmux") { el.hidden = true; return; }
   el.hidden = false; el.className = "watchdog-panel";
   const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const rows = panes.map(x => "<tr><td class='tname'>" + esc(x.session) + ":" + esc(x.pane) +
-    (x.active ? " <span class='tbadge wd'>" + t("tmux_active") + "</span>" : "") + "</td><td data-label='" + t("t_cmd") + "'>" + esc(x.command) +
-    "</td><td class='tscope' data-label='" + t("tmux_th_title") + "'>" + esc(x.title) + "</td><td class='tcmd' data-label='" + t("th_cwd") + "'>" + esc(x.cwd) +
-    "</td><td class='tsch' data-label='" + t("tmux_th_size") + "'>" + esc(x.size) + "</td></tr>").join("");
-  el.innerHTML = "<h2>" + t("tmux_panel") + " <span style='color:var(--text-dead);font-weight:400'>" + t("tmux_panes", { n: panes.length }) +
-    "</span></h2><table><thead><tr><th>" + t("tmux_th_pane") + "</th><th>" + t("t_cmd") + "</th><th>" + t("tmux_th_title") + "</th><th>" + t("th_cwd") + "</th><th>" + t("tmux_th_size") + "</th></tr></thead><tbody>" +
-    (rows || "<tr><td class='empty' colspan='5'>" + t("tmux_none") + "</td></tr>") + "</tbody></table>";
+
+  // 从新到旧排序 (按 activity timestamp 倒序)
+  const sorted = [...panes].sort((a, b) => {
+    if (a.active !== b.active) return a.active ? -1 : 1;
+    return (b.activity || 0) - (a.activity || 0);
+  });
+
+  const rows = sorted.map(x => {
+    const ago = (x.idle_seconds !== undefined && x.idle_seconds !== null) ? agoStr(x.idle_seconds) + "前" : "—";
+    return `
+      <tr>
+        <td class="tname">
+          ${esc(x.session)}:${esc(x.pane)}
+          ${x.active ? " <span class='tbadge wd'>" + t("tmux_active") + "</span>" : ""}
+        </td>
+        <td data-label="${t("t_cmd")}"><code>${esc(x.command)}</code> ${x.pid !== "—" ? `<span class="ghint">(${x.pid})</span>` : ""}</td>
+        <td class="tscope" data-label="${t("tmux_th_title")}">${esc(x.title)}</td>
+        <td class="tcmd" data-label="${t("th_cwd")}">${esc(x.cwd)}</td>
+        <td class="tsch" data-label="活跃时间">${ago}</td>
+        <td data-label="操作">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button type="button" class="btn-ts-mini btn-tmux-wake" data-sname="${esc(x.session)}" data-target="${esc(x.session + ':' + x.pane)}" title="Hermes 智能唤醒推进">
+              ${icon("bolt", 11)} <span>推进</span>
+            </button>
+            <button type="button" class="btn-ts-mini btn-tmux-preview" data-target="${esc(x.session + ':' + x.pane)}" title="预览终端输出">
+              ${icon("play", 11)} <span>预览</span>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  el.innerHTML = `
+    <h2>${t("tmux_panel")} <span style="color:var(--text-dead);font-weight:400">${t("tmux_panes", { n: sorted.length })} · 最新活跃优先</span></h2>
+    <table><thead><tr><th>${t("tmux_th_pane")}</th><th>${t("t_cmd")}</th><th>${t("tmux_th_title")}</th><th>${t("th_cwd")}</th><th>活跃时间</th><th>操作</th></tr></thead>
+    <tbody>${rows || "<tr><td class='empty' colspan='6'>" + t("tmux_none") + "</td></tr>"}</tbody></table>
+  `;
 }
 
 let tasksCache = null; // 懒加载缓存
@@ -689,31 +825,168 @@ function renderWatchdogPanel(tasks) {
   if (filter !== "watchdog") { el.hidden = true; return; }
   el.hidden = false;
   el.className = "watchdog-panel";
-  const nwd = tasks.filter(t => t.type === "watchdog").length;
-  const nrd = tasks.filter(t => t.type === "reminder").length;
-  const nsc = tasks.length - nwd - nrd;
+
+  // 严格按最后执行时间从新到旧排序
+  const sorted = [...tasks].sort((a, b) => {
+    const la = a.last || 0, lb = b.last || 0;
+    if (la !== lb) return lb - la;
+    const na = a.next || 0, nb = b.next || 0;
+    return na - nb;
+  });
+
+  const nwd = sorted.filter(t => t.type === "watchdog").length;
+  const nrd = sorted.filter(t => t.type === "reminder").length;
+  const nsc = sorted.length - nwd - nrd;
   el.innerHTML = `<h2>${t("panel_watchdog")}
     <span style='color:var(--ch-mem)'>${nwd} ${t("tbd_wd")}</span> ·
     <span style='color:var(--ch-cpu)'>${nrd} ${t("tbd_rd")}</span> ·
     <span style='color:var(--text-dim)'>${nsc} ${t("tbd_sc")}</span> ·
-    <span style='color:var(--text-dead);font-weight:400'>${t("t_total", { n: tasks.length })}</span></h2>
-    <table><thead><tr><th>${t("t_task")}</th><th>${t("t_cycle")}</th><th>${t("t_source")}</th><th>${t("t_cmd")}</th><th>${t("t_lastrun")}</th></tr></thead>
-    <tbody>${tasks.length ? tasks.map(taskRow).join("") : "<tr><td class='empty' colspan='5'>" + t("t_none") + "</td></tr>"}</tbody></table>`;
+    <span style='color:var(--text-dead);font-weight:400'>${t("t_total", { n: sorted.length })} · 最近执行优先</span></h2>
+    <table><thead><tr><th>${t("t_task")}</th><th>${t("t_cycle")}</th><th>${t("t_source")}</th><th>${t("t_cmd")}</th><th>${t("t_lastrun")}</th><th>操作</th></tr></thead>
+    <tbody>${sorted.length ? sorted.map(taskRow).join("") : "<tr><td class='empty' colspan='6'>" + t("t_none") + "</td></tr>"}</tbody></table>`;
 }
 
 // ---------------------------------------------------------------- 服务管理
 // 管理本机关键 systemd 单元(zircon-server / zircon-bots / tailscaled)与
 // 手动进程服务(wilviewer / mapviewer): 启动 / 停止 / 重启 / 暂停 / 恢复。
-// systemd 单元: 暂停=SIGSTOP 挂起;手动进程: 暂停=终止进程,启用=重新拉起。
-// 所有操作都需确认。dashboard 自身(80)不在列表,不可操作。
 const MANAGE_UNITS = [
   { id: "zircon-server", kind: "systemd", label: t("m_server"), desc: t("m_server_desc") },
   { id: "zircon-bots", kind: "systemd", label: t("m_bots"), desc: t("m_bots_desc") },
+  { id: "wsgateway", kind: "systemd", label: "Zircon WS 网关", desc: "ws:7001→tcp:7000, 随主服起停" },
   { id: "tailscaled", kind: "systemd", label: t("m_ts"), desc: t("m_ts_desc") },
   { id: "wilviewer", kind: "proc", port: 8765, label: t("m_wilviewer"), desc: t("m_wilviewer_desc") },
   { id: "mapviewer", kind: "proc", port: 8899, label: t("m_mapviewer"), desc: t("m_mapviewer_desc") },
 ];
 const MANAGE_LABELS = { start: t("m_start"), stop: t("m_stop"), restart: t("m_restart"), pause: t("m_pause"), resume: t("m_resume") };
+
+async function loadManage() {
+  const el = $("tasks");
+  if (filter !== "manage") { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = "watchdog-panel manage-panel";
+  el.innerHTML = `<h2>${t("m_panel")} <span style="color:var(--text-dead);font-weight:400">${t("a_loading")}</span></h2>`;
+
+  const [unitStatuses, ctlData] = await Promise.all([
+    Promise.all(MANAGE_UNITS.map(async (u) => {
+      try {
+        const r = await fetch("/api/manage?unit=" + encodeURIComponent(u.id) + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
+        return { ...u, st: await r.json() };
+      } catch (e) {
+        return { ...u, st: null };
+      }
+    })),
+    fetch("/api/svcctl", { cache: "no-store" }).then(r => r.json()).catch(() => ({ paused: [], history: [] }))
+  ]);
+
+  if (filter !== "manage") return;
+  renderManagePanel(unitStatuses, ctlData);
+}
+
+function renderManagePanel(unitStatuses, ctlData) {
+  const el = $("tasks");
+  if (filter !== "manage") { el.hidden = true; return; }
+  el.hidden = false;
+
+  const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  // 1. 核心受管服务卡片
+  const cardsHtml = unitStatuses.map(u => {
+    const st = u.st || {};
+    const isRunning = st.ok && st.active === "active";
+    const isPaused = st.stopped;
+    const dotCls = isRunning ? "on" : (isPaused ? "bad" : "off");
+    const statusTxt = isRunning ? (t("ts_status_running") + (st.pid ? ` · PID ${st.pid}` : "")) : (isPaused ? t("m_paused") : (st.active || t("ts_status_stopped")));
+
+    let btns = "";
+    if (isRunning) {
+      btns = `
+        <button type="button" class="btn-ts-mini ctl-btn" data-ctl="${esc(u.id)}" data-action="restart">${icon("retry", 11)} ${t("m_restart")}</button>
+        <button type="button" class="btn-ts-mini ctl-btn" data-ctl="${esc(u.id)}" data-action="pause">${icon("pause", 11)} ${t("m_pause")}</button>
+        <button type="button" class="btn-ts-mini ctl-btn danger" data-ctl="${esc(u.id)}" data-action="stop">${t("m_stop")}</button>
+      `;
+    } else {
+      btns = `
+        <button type="button" class="btn-ts-mini ctl-btn primary" data-ctl="${esc(u.id)}" data-action="start">${icon("play", 11)} ${t("m_start")}</button>
+      `;
+    }
+
+    return `
+      <div class="manage-card">
+        <div class="manage-card-top">
+          <div class="manage-card-title">
+            <span class="svc-dot ${dotCls}"></span>
+            <strong>${esc(u.label)}</strong>
+            <span class="ts-os-badge">${esc(u.kind)}</span>
+          </div>
+          <span class="ghint">${esc(u.port ? ":" + u.port : "")}</span>
+        </div>
+        <div class="manage-card-desc">${esc(u.desc)}</div>
+        <div class="manage-card-foot">
+          <span class="manage-card-status">${statusTxt}</span>
+          <div class="manage-card-btns">${btns}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // 2. 通用服务冻结台账 (Svcctl 暂停清单) - 从新到旧排序
+  const pausedList = [...(ctlData.paused || [])].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  let pausedHtml = "";
+  if (!pausedList.length) {
+    pausedHtml = `<div class="gempty" style="padding:16px 0;">当前无被冻结的服务（所有监听端口均正常运行）</div>`;
+  } else {
+    pausedHtml = `
+      <table class="manage-paused-table">
+        <thead><tr><th>端口 / 服务</th><th>PID</th><th>冻结时间</th><th>命令</th><th>操作</th></tr></thead>
+        <tbody>
+          ${pausedList.map(p => {
+            const ago = p.ts ? agoStr(Date.now() / 1000 - p.ts) + "前" : "—";
+            return `
+              <tr>
+                <td><strong>:${p.port}</strong> <span class="tscope">${esc(p.name)}</span></td>
+                <td>${(p.pids || []).join(", ") || "—"}</td>
+                <td class="tsch">${ago}</td>
+                <td class="tcmd" title="${esc(p.cmdline)}">${esc((p.cmdline || "—").slice(0, 60))}</td>
+                <td>
+                  <button type="button" class="btn-ts-mini svctl-btn" data-svcp="${p.port}" data-svca="resume" data-svcn="${esc(p.name)}">
+                    ${icon("play", 11)} <span>${t("ctl_resume")}</span>
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // 3. 操作审计历史 (Audit Log) - 从新到旧排序
+  const historyList = [...(ctlData.history || [])].reverse().slice(0, 12);
+  const historyHtml = historyList.length ? `
+    <div class="manage-audit-list">
+      ${historyList.map(h => `<div class="manage-audit-item">${esc(h)}</div>`).join("")}
+    </div>
+  ` : `<div class="gempty" style="padding:10px 0;">暂无操作记录</div>`;
+
+  el.innerHTML = `
+    <h2>${t("m_panel")} <span class="ghint">${t("m_hint")}</span></h2>
+    <div class="manage-grid">${cardsHtml}</div>
+
+    <div style="margin-top:20px;">
+      <h2>通用冻结服务台账 <span class="ghint">${pausedList.length} 个端口已挂起</span></h2>
+      ${pausedHtml}
+    </div>
+
+    <div style="margin-top:20px;">
+      <h2>最近管理记录 <span class="ghint">Audit History (最新在最前)</span></h2>
+      ${historyHtml}
+    </div>
+  `;
+
+  // 绑定按钮事件
+  el.querySelectorAll(".ctl-btn").forEach(b => b.addEventListener("click", () => doCtl(b)));
+  el.querySelectorAll(".svctl-btn").forEach(b => b.addEventListener("click", () => doSvcCtl(b)));
+}
 
 // 端口 -> 受管手动进程服务 id(服务表行尾按钮用)
 const MANAGE_PROC_BY_PORT = {};
@@ -861,86 +1134,6 @@ document.addEventListener("click", (ev) => {
   ev.preventDefault(); ev.stopPropagation();   // 迷你按钮嵌在 <a> 磁贴内: 拦截导航
   if (b.getAttribute("aria-disabled") !== "true") doSvcCtl(b);
 });
-
-function manageCard(u, st, result) {
-  const esc = (x) => String(x || "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const ok = st && st.ok;
-  const active = ok && st.active === "active";
-  const stopped = ok && st.stopped;
-  const color = !ok ? "var(--c-gray)" : (stopped ? "var(--c-warn)" : (active ? "var(--c-green)" : "var(--c-red)"));
-  const stateTxt = !ok ? (st && st.msg ? st.msg : t("m_state_fail"))
-    : (stopped ? t("m_paused") : (active ? st.sub : st.active));
-  const pid = ok && st.pid && st.pid !== "0" ? " · PID " + esc(st.pid) : "";
-  const isProc = u.kind === "proc";
-  let btns = "";
-  if (active) {
-    // 手动进程: 暂停=终止进程;systemd: 停止/暂停(SIGSTOP)分开
-    if (isProc) {
-      btns += `<span class='mbtn' data-unit='${u.id}' data-action='stop' role='button' tabindex='0' title='${t("m_title_stop")}'>${icon("pause", 13)} ${t("m_pause")}</span>`;
-      btns += `<span class='mbtn' data-unit='${u.id}' data-action='restart' role='button' tabindex='0' title='${t("m_title_restart")}'>${icon("refresh", 13)} ${t("m_restart")}</span>`;
-    } else {
-      btns += `<span class='mbtn' data-unit='${u.id}' data-action='stop' role='button' tabindex='0' title='${t("m_title_stop")}'>${icon("stop", 13)} ${t("m_stop")}</span>`;
-      btns += `<span class='mbtn' data-unit='${u.id}' data-action='restart' role='button' tabindex='0' title='${t("m_title_restart")}'>${icon("refresh", 13)} ${t("m_restart")}</span>`;
-      btns += stopped
-        ? `<span class='mbtn' data-unit='${u.id}' data-action='resume' role='button' tabindex='0' title='${t("m_title_resume")}'>${icon("play", 13)} ${t("m_resume")}</span>`
-        : `<span class='mbtn' data-unit='${u.id}' data-action='pause' role='button' tabindex='0' title='${t("m_title_pause")}'>${icon("pause", 13)} ${t("m_pause")}</span>`;
-    }
-  } else if (ok) {
-    btns += `<span class='mbtn' data-unit='${u.id}' data-action='start' role='button' tabindex='0' title='${t("m_title_start")}'>${icon("play", 13)} ${isProc ? t("m_enable") : t("m_start")}</span>`;
-  }
-  const res = result ? `<div class='mresult'>${esc(result)}</div>` : "<div class='mresult'></div>";
-  return `<div class='mcard' data-unit='${u.id}'>
-    <div class='mhead'><span class='mname'>${esc(u.label)}</span><span class='mdesc'>${esc(u.desc)}</span></div>
-    <div class='mstate'><span class='mdot' style='background:${color}'></span> ${esc(stateTxt)}${pid}</div>
-    <div class='mbtns'>${btns}</div>
-    ${res}
-  </div>`;
-}
-
-async function loadManage() {
-  const el = $("tasks");
-  if (filter !== "manage") { el.hidden = true; return; }
-  el.hidden = false;
-  el.className = "watchdog-panel";
-  // 记住各卡片的操作结果,面板重建(轮询/动作后刷新)时保留
-  const prevResults = {};
-  el.querySelectorAll(".mcard").forEach(c => {
-    const r = c.querySelector(".mresult");
-    if (r && r.textContent) prevResults[c.dataset.unit] = r.textContent;
-  });
-  const cards = await Promise.all(MANAGE_UNITS.map(async (u) => {
-    let st = null;
-    try {
-      const r = await fetch("/api/manage?unit=" + encodeURIComponent(u.id) + "&lang=" + encodeURIComponent(LANG), { cache: "no-store" });
-      st = await r.json();
-    } catch (e) { st = null; }
-    return manageCard(u, st, prevResults[u.id] || "");
-  }));
-  el.innerHTML = `<h2>${t("m_panel")} <span style='color:var(--text-dead);font-weight:400'>${t("m_hint")}</span></h2>
-    <div class='mgrid'>${cards.join("")}</div>`;
-  el.querySelectorAll(".mbtn").forEach(b => b.addEventListener("click", () => doManage(b)));
-}
-
-async function doManage(btn) {
-  const unit = btn.dataset.unit, action = btn.dataset.action;
-  const label = MANAGE_LABELS[action] || action;
-  if (!await uiConfirm(t("m_confirm", { label, unit }))) return;
-  btn.setAttribute("aria-disabled", "true");
-  const res = btn.closest(".mcard").querySelector(".mresult");
-  res.textContent = t("m_doing");
-  try {
-    const r = await apiPost("/api/manage?lang=" + encodeURIComponent(LANG),
-      { unit, action });
-    const d = await r.json();
-    res.innerHTML = icon(d.ok ? "ok" : "err", 13) + " " + escHtml(d.msg || "");
-    res.style.color = d.ok ? "var(--c-green)" : "var(--c-red)";
-  } catch (e) {
-    res.innerHTML = icon("err", 13) + " " + escHtml(e.message);
-    res.style.color = "var(--c-red)";
-  }
-  btn.setAttribute("aria-disabled", "false");
-  setTimeout(() => loadManage(), 600); // 等 systemd 状态落地再刷新
-}
 
 // --- 首屏快照缓存(localStorage): 打开页面先用上次数据秒渲染, 后台再拉新覆盖 ---
 // 慢接口(/api/repos 冷启动 ~14s)不再阻塞首屏; 右上刷新钮照常拉最新。
@@ -1301,56 +1494,93 @@ function renderPortalSvc(services) {
   }).join("") + `</div>`;
 }
 
+function formatQuotaBucketName(label) {
+  if (!label) return "额度";
+  let s = String(label);
+  s = s.replace(/^(Gemini Models|Claude and GPT models)\s*·\s*/i, "");
+  s = s.replace(/^codex\s*·\s*/i, "");
+  s = s.replace(/^gpt-reserve\s*·\s*/i, "GPT 储备 · ");
+  s = s.replace(/\bprimary\b/i, "5h");
+  s = s.replace(/\bsecondary\b/i, "周额度");
+  s = s.replace(/\bgemini-5h\b/i, "Gemini 5h");
+  s = s.replace(/\bgemini-weekly\b/i, "Gemini 周");
+  s = s.replace(/\b3p-5h\b/i, "Claude/3P 5h");
+  s = s.replace(/\b3p-weekly\b/i, "Claude/3P 周");
+  return s.trim();
+}
+
 async function renderPortalAgent() {
   const body = $("hp-body-agent"), badge = $("hp-badge-agent");
   if (!body) return;
   try {
     const d = await loadRuntimes();
     const agents = (d && d.agents) || [];
-    const low = [];
-    agents.forEach(a => ((a.quota && a.quota.buckets) || []).forEach(b => {
-      if (b.remaining_pct != null && b.remaining_pct < 15) {
-        low.push({ agent: a.name, label: b.label, pct: b.remaining_pct });
-      }
-    }));
-    if (badge) badge.textContent = t("hp_installed_running", { installed: d.total_installed || 0, running: d.total_running || 0 });
-
-    const runningAgents = agents.filter(a => (a.procs || 0) > 0);
-    const procsList = [];
-    runningAgents.forEach(a => {
-      (a.proc_list || []).forEach(p => {
-        procsList.push({ name: a.name, pid: p.pid, mem: p.mem_mb, cpu: p.cpu });
-      });
+    if (badge) badge.textContent = t("hp_installed_running", {
+      installed: d.total_installed || 0, running: d.total_running || 0
     });
+    // 只显示有额度数据的 agent，没有额度或查不到的一律不显示
+    const withQuota = agents.filter(a => {
+      const buckets = (a.quota && a.quota.buckets) || [];
+      return buckets.length > 0 && buckets.some(b => b.remaining_pct != null);
+    }).sort((a, b) => (b.procs || 0) - (a.procs || 0));
 
-    let lowHtml = "";
-    if (low.length > 0) {
-      lowHtml = `<div class="hp-agent-pill warn">${icon("warn", 12)} <span>${escHtml(t("hp_quota_warn", { n: low.length }))}</span></div>`;
-    } else {
-      lowHtml = `<div class="hp-agent-pill green"><span>✓ ${escHtml(t("hp_quota_ok"))}</span></div>`;
+    if (!withQuota.length) {
+      body.innerHTML = `<div class="gempty">${escHtml(t("hp_no_agent_proc"))}</div>`;
+      return;
     }
+    body.innerHTML = withQuota.map(a => {
+      const buckets = (a.quota && a.quota.buckets) || [];
+      // 工作目录摘要
+      const cwds = [...new Set((a.proc_list || []).map(p =>
+        (p.cwd || "").replace(/\/$/, "").split("/").pop() || "?"
+      ))].slice(0, 2);
+      const cwdHtml = cwds.map(c => `<span class="hp-ag-cwd">${escHtml(c)}</span>`).join("");
 
-    body.innerHTML = `
-      <div class="hp-agent-summary" data-nav="agent" role="button" tabindex="0">
-        <div class="hp-agent-kpis">
-          <div class="hp-agent-pill"><b>${d.total_installed || 0}</b> <span>${escHtml(t("hp_installed"))}</span></div>
-          <div class="hp-agent-pill ${d.total_running ? 'green' : ''}"><b>${d.total_running || 0}</b> <span>${escHtml(t("hp_running"))}</span></div>
-          ${lowHtml}
+      // 额度分桶进度条
+      const bucketsHtml = `<div class="hp-ag-buckets">` + buckets.map(b => {
+        const p = b.remaining_pct != null ? Math.round(b.remaining_pct) : null;
+        if (p == null) return "";
+        const cls = p >= 50 ? "high" : (p >= 15 ? "mid" : "low");
+        const shortName = formatQuotaBucketName(b.label);
+        let resetTip = "";
+        if (b.reset) {
+          const m = b.reset.match(/(?:\d{4}-)?(\d{2}-\d{2}\s+\d{2}:\d{2})/);
+          resetTip = m ? m[1] : b.reset.slice(-8);
+        } else if (b.detail && b.detail.includes("/")) {
+          resetTip = b.detail.split(" ")[0];
+        }
+        return `<div class="hp-bucket-row">
+          <div class="hp-bucket-meta">
+            <span class="hp-bucket-name" title="${escAttr(b.label)}">${escHtml(shortName)}</span>
+            <span class="hp-bucket-right">
+              ${resetTip ? `<span class="hp-bucket-reset">${escHtml(resetTip)}</span>` : ""}
+              <span class="hp-bucket-val ${cls}">${p}%</span>
+            </span>
+          </div>
+          <div class="hp-bucket-track">
+            <div class="hp-bucket-fill ${cls}" style="width:${Math.max(p, 2)}%"></div>
+          </div>
+        </div>`;
+      }).join("") + `</div>`;
+
+      return `<div class="hp-ag-item" role="button" tabindex="0" data-nav="agent" data-agent="${escAttr(a.id)}">
+        <div class="hp-ag-item-head">
+          <div class="hp-ag-title-wrap">
+            <span class="agent-status-dot on"></span>
+            <span class="hp-ag-name">${escHtml(a.name)}</span>
+            <span class="hp-ag-procs">${a.procs}${escHtml(t("hp_procs_unit"))}</span>
+          </div>
+          <div class="hp-ag-cwds">${cwdHtml}</div>
         </div>
-        <div class="hp-agent-procs">
-          ${procsList.length ? procsList.slice(0, 3).map(p => `
-            <div class="hp-agent-proc-row">
-              <span class="hp-agent-proc-name">${escHtml(p.name)}</span>
-              <span class="hp-agent-proc-detail">PID ${p.pid} · ${Math.round(p.mem)}MB · ${p.cpu}%</span>
-            </div>
-          `).join("") : `<div class="gempty" style="padding:10px 0;">${escHtml(t("hp_no_agent_proc"))}</div>`}
-        </div>
-      </div>
-    `;
+        ${bucketsHtml}
+      </div>`;
+    }).join("");
   } catch (e) {
     body.innerHTML = `<div class="gempty">${escHtml(e.message)}</div>`;
   }
 }
+
+
 
 let lastSvc = { ok: 0, total: 0 };
 async function renderOverview(apiData) {
@@ -1496,7 +1726,7 @@ setInterval(() => { if (!document.hidden) refreshFreshness(); }, 20000);
 // 概要页交互: 状态卡 / 四大中枢 Portal 跳转
 $("statuscard")?.addEventListener("click", (e) => {
   if (e.target.closest(".gcopy") || e.target.closest("a")) return;
-  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(2);
+  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(4);
   else setCat("svc");
 });
 
@@ -1506,9 +1736,13 @@ document.addEventListener("click", (e) => {
     if (e.target.closest("a[href]") || e.target.closest(".gcopy") || e.target.closest(".svctl-btn")) return;
     const nav = jump.dataset.nav;
     if (nav === "activity") { isMobile() ? setPage(1) : setCat("activity"); }
-    else if (nav === "svc") { isMobile() ? setPage(2) : setCat("svc"); }
-    else if (nav === "tmux") { isMobile() ? setPage(3) : setCat("tmux"); }
-    else if (nav === "agent") { isMobile() ? setPage(4) : setCat("agent"); }
+    else if (nav === "tmux") { isMobile() ? setPage(2) : setCat("tmux"); }
+    else if (nav === "agent") { isMobile() ? setPage(3) : setCat("agent"); }
+    else if (nav === "svc") { isMobile() ? setPage(4) : setCat("svc"); }
+    else if (nav === "network" || nav === "ts") {
+      if (isMobile()) setPage(4); else setCat("svc");
+      filter = "tailscale"; applyFilter();
+    }
     scrollTo({ top: 0, behavior: "smooth" });
   }
 });
@@ -1526,7 +1760,7 @@ if (rcMore) rcMore.addEventListener("click", () => {
 });
 const hpMore = document.querySelector(".hp-more");
 if (hpMore) hpMore.addEventListener("click", () => {
-  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(3);
+  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(2);
   else setCat("tmux");
 });
 const recentBodyEl = $("recent-body");
@@ -1551,7 +1785,7 @@ document.addEventListener("click", (e) => {
     renderOverview(null);
     return;
   }
-  if (e.target.closest(".detail")) setPage(3);
+  if (e.target.closest(".detail")) setPage(2);
 });
 
 // --- 活动流 (Activity Stream: Git 提交 + 远程同步 + Goal/Watchdog) ---
@@ -1877,10 +2111,11 @@ async function renderActivityPage() {
       const subj = e.subject || e.text || "—";
       const timeStr = e.time || (e.ts ? new Date(e.ts * 1000).toLocaleString() : '');
       const author = e.author || "cheyan";
+      const initial = (author.slice(0, 1) || "C").toUpperCase();
       const metaRow = `<div class="act-meta-row">
-        <span class="act-time-full">${icon("clock", 11)} ${escHtml(timeStr)}</span>
+        <span class="act-author-wrap"><span class="act-avatar-badge">${escHtml(initial)}</span> <span class="act-author">${escHtml(author)}</span></span>
         <span class="act-dot-sep">·</span>
-        <span class="act-author">by ${escHtml(author)}</span>
+        <span class="act-time-full">${icon("clock", 11)} ${escHtml(timeStr)}</span>
         <span class="act-dot-sep">·</span>
         <span class="act-time-ago">${escHtml(agoFromTs(e.ts))}</span>
       </div>`;
@@ -2161,6 +2396,246 @@ async function fetchTmuxPaneCapture(target, lines) {
   }
 }
 
+// --- Tailscale 组网与服务中枢 (Tailscale Network & Services Hub) ---
+let tsCache = { t: 0, data: null };
+
+async function fetchTailscaleData(force) {
+  const now = Date.now();
+  if (!force && tsCache.data && now - tsCache.t < 6000) return tsCache.data;
+  try {
+    const r = await fetch("/api/tailscale", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    tsCache = { t: now, data: d };
+    return d;
+  } catch (err) {
+    console.error("tailscale fetch failed", err);
+    return tsCache.data || { ok: false, error: err.message };
+  }
+}
+
+function fmtBytes(bytes) {
+  if (!bytes || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(1) + " " + units[i];
+}
+
+async function renderNetworkPage(force) {
+  const np = $("network-page");
+  if (!np) return;
+
+  const data = await fetchTailscaleData(force);
+  if (!data || !data.ok) {
+    const list = $("ts-peers-list");
+    if (list) list.innerHTML = `<div class="gempty">${t("a_none")}: ${escHtml(data?.error || "Tailscale not running")}</div>`;
+    return;
+  }
+
+  // 1. 本机 Self 卡片
+  const selfCard = $("ts-self-card");
+  if (selfCard && data.self) {
+    const s = data.self;
+    const isRunning = data.backend_state === "Running";
+    const ipsHtml = (s.ips || []).map(ip =>
+      `<span class="ts-ip-chip gcopy" data-copy="${escAttr(ip)}" title="${t("ts_copy_ip")}">
+         ${escHtml(ip)} ${icon("copy", 10)}
+       </span>`
+    ).join("");
+
+    selfCard.innerHTML = `
+      <div class="ts-self-top">
+        <div class="ts-self-title">
+          <span>${icon("home", 15)}</span>
+          <span>${escHtml(s.hostname)}</span>
+          <span class="ts-os-badge">${escHtml(s.os)}</span>
+          <span class="ts-badge ${isRunning ? 'running' : ''}">${isRunning ? icon("ok", 11) + " " + t("ts_status_running") : t("ts_status_stopped")}</span>
+        </div>
+        ${data.version ? `<span class="ghint">v${escHtml(data.version.split('-')[0])}</span>` : ''}
+      </div>
+      <div class="ts-self-ips">${ipsHtml}</div>
+      ${s.dns_name ? `
+        <div class="ts-dns-text">
+          <span>${icon("ext", 11)}</span>
+          <span class="gcopy" data-copy="https://${escAttr(s.dns_name)}" title="${t("g_copy")}">${escHtml(s.dns_name)}</span>
+        </div>` : ''}
+    `;
+  }
+
+  // 2. Serve 代理服务
+  const srvGrid = $("ts-serve-grid");
+  const srvCount = $("ts-serve-count");
+  const srvServices = data.serve?.services || [];
+  if (srvCount) srvCount.textContent = `(${srvServices.length})`;
+  if (srvGrid) {
+    if (!srvServices.length) {
+      srvGrid.innerHTML = `<div class="gempty" style="grid-column: 1/-1;">${t("a_none")}</div>`;
+    } else {
+      srvGrid.innerHTML = srvServices.map(srv => {
+        return `
+          <div class="ts-serve-card">
+            <div class="ts-serve-info">
+              <div class="ts-serve-path" title="${escAttr(srv.url)}">${escHtml(srv.path || "/")}</div>
+              <div class="ts-serve-proxy">代理至 <code>${escHtml(srv.target)}</code> (${escHtml(srv.host_port || '')})</div>
+            </div>
+            <div class="ts-serve-btns">
+              <a href="${escAttr(srv.url)}" target="_blank" rel="noopener noreferrer" class="btn-ts-mini">
+                ${icon("ext", 11)} <span>${t("ts_open")}</span>
+              </a>
+              <button type="button" class="btn-ts-mini gcopy" data-copy="${escAttr(srv.url)}" title="${t("g_copy")}">
+                ${icon("copy", 11)}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  // 3. 已连 Peers 设备列表
+  const peersList = $("ts-peers-list");
+  const peersCount = $("ts-peers-count");
+  const peers = data.peers || [];
+  if (peersCount) peersCount.textContent = `(${peers.length})`;
+  if (peersList) {
+    if (!peers.length) {
+      peersList.innerHTML = `<div class="gempty">${t("a_none")}</div>`;
+    } else {
+      peersList.innerHTML = peers.map(p => {
+        const ip = (p.ips && p.ips[0]) || "";
+        const online = p.online;
+        const direct = p.direct;
+
+        let connBadge = "";
+        if (direct && p.cur_addr) {
+          connBadge = `<span class="ts-conn-pill direct">${icon("bolt", 10)} ${t("ts_direct")} · ${escHtml(p.cur_addr)}</span>`;
+        } else if (p.relay) {
+          connBadge = `<span class="ts-conn-pill relay">🌐 ${t("ts_relay")} (${escHtml(p.relay)})</span>`;
+        } else if (online) {
+          connBadge = `<span class="ts-conn-pill direct">${t("ts_online")}</span>`;
+        } else {
+          connBadge = `<span class="ts-conn-pill offline">${t("ts_offline")}</span>`;
+        }
+
+        const trafficText = (p.tx_bytes || p.rx_bytes) ?
+          `↑ ${fmtBytes(p.tx_bytes)} · ↓ ${fmtBytes(p.rx_bytes)}` : "";
+
+        return `
+          <div class="ts-peer-card" data-peer-ip="${escAttr(ip)}" data-peer-host="${escAttr(p.hostname)}">
+            <div class="ts-peer-header">
+              <div class="ts-peer-name">
+                <span>${escHtml(p.hostname)}</span>
+                <span class="ts-os-badge">${escHtml(p.os)}</span>
+              </div>
+              <div>${connBadge}</div>
+            </div>
+            <div class="ts-peer-detail">
+              <div class="ts-peer-ip">${escHtml(ip)}</div>
+              ${trafficText ? `<div class="ts-peer-traffic">${trafficText}</div>` : ''}
+            </div>
+            <div class="ts-peer-actions">
+              <button type="button" class="btn-ts-mini btn-peer-ping" data-peer="${escAttr(ip || p.hostname)}">
+                ${icon("bolt", 11)} <span>${t("ts_ping")}</span>
+              </button>
+              <span class="ts-ping-res" hidden></span>
+              <button type="button" class="btn-ts-mini gcopy" data-copy="${escAttr(ip)}" title="${t("ts_copy_ip")}">
+                ${icon("copy", 11)} <span>${t("ts_copy_ip")}</span>
+              </button>
+              <button type="button" class="btn-ts-mini gcopy" data-copy="ssh tetsuya@${escAttr(ip)}" title="${t("ts_copy_ssh")}">
+                ${icon("term", 11)} <span>${t("ts_copy_ssh")}</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+}
+
+// --- Tailscale 事件委托 (Netcheck, Ping, Refresh) ---
+document.addEventListener("click", async (e) => {
+  // 刷新网络面板
+  const refBtn = e.target.closest("#btn-ts-refresh");
+  if (refBtn) {
+    haptic(8);
+    refBtn.disabled = true;
+    try { await renderNetworkPage(true); } finally { setTimeout(() => refBtn.disabled = false, 800); }
+    return;
+  }
+
+  // 运行 Netcheck 网络穿透诊断
+  if (e.target.closest("#btn-ts-netcheck")) {
+    const card = $("ts-netcheck-card");
+    if (!card) return;
+    card.hidden = false;
+    card.innerHTML = `<div class="gempty">${icon("wait", 14)} 诊断穿透与 DERP 节点中…</div>`;
+    haptic(8);
+    try {
+      const r = await tlPost("/api/tailscale/netcheck", {});
+      if (r && r.ok) {
+        card.innerHTML = `
+          <div class="ts-self-title" style="margin-bottom:8px;">
+            <span>${icon("activity", 14)}</span> <span>${t("ts_diag_title")}</span>
+          </div>
+          <div class="ts-diag-grid">
+            <div class="ts-diag-item">
+              <div class="ts-diag-label">UDP 穿透</div>
+              <div class="ts-diag-val ${r.udp ? 'ok' : 'warn'}">${r.udp ? '正常 (OK)' : '受限'}</div>
+            </div>
+            <div class="ts-diag-item">
+              <div class="ts-diag-label">IPv4 / IPv6</div>
+              <div class="ts-diag-val ok">${r.ipv4 ? 'v4' : ''} ${r.ipv6 ? '· v6' : ''}</div>
+            </div>
+            <div class="ts-diag-item">
+              <div class="ts-diag-label">UPnP 打洞</div>
+              <div class="ts-diag-val ${r.upnp ? 'ok' : ''}">${r.upnp ? '支持 (Yes)' : '未启用'}</div>
+            </div>
+            <div class="ts-diag-item">
+              <div class="ts-diag-label">最优 DERP 中继</div>
+              <div class="ts-diag-val ok">Region ${r.preferred_derp || '-'} (${r.preferred_derp_latency_ms || '-'} ms)</div>
+            </div>
+          </div>
+        `;
+      } else {
+        card.innerHTML = `<div class="gempty" style="color:var(--c-red);">诊断失败: ${escHtml(r?.error || "Netcheck error")}</div>`;
+      }
+    } catch (err) {
+      card.innerHTML = `<div class="gempty" style="color:var(--c-red);">诊断失败: ${escHtml(err.message)}</div>`;
+    }
+    return;
+  }
+
+  // Peer 节点 Ping 测速
+  const pingBtn = e.target.closest(".btn-peer-ping");
+  if (pingBtn) {
+    const peer = pingBtn.dataset.peer;
+    const card = pingBtn.closest(".ts-peer-card");
+    const resEl = card ? card.querySelector(".ts-ping-res") : null;
+    if (!peer || !resEl) return;
+    pingBtn.disabled = true;
+    resEl.hidden = false;
+    resEl.className = "ts-ping-res";
+    resEl.textContent = t("ts_pinging");
+    haptic(6);
+    try {
+      const r = await tlPost("/api/tailscale/ping", { peer });
+      if (r && r.ok && r.rtt_ms !== null) {
+        const mode = r.direct ? t("ts_direct") : (r.via || t("ts_relay"));
+        resEl.textContent = `${r.rtt_ms} ms (${mode})`;
+      } else {
+        resEl.className = "ts-ping-res err";
+        resEl.textContent = "超时 / 失败";
+      }
+    } catch (_) {
+      resEl.className = "ts-ping-res err";
+      resEl.textContent = "错误";
+    } finally {
+      pingBtn.disabled = false;
+    }
+    return;
+  }
+});
+
 async function fetchTmuxData(force) {
   const now = Date.now();
   if (BOOT.static && BOOT.tmuxData) return BOOT.tmuxData;
@@ -2198,7 +2673,7 @@ async function renderTmuxPage() {
     const totalWins = sessions.reduce((acc, s) => acc + (s.windows_count || (s.windows ? s.windows.length : 1)), 0);
     statsEl.innerHTML = `
       <div class="tmux-stat-card">
-        <div class="tmux-stat-val">${summary.total}</div>
+        <div class="tmux-stat-val">${summary.total || sessions.length}</div>
         <div class="tmux-stat-lbl">${escHtml(t("tmux_total_sessions"))}</div>
       </div>
       <div class="tmux-stat-card">
@@ -2267,14 +2742,12 @@ async function renderTmuxPage() {
     const agentBadge = isAgent ?
       `<span class="tmux-badge tmux-badge-agent">${icon("bot", 11)} ${escHtml(t("tmux_filter_agent"))}</span>` : "";
 
-    // 仓库颜色胶囊
     let repoBadge = "";
     if (s.repo && s.repo !== "—") {
       const theme = getRepoTheme(s.repo);
       repoBadge = `<span class="tmux-badge tmux-badge-repo" style="background:${theme.color};">${escHtml(s.repo)}</span>`;
     }
 
-    // 活跃窗口选择
     const wins = s.windows || [];
     let curWinIdx = tmuxActiveWins[s.name];
     if (curWinIdx === undefined) {
@@ -2284,7 +2757,6 @@ async function renderTmuxPage() {
     }
     const curWin = wins.find(w => w.index === curWinIdx) || wins[0] || { panes: [] };
 
-    // 窗口 Tabs
     const tabsHtml = wins.length > 0 ? `
       <div class="tmux-tabs-bar">
         ${wins.map(w => {
@@ -2296,11 +2768,9 @@ async function renderTmuxPage() {
         }).join("")}
       </div>` : "";
 
-    // 窗格详情
     const panes = curWin.panes || [];
     const activePane = panes.find(p => p.active) || panes[0] || {};
 
-    // 窗格行
     const panesHtml = panes.map(p => {
       const pcmd = (p.command || "term").toLowerCase();
       return `
@@ -2316,8 +2786,7 @@ async function renderTmuxPage() {
       `;
     }).join("");
 
-    // 终端预览开关与内容
-    const showTerm = tmuxShowTerm[s.name] !== false; // 默认展开
+    const showTerm = tmuxShowTerm[s.name] !== false;
     const termLines = (activePane.preview || []).slice(-12);
     const termText = termLines.length ? termLines.join("\n") : "(no terminal output captured)";
     const termHtml = showTerm ? `
@@ -2331,7 +2800,6 @@ async function renderTmuxPage() {
       </div>
     ` : "";
 
-    // 关联 Goal 提示
     let goalBanner = "";
     if (s.goal) {
       const g = s.goal;
@@ -2341,7 +2809,16 @@ async function renderTmuxPage() {
             ${icon("target", 13)} <b>${escHtml(t("tmux_linked_goal"))}</b>
             <span class="tmux-goal-banner-obj">${escHtml(g.objective || g.label || g.gid)}</span>
           </div>
-          ${g.resume_cmd ? `<button class="btn-tmux-act gcopy" data-copy="${escAttr(g.resume_cmd)}">${icon("copy", 11)} <span>Resume</span></button>` : ""}
+          ${g.resume_cmd ? `
+            <div class="tmux-goal-banner-acts">
+              <button class="btn-tmux-act g-resume-btn" data-resume-cmd="${escAttr(g.resume_cmd)}" title="后台 Tmux 唤醒恢复该任务">
+                ${icon("play", 11)} <span>${escHtml(t("g_resume_run"))}</span>
+              </button>
+              <button class="btn-tmux-act gcopy" data-copy="${escAttr(g.resume_cmd)}" title="${escAttr(t("g_copy"))}">
+                ${icon("copy", 11)} <span>${escHtml(t("g_copy"))}</span>
+              </button>
+            </div>
+          ` : ""}
         </div>
       `;
     }
@@ -2360,6 +2837,9 @@ async function renderTmuxPage() {
             <span class="tmux-badge tmux-badge-det">${s.windows_count} ${escHtml(t("tmux_total_windows"))}</span>
           </div>
           <div class="tmux-card-actions">
+            <button class="btn-tmux-act btn-tmux-wake" data-sname="${escAttr(s.name)}" data-target="${escAttr(activePane.pane ? `${s.name}:${activePane.pane}` : s.name)}" title="调用 Hermes 检查当前阻塞/选择状态并自动推进">
+              ${icon("bolt", 12)} <span>唤醒推进</span>
+            </button>
             <button class="btn-tmux-act btn-tmux-fullscreen" data-sname="${escAttr(s.name)}" data-target="${escAttr(activePane.pane ? `${s.name}:${activePane.pane}` : s.name)}" title="${escAttr(t('tmux_fullscreen'))}">
               ${icon("expand", 12)} <span>${escHtml(t("tmux_fullscreen"))}</span>
             </button>
@@ -2923,26 +3403,16 @@ function bindRefreshCtl(btn) {
       setAutoLocked(!autoLocked);
       haptic(15);
       themeToast(t(autoLocked ? "locked_toast" : "unlocked_toast"));
-      console.log("[svc-dashboard] auto refresh " + (autoLocked ? "locked" : "unlocked") + " via " + btn.id);
     }, 500);
   }, { passive: true }));
   ["pointerup", "pointercancel", "touchend", "touchcancel", "pointerleave"].forEach(ev =>
     btn.addEventListener(ev, () => clearTimeout(refreshHoldTimer), { passive: true }));
 }
 refreshBtns().forEach(bindRefreshCtl);
-// 浮动刷新圆钮显隐: topbar(header)滚出视口 → 显示; 回到顶部 → 隐藏。
-// IntersectionObserver 以视口为 root: 移动端 header 在 main 内随内容滚走, 桌面端随文档滚走。
+// 全局彻底停用浮动刷新圆钮
 (function setupFab() {
-  const fab = $("fab-refresh"), hdr = document.querySelector("header");
-  if (!fab || !hdr || !("IntersectionObserver" in window)) return;
-  const io = new IntersectionObserver((entries) => {
-    for (const en of entries) {
-      const show = !en.isIntersecting;
-      fab.hidden = !show;
-      console.log("[svc-dashboard] fab " + (show ? "visible (topbar scrolled out)" : "hidden"));
-    }
-  }, { threshold: 0 });
-  io.observe(hdr);
+  const fab = $("fab-refresh");
+  if (fab) fab.hidden = true;
 })();
 // 全局键盘委托: 所有 span[role=button] 控件支持 Enter/Space 触发
 document.addEventListener("keydown", (e) => {
@@ -2971,9 +3441,9 @@ const haptic = (ms) => {
 const PAGE_GROUPS = [
   ["#statuscard", "#sysbar", "#chart-wrap", "#hp-portal-grid"],
   ["#activity-page"],
-  ["#filters", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
   ["#tmux-panel"],
   ["#agents-page"],
+  ["#filters", "#network-page", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
 ];
 let pagesHomeOrder = null, pgWrappers = null, trackEl = null, headerHome = null;
 function placeHeader(mobile) {
@@ -3026,12 +3496,12 @@ mqMobile.addEventListener("change", () => {
     document.querySelectorAll(".cat-off").forEach(el => el.classList.remove("cat-off"));
   } else setCat(curCat, false);   // 切回桌面: 恢复选中分类的过滤
 });
-// --- 分页(概览/活动/服务/Tmux/Agent) ---
+// --- 分页(概览/活动/Tmux/Agent/服务) ---
 const pages = $("pages");
 const N_PAGES = 5;
 const PAGE_W = 100 / N_PAGES;   // 轨道宽 500%, 每页位移 = 轨道的 1/5
 var page = 0;   // var: 挂到 window, 便于外部调试/测试读取
-function pageLabels() { return [t("tab_home"), t("tab_activity"), t("tab_svc"), t("tab_tmux"), t("tab_agent")]; }
+function pageLabels() { return [t("tab_home"), t("tab_activity"), t("tab_tmux"), t("tab_agent"), t("tab_svc")]; }
 function applyPagesX(withTransition) {
   const tr = trackEl; // 移动端才有轨道
   if (!tr) return;
@@ -3071,6 +3541,8 @@ function setPage(i, opts) {
   syncConnbarVisibility();
   applyPagesX(true);
   document.querySelectorAll("#tabbar .tab").forEach(b => b.classList.toggle("active", +b.dataset.p === i));
+  const tb = $("tabbar");
+  if (tb) tb.classList.remove("tabbar-hidden");
   if (changed) activatePage(i);
   // 页面内容异步变化后(骨架→数据/折叠展开)重测高度
   requestAnimationFrame(() => applyPagesX(false));
@@ -3078,32 +3550,197 @@ function setPage(i, opts) {
 function activatePage(i) {
   if (i === 0) requestAnimationFrame(drawChart);
   if (i === 1) { const ap = $("activity-page"); if (ap) ap.hidden = false; renderActivityPage(); }
-  if (i === 2 && isMobile()) {       // 服务页: 骨架 → 渲染
+  if (i === 2) {
+    const tp = $("tmux-panel");
+    if (tp) tp.hidden = false;
+    renderTmuxPage();
+  }
+  if (i === 3) {
+    const ap = $("agents-page");
+    if (ap) ap.hidden = false;
+    initAgentsPage();
+  }
+  if (i === 4 && isMobile()) {       // 服务页: 骨架 → 渲染
     const tbody = $("svc").querySelector("tbody");
     if (!tbody.children.length) tbody.innerHTML = mobileSkel(4);
     applyFilter();
   }
-  if (i === 2) {                     // 服务页尾部 = 计划任务 + 日志区(原管理页迁入)
+  if (i === 4) {                     // 服务页尾部 = 计划任务 + 日志区
     const cp = $("cron-panel");
     if (cp) cp.hidden = false;
     cronLoad();
     initLogPage(); renderLogTimeline();
   }
-  if (i === 3) {
-    const tp = $("tmux-panel");
-    if (tp) tp.hidden = false;
-    renderTmuxPage();
-  }
-  if (i === 4) {
-    const ap = $("agents-page");
-    if (ap) ap.hidden = false;
-    initAgentsPage();
-  }
 }
 document.addEventListener("click", (e) => {
   const b = e.target.closest("#tabbar .tab");
-  if (b) { setPage(+b.dataset.p); return; }
+  if (b) {
+    const tb = $("tabbar");
+    if (tb) tb.classList.remove("tabbar-hidden");
+    setPage(+b.dataset.p);
+    return;
+  }
 });
+
+// --- 手机端导航栏随滚动自动隐藏/显现 (下滑隐藏留出全屏视野，上滑浮现) ---
+(function initTabbarAutoScroll() {
+  const main = document.querySelector("main");
+  const tabbar = document.getElementById("tabbar");
+  if (!tabbar) return;
+  let lastY = 0;
+  let ticking = false;
+
+  const onScroll = (currentY) => {
+    const diff = currentY - lastY;
+    if (diff > 12 && currentY > 50) {
+      tabbar.classList.add("tabbar-hidden");
+    } else if (diff < -8 || currentY <= 25) {
+      tabbar.classList.remove("tabbar-hidden");
+    }
+    lastY = Math.max(0, currentY);
+    ticking = false;
+  };
+
+  if (main) {
+    main.addEventListener("scroll", () => {
+      if (!ticking) {
+        requestAnimationFrame(() => onScroll(main.scrollTop));
+        ticking = true;
+      }
+    }, { passive: true });
+  }
+
+  window.addEventListener("scroll", () => {
+    if (!ticking) {
+      requestAnimationFrame(() => onScroll(window.scrollY || document.documentElement.scrollTop));
+      ticking = true;
+    }
+  }, { passive: true });
+})();
+
+// --- 手机端左右滑动切换卡片 (Swipe to Switch Page / Tab) ---
+(function initSwipeToChangePage() {
+  const touchCapable = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+  if (!touchCapable) return;
+
+  let startX = 0, startY = 0, startTime = 0;
+  let isSwiping = false, directionLocked = false;
+  let scrollableParent = null;
+
+  function findHorizontalScrollable(el) {
+    while (el && el !== document.body && el !== trackEl && el !== pages) {
+      if (el.classList && (el.classList.contains("filters") || el.classList.contains("nodel-code"))) {
+        if (el.scrollWidth > el.clientWidth) return el;
+      }
+      const style = window.getComputedStyle(el);
+      const ox = style.overflowX;
+      if ((ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth) {
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  document.addEventListener("touchstart", (e) => {
+    if (!isMobile() || !trackEl || e.touches.length !== 1) return;
+    const target = e.target;
+    // 忽略输入交互与弹窗
+    if (target.closest("input, textarea, select, [contenteditable='true'], .modal-content, .lightbox")) return;
+
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    startTime = Date.now();
+    isSwiping = false;
+    directionLocked = false;
+    scrollableParent = findHorizontalScrollable(target);
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (!isMobile() || !trackEl || !startX || e.touches.length !== 1) return;
+    const curX = e.touches[0].clientX;
+    const curY = e.touches[0].clientY;
+    const dx = curX - startX;
+    const dy = curY - startY;
+
+    if (!directionLocked) {
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      if (absX >= 8 || absY >= 8) {
+        directionLocked = true;
+        if (absX > absY * 1.2) {
+          // 判定为水平滑动。若触摸在内部横滚容器上且该容器在滑动方向尚有滚动余量，则让容器自己滚动
+          if (scrollableParent) {
+            const maxScroll = scrollableParent.scrollWidth - scrollableParent.clientWidth;
+            const sl = scrollableParent.scrollLeft;
+            if ((dx > 0 && sl > 2) || (dx < 0 && sl < maxScroll - 2)) {
+              isSwiping = false;
+              return;
+            }
+          }
+          isSwiping = true;
+        } else {
+          isSwiping = false;
+        }
+      }
+    }
+
+    if (isSwiping) {
+      if (e.cancelable) e.preventDefault();
+      const vw = window.innerWidth || 360;
+      let deltaPercent = (dx / vw) * PAGE_W;
+
+      // 处于第 0 页向右拉或最后一页向左拉时，施加橡皮筋弹性阻尼
+      if ((page === 0 && dx > 0) || (page === N_PAGES - 1 && dx < 0)) {
+        deltaPercent *= 0.28;
+      }
+
+      trackEl.classList.add("stick");
+      trackEl.style.transform = `translate3d(${-page * PAGE_W + deltaPercent}%, 0, 0)`;
+    }
+  }, { passive: false });
+
+  const endSwipe = (e) => {
+    if (!startX) return;
+    const lastX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : startX;
+    const dx = lastX - startX;
+    const dt = Date.now() - startTime;
+    const wasSwiping = isSwiping;
+
+    startX = 0;
+    startY = 0;
+    startTime = 0;
+    isSwiping = false;
+    directionLocked = false;
+    scrollableParent = null;
+
+    if (wasSwiping && trackEl) {
+      trackEl.classList.remove("stick");
+      const vw = window.innerWidth || 360;
+      const vx = dx / Math.max(1, dt);
+      const flick = dt < 350 && Math.abs(dx) > 28 && Math.abs(vx) > 0.22;
+      const movedEnough = Math.abs(dx) > Math.min(vw * 0.18, 55);
+
+      let targetPage = page;
+      if (flick || movedEnough) {
+        if (dx < 0 && page < N_PAGES - 1) {
+          targetPage = page + 1;
+        } else if (dx > 0 && page > 0) {
+          targetPage = page - 1;
+        }
+      }
+
+      if (targetPage !== page) {
+        setPage(targetPage);
+      } else {
+        applyPagesX(true);
+      }
+    }
+  };
+
+  document.addEventListener("touchend", endSwipe, { passive: true });
+  document.addEventListener("touchcancel", endSwipe, { passive: true });
+})();
 
 // --- 骨架屏 ---
 function mobileSkel(n) {
@@ -3153,8 +3790,10 @@ function initLogAgentPicker() {
 }
 
 async function initLogPage(force) {
+  const lp = $("logpage");
+  if (lp) lp.hidden = false;   // 双端进入日志页即显示(移动页签 / 桌面 cat=log)
   const sel = $("logagent-sel"), body = $("logbody");
-  $("logpage").hidden = false;   // 双端进入日志页即显示(移动页签 / 桌面 cat=log)
+  if (!sel || !body) return;
   if (logAgents && !force) { if (!body.children.length) loadLogView(); return; }
   const agents = await loadAgents();
   logAgents = agents;
@@ -3165,13 +3804,14 @@ async function initLogPage(force) {
   syncLogAgentPicker();
   // 默认选中最近活跃的 agent(omp 已按 活跃→闲置 排序), 免得默认空选择
   const first = [...sel.options].find(o => o.value);
-  if (first && !sel.selectedOptions[0].value) { sel.value = first.value; }
+  if (first && !sel.selectedOptions[0]?.value) { sel.value = first.value; }
   if (!body.children.length) loadLogView();
 }
 async function loadLogView() {
   const body = $("logbody");
   const sel = $("logagent-sel");
-  const opt = sel.selectedOptions[0];
+  if (!body || !sel) return;
+  const opt = sel.selectedOptions ? sel.selectedOptions[0] : null;
   const sid = sel.value, cwd = opt ? opt.dataset.cwd || "" : "", tmx = opt ? opt.dataset.tmux || "" : "";
   if (!sid && !cwd) { renderLogTimeline(); return; }  // 未选 agent → 全局事件时间线(默认视图)
   body.innerHTML = `<div class='agentlog'>${t("a_loading")}</div>`;
@@ -3421,7 +4061,7 @@ function bindAgentHubEvents(el, d) {
     if (c.dataset.bound) return;
     c.dataset.bound = "1";
     c.addEventListener("click", () => {
-      if (typeof setPage !== "undefined" && isMobile()) setPage(3);
+      if (typeof setPage !== "undefined" && isMobile()) setPage(2);
       else setCat("tmux");
     });
   });
@@ -4059,15 +4699,156 @@ document.addEventListener("click", (e) => {
   m.setAttribute("aria-expanded", m.classList.contains("open") ? "true" : "false");
 });
 
-// --- goal 卡片展开(点标题切换 .gextra) ---
+// --- goal 卡「▶ 恢复运行」按钮: POST /api/goalresume ---
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".g-resume-btn");
+  if (!btn) return;
+  e.preventDefault(); e.stopPropagation();
+  const cmd = btn.dataset.resumeCmd || "";
+  if (!cmd) return;
+  btn.disabled = true;
+  const origHtml = btn.innerHTML;
+  btn.textContent = "…";
+  haptic(10);
+  try {
+    const r = await tlPost("/api/goalresume", { resume_cmd: cmd });
+    if (r && r.ok) {
+      btn.innerHTML = icon("ok", 12) + " " + escHtml(t("g_resumed"));
+      btn.classList.add("ok");
+      // 唤醒成功后，2.5 秒自动刷新 Tmux 会话列表，使新会话即时出现
+      setTimeout(async () => {
+        try {
+          await fetchTmuxData(true);
+          await fetchGoalsData(true);
+          renderTmuxPage();
+        } catch (_) {}
+      }, 2500);
+    } else {
+      btn.textContent = "✗ " + escHtml((r && r.msg) || "error");
+    }
+  } catch (err) {
+    btn.textContent = "✗ err";
+  }
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.classList.remove("ok");
+    btn.innerHTML = origHtml;
+  }, 4000);
+});
+
+// --- Tmux 会话「⚡ 唤醒推进」按钮: 调用 Hermes 自动判断并推进任务 ---
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".btn-tmux-wake");
+  if (!btn) return;
+  e.preventDefault(); e.stopPropagation();
+  const sname = btn.dataset.sname;
+  if (!sname) return;
+  btn.disabled = true;
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = `${icon("bolt", 12)} <span>⚡ 分析推进中…</span>`;
+  btn.classList.add("working");
+  haptic(10);
+  try {
+    const r = await tlPost("/api/tmux/wake", { session: sname, pane: (btn.dataset.target || "").split(":")[1] || "" });
+    if (r && r.ok) {
+      btn.innerHTML = `${icon("ok", 12)} <span>${escHtml(r.msg || "已推进")}</span>`;
+      btn.classList.remove("working");
+      btn.classList.add("success");
+      haptic(15);
+      // 推进成功后，延迟 1.5 秒刷新当前会话终端画面
+      setTimeout(async () => {
+        try {
+          await fetchTmuxData(true);
+          renderTmuxPage();
+        } catch (_) {}
+      }, 1500);
+    } else {
+      btn.innerHTML = `<span>✗ ${escHtml((r && r.msg) || "推进失败")}</span>`;
+    }
+  } catch (err) {
+    btn.innerHTML = `<span>✗ ${escHtml(err.message)}</span>`;
+  }
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.classList.remove("working", "success");
+    btn.innerHTML = origHtml;
+  }, 4500);
+});
+
+// --- 定时任务「▶ 触发」按钮: POST /api/tasks/run ---
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".btn-task-trigger");
+  if (!btn) return;
+  e.preventDefault(); e.stopPropagation();
+  const name = btn.dataset.name, kind = btn.dataset.kind, scope = btn.dataset.scope;
+  if (!name) return;
+  btn.disabled = true;
+  const origText = btn.innerHTML;
+  btn.textContent = "…";
+  haptic(10);
+  try {
+    const r = await tlPost("/api/tasks/run", { name, kind, scope });
+    if (r && r.ok) {
+      btn.innerHTML = `${icon("ok", 11)} <span>已触发</span>`;
+      btn.classList.add("ok");
+      setTimeout(() => { tasksCache = null; loadTasks().then(renderWatchdogPanel); }, 1500);
+    } else {
+      btn.textContent = "✗ " + ((r && r.msg) || "失败");
+    }
+  } catch (err) {
+    btn.textContent = "✗ 错误";
+  }
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.classList.remove("ok");
+    btn.innerHTML = origText;
+  }, 3500);
+});
+
+// --- Tmux 窗格「▶ 预览」终端输出 ---
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".btn-tmux-preview");
+  if (!btn) return;
+  e.preventDefault(); e.stopPropagation();
+  const target = btn.dataset.target;
+  if (!target) return;
+  const tr = btn.closest("tr");
+  if (!tr) return;
+  let nextRow = tr.nextElementSibling;
+  if (nextRow && nextRow.classList.contains("tmux-preview-row")) {
+    nextRow.remove();
+    btn.classList.remove("active");
+    return;
+  }
+  btn.classList.add("active");
+  const newRow = document.createElement("tr");
+  newRow.className = "tmux-preview-row";
+  newRow.innerHTML = `<td colspan="6" style="padding:10px;background:rgba(0,0,0,.35);"><div class="termlog" style="max-height:220px;overflow-y:auto;font-family:ui-monospace,monospace;font-size:11px;line-height:1.35;white-space:pre-wrap;">${t("a_loading")}</div></td>`;
+  tr.after(newRow);
+  try {
+    const r = await fetch(`/api/tmux/capture?target=${encodeURIComponent(target)}&lines=40&ansi=1`, { cache: "no-store" });
+    const d = await r.json();
+    const box = newRow.querySelector(".termlog");
+    if (box) {
+      if (d.ok && d.capture) box.innerHTML = ansiToHtml(d.capture);
+      else box.textContent = "无法获取终端输出: " + (d.msg || "未知");
+    }
+  } catch (err) {
+    const box = newRow.querySelector(".termlog");
+    if (box) box.textContent = "获取失败: " + err.message;
+  }
+});
+
 document.addEventListener("click", (e) => {
     const g = e.target.closest(".gcard");
     if (!g || !isMobile()) return;
     if (e.target.closest(".gcopy")) return;           // 复制 resume 命令: 交给全局 gcopy
     if (e.target.closest(".g-detail-btn")) return;    // 查看详情: 交给 goal 详情弹层
     if (e.target.closest(".g-ignore-btn")) return;    // 标记忽略: 交给上方忽略委托
+    if (e.target.closest(".g-resume-btn")) return;    // 恢复运行: 交给上方委托
     if (g.querySelector(".gextra")) { g.classList.toggle("open"); haptic(6); }
 });
+
 
 // --- 服务行"详情"按钮: 弹层看完整启动命令/工作目录 (复用主题化 ui-modal) ---
 document.addEventListener("click", async (e) => {
@@ -4128,7 +4909,7 @@ if (TOUCH) document.addEventListener("touchend", (e) => {
   const now = Date.now();
   if (now - lastTap < 300 && stat === lastTapEl) {
     lastTap = 0;
-    if (stat.dataset.k === "load") { setPage(3); haptic(10); }
+    if (stat.dataset.k === "load") { setPage(2); haptic(10); }
   } else { lastTap = now; lastTapEl = stat; }
 }, { passive: true });
 
@@ -4681,21 +5462,27 @@ function initToolsPage() {
   }
 }
 
-// --- 桌面端分类条(右上角 #catbar): 概览/活动/服务/Tmux/Agent; 移动端隐藏(底部页签) ---
+// --- 桌面端分类条(右上角 #catbar): 概览/活动/Tmux/Agent/服务; 移动端隐藏(底部页签) ---
 const CATS = [
-  ["home", "tab_home"], ["activity", "tab_activity"], ["svc", "tab_svc"], ["tmux", "tab_tmux"], ["agent", "tab_agent"],
+  ["home", "tab_home"], ["activity", "tab_activity"], ["tmux", "tab_tmux"],
+  ["agent", "tab_agent"], ["svc", "tab_svc"],
 ];
 const CAT_SELS = {
   home: ["#statuscard", "#sysbar", "#chart-wrap", "#hp-portal-grid"],
   activity: ["#activity-page"],
-  svc: ["#filters", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
   tmux: ["#tmux-panel"],
   goal: ["#tmux-panel"],
   agent: ["#agents-page"],
   manage: ["#agents-page"],
+  svc: ["#filters", "#network-page", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
+  network: ["#filters", "#network-page", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
 };
 var curCat = "all";
 function setCat(c, save) {
+  if (c === "network") {
+    filter = "tailscale";
+    c = "svc";
+  }
   curCat = c;
   syncConnbarVisibility();
   document.querySelectorAll("#catbar .cat").forEach(b => b.classList.toggle("active", b.dataset.cat === c));
@@ -4716,6 +5503,7 @@ function setCat(c, save) {
     const lp = $("logpage"), cp = $("cron-panel");
     if (lp) lp.hidden = false;
     if (cp) cp.hidden = false;
+    applyFilter();
     initLogPage(); renderLogTimeline(); cronLoad();
   }
   if (c === "agent" || c === "manage") {
@@ -4738,6 +5526,7 @@ function catFromHash() {
   if (c === "all") c = "home";
   if (c === "goal") c = "tmux";
   if (c === "log") c = "svc";   // 旧 #cat=log 现落在服务页(日志迁入)
+  if (c === "network") { filter = "tailscale"; c = "svc"; }
   if (c === "manage" || c === "tools") c = "agent";
   return CATS.some(x => x[0] === c) ? c : null;
 }

@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 import threading
 import time
+from datetime import datetime
 
 from svcdash import agents
 
@@ -282,8 +283,41 @@ def _recent_files(root, hours=24, limit=3):
 
 # ---------------- 额度: agent-quota.sh --json → 归一化 buckets ----------------
 
+def _iso_to_datetime(s):
+    """将 ISO 时间字符串或 epoch 秒转换为本地时区 datetime 对象。"""
+    if not s:
+        return None
+    if isinstance(s, (int, float)) or (isinstance(s, str) and s.isdigit()):
+        try:
+            return datetime.fromtimestamp(float(s)).astimezone()
+        except (TypeError, ValueError, OverflowError):
+            return None
+    raw = str(s).strip()
+    try:
+        clean = raw
+        if clean.endswith("Z") or clean.endswith("z"):
+            clean = clean[:-1] + "+00:00"
+        dt = datetime.fromisoformat(clean)
+        if dt.tzinfo is not None:
+            return dt.astimezone()
+        return dt
+    except (ValueError, TypeError):
+        return None
+
+
 def _iso_cut(s):
-    return str(s or "")[:19].replace("T", " ")
+    """截断/转换 ISO 时间; 兼容 epoch 秒(codex app-server 返回数字)。转换为本地时间字符串。"""
+    if not s:
+        return ""
+    if isinstance(s, (int, float)) or (isinstance(s, str) and s.isdigit()):
+        try:
+            return time.strftime("%m-%d %H:%M", time.localtime(float(s)))
+        except (TypeError, ValueError, OverflowError):
+            return ""
+    dt = _iso_to_datetime(s)
+    if dt is not None:
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    return str(s)[:19].replace("T", " ")
 
 
 def _pct(x):
@@ -308,8 +342,15 @@ def _parse_codex_quota(d):
             used = _pct(p.get("usedPercent"))
             if used is None:
                 continue
-            buckets.append({"label": f"{name} · {tag}", "remaining_pct": 100 - used,
-                            "reset": _iso_cut(p.get("resetsAt")), "detail": ""})
+            r_at = p.get("resetsAt")
+            item = {"label": f"{name} · {tag}", "remaining_pct": 100 - used,
+                    "reset": _iso_cut(r_at), "detail": ""}
+            if isinstance(r_at, (int, float)) or (isinstance(r_at, str) and str(r_at).isdigit()):
+                try:
+                    item["reset_ts"] = float(r_at)
+                except (ValueError, TypeError):
+                    pass
+            buckets.append(item)
     usage = d.get("usage") or {}
     s = usage.get("summary") or {}
     toks = []
@@ -325,20 +366,11 @@ def _parse_codex_quota(d):
     return {"ok": True, "account": acc.get("email") or "", "plan": acc.get("planType") or "",
             "buckets": buckets, "detail": "; ".join(toks)}
 
-def _iso_cut(s):
-    """截断 ISO 时间; 兼容 epoch 秒(codex app-server 返回数字)。"""
-    if isinstance(s, (int, float)) or (isinstance(s, str) and s.isdigit()):
-        try:
-            return time.strftime("%m-%d %H:%M", time.localtime(float(s)))
-        except (TypeError, ValueError, OverflowError):
-            return ""
-    return str(s or "")[:19].replace("T", " ")
-
-
 
 def _parse_agy_quota(d):
     """google cloudcode retrieveUserQuotaSummary → gemini/claude+gpt 周额度与5小时额度"""
     buckets = []
+    now = time.time()
     for g in (d.get("quota") or {}).get("groups") or []:
         gname = g.get("displayName") or ""
         for b in g.get("buckets") or []:
@@ -346,9 +378,17 @@ def _parse_agy_quota(d):
             pct = _pct(float(frac) * 100) if frac is not None else None
             if pct is None:
                 continue
-            buckets.append({"label": f"{gname} · {b.get('bucketId', '')}",
-                            "remaining_pct": pct,
-                            "reset": _iso_cut(b.get("resetTime")), "detail": ""})
+            raw_reset = b.get("resetTime")
+            reset_dt = _iso_to_datetime(raw_reset)
+            reset_ts = reset_dt.timestamp() if reset_dt else None
+            if reset_ts and reset_ts < now and pct == 0:
+                pct = 100
+            item = {"label": f"{gname} · {b.get('bucketId', '')}",
+                    "remaining_pct": pct,
+                    "reset": _iso_cut(raw_reset), "detail": ""}
+            if reset_ts:
+                item["reset_ts"] = reset_ts
+            buckets.append(item)
     emails = [a.get("email") for a in (d.get("accounts") or []) if a.get("email")]
     return {"ok": bool(buckets), "account": ", ".join(emails[:2]), "plan": "",
             "buckets": buckets, "detail": ""}
@@ -360,9 +400,13 @@ def _parse_grok_quota(d):
     buckets = []
     used = _pct(cfg.get("creditUsagePercent"))
     if used is not None:
-        buckets.append({"label": "credits", "remaining_pct": 100 - used,
-                        "reset": _iso_cut(cfg.get("currentPeriod", {}).get("end")),
-                        "detail": ""})
+        raw_end = cfg.get("currentPeriod", {}).get("end")
+        end_dt = _iso_to_datetime(raw_end)
+        item = {"label": "credits", "remaining_pct": 100 - used,
+                "reset": _iso_cut(raw_end), "detail": ""}
+        if end_dt:
+            item["reset_ts"] = end_dt.timestamp()
+        buckets.append(item)
     prepaid = (cfg.get("prepaidBalance") or {}).get("val")
     return {"ok": bool(buckets), "account": user.get("email") or "",
             "plan": user.get("subscriptionTier") or "", "buckets": buckets,
@@ -400,6 +444,7 @@ def _parse_cursor_quota(d):
             reset = time.strftime("%Y-%m-%d %H:%M", time.localtime(int(end_ms) / 1000))
             for b in buckets:
                 b["reset"] = reset
+                b["reset_ts"] = int(end_ms) / 1000
         except (TypeError, ValueError):
             pass
     return {"ok": bool(buckets), "account": "", "plan": "", "buckets": buckets,
@@ -421,12 +466,17 @@ def _parse_dim_quota(d):
     if total <= 0:
         return {"ok": False, "account": "", "plan": "", "buckets": [],
                 "detail": "no Credits bucket"}
-    reset = str(d.get("term_end") or "")[:19].replace("T", " ")
+    raw_term = d.get("term_end")
+    reset = _iso_cut(raw_term)
+    term_dt = _iso_to_datetime(raw_term)
     pct = max(0, min(100, round(remaining / total * 100)))
     detail = f"{int(used)}/{int(total)} Credits remaining {int(remaining)}"
-    return {"ok": True, "account": "", "plan": "", "buckets": [{
+    item = {
         "label": "Credits", "remaining_pct": pct, "reset": reset, "detail": detail
-    }], "detail": detail}
+    }
+    if term_dt:
+        item["reset_ts"] = term_dt.timestamp()
+    return {"ok": True, "account": "", "plan": "", "buckets": [item], "detail": detail}
 
 
 QUOTA_PARSERS = {"codex": _parse_codex_quota, "agy": _parse_agy_quota,
@@ -452,13 +502,29 @@ def _runuser_tetsuya(cmd, timeout=300):
         return 1, str(e)
 
 
+def _has_expired_quota():
+    now = time.time()
+    data = _quota.get("data")
+    if not isinstance(data, dict):
+        return False
+    for pdata in data.values():
+        if not isinstance(pdata, dict):
+            continue
+        for b in pdata.get("buckets") or []:
+            rts = b.get("reset_ts")
+            if rts and _quota["t"] < rts <= now:
+                return True
+    return False
+
+
 def refresh_quota(force=False):
-    """后台线程跑 agent-quota.sh --json; 结果缓存 5 分钟。立即返回。"""
+    """后台线程跑 agent-quota.sh --json; 结果缓存 5 分钟(若有分桶到达重置时间则提前刷新)。立即返回。"""
     with _quota["lock"]:
         if _quota["running"]:
             return
         if not force and _quota["data"] is not None and time.time() - _quota["t"] < 300:
-            return
+            if not _has_expired_quota():
+                return
         _quota["running"] = True
     def _work():
         try:

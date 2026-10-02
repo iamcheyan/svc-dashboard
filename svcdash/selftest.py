@@ -191,6 +191,7 @@ def selftest():
                              "resetTime": "2026-08-15T08:52:07Z"}]}]},
                 "accounts": [{"email": "x@gmail.com"}]})
             self.assertEqual(q["buckets"][0]["remaining_pct"], 25)
+            self.assertEqual(q["buckets"][0]["reset"], rt._iso_cut("2026-08-15T08:52:07Z"))
             q = rt._parse_cursor_quota({"usage": {"planUsage": {
                 "totalPercentUsed": 55}}, "hardLimit": {}})
             self.assertEqual(q["buckets"][0]["remaining_pct"], 45)
