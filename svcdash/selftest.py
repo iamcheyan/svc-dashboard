@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """离线自检: 纯函数单测 + 真实数据源 dry-run,全部通过返回 0。"""
+import os
+import re
 import unittest
 
 from svcdash.goals import (parse_ctx_k, ctx_level, parse_retry, parse_progress,
@@ -11,6 +13,84 @@ from svcdash.repos import agent_repos, repo_stats, parse_repo_commits
 from svcdash.procscan import gather
 from svcdash.render import render_html, TOOL_LINKS
 from svcdash.privacy import sanitize_agent_detail_for_public, sanitize_runtimes_for_public
+from svcdash.i18n import L10N, LANG_KEYS
+
+
+
+class I18nParityTest(unittest.TestCase):
+    """三语字典一致性 + 源码引用完整性 + 前端硬编码守卫。"""
+
+    @staticmethod
+    def _root():
+        import os
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def test_same_key_sets(self):
+        base = set(L10N[LANG_KEYS[0]])
+        for lang in LANG_KEYS[1:]:
+            self.assertEqual(base, set(L10N[lang]), f"{lang} key set differs")
+
+    def test_no_empty_values(self):
+        for lang in LANG_KEYS:
+            empties = [k for k, v in L10N[lang].items() if not isinstance(v, str) or not v.strip()]
+            self.assertEqual([], empties, f"{lang} has empty values")
+
+    def test_placeholder_parity(self):
+        ph = re.compile(r"\{([A-Za-z0-9_]+)\}")
+        base = {k: set(ph.findall(v)) for k, v in L10N[LANG_KEYS[0]].items()}
+        for lang in LANG_KEYS[1:]:
+            for k, v in L10N[lang].items():
+                self.assertEqual(base[k], set(ph.findall(v)), f"{lang}:{k} placeholders differ")
+
+    def test_referenced_keys_defined(self):
+        root = self._root()
+        html = open(os.path.join(root, "static", "index.html"), encoding="utf-8").read()
+        js = open(os.path.join(root, "static", "app.js"), encoding="utf-8").read()
+        missing = sorted({k for k in re.findall(r"\{\{T:([A-Za-z0-9_]+)\}\}", html) if k not in L10N["zh"]})
+        missing += sorted({k for k in re.findall(r"\bt\(\s*[\"']([a-z0-9_]+)[\"']", js)
+                           if k not in L10N["zh"] and not k.endswith("_")})
+        self.assertEqual([], missing, f"undefined i18n keys referenced: {missing}")
+
+    def test_no_hardcoded_cjk_ui(self):
+        root = self._root()
+        js = open(os.path.join(root, "static", "app.js"), encoding="utf-8").read()
+        cjk = re.compile(r"[\u4e00-\u9fff\u3040-\u30ff]")
+        allowed = {"简体中文", "日本語", "中文"}
+        bad, in_block = [], False
+        for i, ln in enumerate(js.splitlines(), 1):
+            st = ln.strip()
+            if in_block:
+                if "*/" in ln:
+                    in_block = False
+                continue
+            if st.startswith("/*") and "*/" not in st:
+                in_block = True
+                continue
+            # 剥离行内注释（字符串感知的简化实现）
+            code, state = [], None
+            j = 0
+            while j < len(ln):
+                c = ln[j]
+                if state is None:
+                    if ln.startswith("//", j):
+                        break
+                    if c in "\"'`":
+                        state = c
+                    code.append(c)
+                else:
+                    code.append(c)
+                    if c == "\\":
+                        if j + 1 < len(ln):
+                            code.append(ln[j + 1]); j += 2; continue
+                    elif c == state:
+                        state = None
+                j += 1
+            line = "".join(code)
+            for m in re.finditer(r"([\"'])((?:\\.|(?!\1).)*)\1", line):
+                s = m.group(2)
+                if cjk.search(s) and s not in allowed:
+                    bad.append((i, s[:50]))
+        self.assertEqual([], bad, f"hardcoded CJK UI literals in app.js: {bad[:8]}")
 
 
 def selftest():
@@ -200,6 +280,7 @@ def selftest():
             self.assertIn("omp", procs) and self.assertIn("hermes", procs)
 
     suite = unittest.TestLoader().loadTestsFromTestCase(T)
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(I18nParityTest))
     unittest.TextTestRunner(verbosity=2).run(suite)
     print("\n--- live dry-run ---")
     gl = scan_goals()
