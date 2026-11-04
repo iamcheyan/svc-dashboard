@@ -134,6 +134,11 @@ def parse_watchdog_events(limit=20):
         except ValueError:
             continue
         gid, msg = m.group(2), m.group(3)
+        # Cached Hermes decisions are watchdog polling noise, not user-facing
+        # activity. The watchdog runs every five minutes, so exposing cache hits
+        # floods the activity feed while the underlying transcript is unchanged.
+        if msg.startswith("cached Hermes decision="):
+            continue
         g = wd.get(gid) or {}
         name = g.get("label") or g.get("session") or ""
         if not name:
