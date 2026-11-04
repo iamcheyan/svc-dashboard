@@ -18,6 +18,7 @@ _REPO_SKIP_DIRS = {".git", ".hg", ".svn", ".venv", "venv", "node_modules",
 _repo_set_cache = {"t": 0.0, "repos": None}
 _repo_ev_cache = {"t": 0.0, "data": None, "paths": []}
 _repo_ev_lock = threading.Lock()
+_repo_ev_refresh_lock = threading.Lock()
 _repo_stats_cache = {"t": 0.0, "data": None}
 _REPO_STATS_PATH = Path("/home/tetsuya/.cache/svc-dashboard/repos.json")
 _REPO_EVENTS_PATH = Path("/home/tetsuya/.cache/svc-dashboard/events.json")
@@ -165,8 +166,8 @@ def agent_repos():
     return repos
 
 
-def parse_repo_commits(per_repo=30, total=150):
-    """Build a cached commit feed once per process, sharing concurrent requests."""
+def _parse_repo_commits_sync(per_repo=30, total=150):
+    """Rebuild and persist the repo commit feed; called by the refresh worker."""
     with _repo_ev_lock:
         now = time.time()
         if _repo_ev_cache["data"] is None:
@@ -234,6 +235,27 @@ def parse_repo_commits(per_repo=30, total=150):
         _repo_ev_cache.update({"t": now, "data": out})
         _save_repo_events_snapshot(out, repos)
         return out
+def _refresh_repo_events_background(per_repo, total):
+    try:
+        _parse_repo_commits_sync(per_repo=per_repo, total=total)
+    finally:
+        _repo_ev_refresh_lock.release()
+
+
+def parse_repo_commits(per_repo=30, total=150):
+    """Serve the last feed immediately and refresh all discovered repos once per minute."""
+    with _repo_ev_lock:
+        if _repo_ev_cache["data"] is None:
+            _load_repo_events_snapshot()
+        data = _repo_ev_cache["data"]
+        updated = _repo_ev_cache["t"]
+    if data is None or time.time() - updated >= 60:
+        if _repo_ev_refresh_lock.acquire(False):
+            threading.Thread(target=_refresh_repo_events_background,
+                             args=(per_repo, total), daemon=True,
+                             name="svc-repo-events-refresh").start()
+    return data or []
+
 
 
 def _repo_one_stats(repo, include_traj=False):
