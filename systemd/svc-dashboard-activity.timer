@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh svc-dashboard Git activity every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=svc-dashboard-activity.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect svc-dashboard Git activity from development projects
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/tetsuya/development/svc-dashboard
+ExecStart=/usr/bin/flock -n /home/tetsuya/.cache/svc-dashboard/activity-refresh.lock /usr/bin/python3 /home/tetsuya/development/svc-dashboard/scripts/collect_activity.py
+TimeoutStartSec=15min
+Nice=10
+MemoryMax=512M
