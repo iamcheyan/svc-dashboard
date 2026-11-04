@@ -111,14 +111,49 @@ python3 dashboard.py --selftest          # 离线自检（单测 + 真实数据�
 
 HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）。
 
-## 六、tailscale 源切换机制
+## 六、活动流 Git 采集器
 
-用户手机经 Tailscale（CGNAT 段 `100.64.0.0/10`，本机 TS IP=100.76.219.104）访问时，
-页面里的服务链接主机要自动从 `192.168.3.82` 切到 TS IP：
+在线活动 API 只读取 `~/.cache/svc-dashboard/events.json`，不在请求过程中遍历仓库。
+用户级 `svc-dashboard-activity.timer` 每分钟运行一次 `scripts/collect_activity.py`，扫描 `~/development` 下的 Git 仓库（并补充 `~/.hermes/worktrees`、家目录顶层独立仓库、agent worktree），合并最新提交与 GitHub 动态后原子更新 JSON。新仓库会在下一轮扫描自动纳入；活动页读取新快照无需重启 dashboard。
+
+### 增量采集（#138）
+
+每分钟一次全量 `git log --all -n 30 --name-status` 扫 100+ 仓库太贵（实测 13–18s、峰值 138–512MB）。现在分两层缓存：
+
+- `~/.cache/svc-dashboard/repos-list.json`：仓库清单，10 分钟重扫一次；
+- `~/.cache/svc-dashboard/repo-events-cache.json`：逐仓库提交事件 + HEAD 签名。
+
+每轮只对每个仓库跑一次 `git log --all -1 --format=%H%x1f%ct` 取签名；签名未变直接复用缓存事件，只有有新提交的仓库才跑完整的 `--name-status`。稳态约 0.7–1.1s、峰值内存约 58MB。签名集合未变化时不写盘。
+
+### 隐私打码（#138）
+
+- `scripts/check_secrets.py --staged --fix`：pre-commit 时把命中的密钥/内网 IP/Tailscale IP/邮箱/电话就地改成 `******` 并重新 `git add`，不再阻断提交。
+- `--commit-msg <file>`：commit message 同样就地打码。
+- `--push`：推送无法安全改写历史，命中即阻断（fail closed）。
+- 静态导出时 `export.py` 连 `app.js`/`app.css` 一起脱敏，源码里不许再硬编码内网 IP 或真实邮箱。
+- 验证：`python3 scripts/verify_static_masking.py`（真实导出 + 逐文件扫描）与
+  `--self-test`（注入用例）。
+
+安装/更新：
+
+```bash
+install -Dm644 systemd/svc-dashboard-activity.service ~/.config/systemd/user/svc-dashboard-activity.service
+install -Dm644 systemd/svc-dashboard-activity.timer ~/.config/systemd/user/svc-dashboard-activity.timer
+systemctl --user daemon-reload
+systemctl --user enable --now svc-dashboard-activity.timer
+systemctl --user start svc-dashboard-activity.service
+systemctl --user status svc-dashboard-activity.timer svc-dashboard-activity.service
+```
+
+采集日志：`journalctl --user -u svc-dashboard-activity.service -n 30 --no-pager`。验证快照中的 `paths` 包含新项目，`events` 中出现其新提交。
+
+
+用户手机经 Tailscale（CGNAT 段 `100.64/10`，本机 TS IP=`<TS-IP>`）访问时，
+页面里的服务链接主机要自动从 `<LAN-IP>` 切到 TS IP：
 
 - 服务端（svcdash/handler.py `_is_tailscale_client`）：`_client_ip()` 落在
-  `100.64.0.0/10` 网段 → BOOT 里 `tsMode=true`。
-- 前端（static/app.js）：`const TS_HOST = "100.76.219.104"; linkHost = (h) => (TS_MODE && h === "192.168.3.82") ? TS_HOST : h`。
+  `100.64/10` 网段 → BOOT 里 `tsMode=true`。
+- 前端（static/app.js）：主机地址取自 `BOOT.tl.hosts`（`tailscale` / `lan`），源码不硬编码 IP；`linkHost(h)` 在 tsMode 下把 LAN 主机换成 TS 主机。
 - 新增带链接的前端功能时**必须走 `linkHost()`**，否则手机端点不通。
 
 ## 七、goal_watchdog 集成
@@ -163,7 +198,7 @@ HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）�
 - 活动页事件分两类处理：`kind=commit` 的 Git 提交事件属于公开仓库信号，保留提交说明、文件路径、作者和 Diff 入口；Goal/watchdog 的 `complete`、`cleanup`、`recover`、`nudge` 等事件只保留 Goal ID、事件类型和时间，正文统一显示 `[内容已脱敏]`。
 - 因此活动页出现“部分正常、部分 `[内容已脱敏]`”是预期行为，不是导出失败：前者是公开 Git 活动，后者是 Agent/Goal 内部日志。
 - 自动发布器产生的 `svc-dashboard` / `Update sanitized static snapshot ...` 维护提交只保留最新一条作为运行状态，其余历史在首页和活动页折叠；活动页可展开全部自动发布历史。匹配仅针对提交说明以 `Update sanitized static snapshot` 开头的自动构建提交，其他 `svc-dashboard` Git 提交照常显示。
-- 只读静态快照顶部的“在线版”入口用于切回实时 dashboard：从内网地址打开时回到当前内网主机，从 Tailscale 地址打开时回到当前 Tailscale 主机，从公网 GitHub Pages 打开时默认回到本机 Tailscale 地址 `100.76.219.104`。该入口只在静态只读版显示。
+- 只读静态快照顶部的“在线版”入口用于切回实时 dashboard：从内网地址打开时回到当前内网主机，从 Tailscale 地址打开时回到当前 Tailscale 主机，从公网 GitHub Pages 打开时默认回到本机 Tailscale 地址（`BOOT.tl.hosts.tailscale`）。该入口只在静态只读版显示。
 - 静态快照的负载/CPU 图不依赖访客浏览器的 `localStorage`：发布器把每次快照的系统采样保存到 `~/.cache/svc-dashboard-static/chart.json`，导出最多 24 个点并注入 `BOOT.chartData`；首次发布用当前采样填满窗口，后续定时发布逐步形成真实趋势。在线版仍使用浏览器实时采样。
 - 界面语言支持中文、英文、日文：在线版默认遵从浏览器 `Accept-Language`，也可用 `?lang=zh|en|ja` 指定；顶部语言菜单可以选择“自动”或固定语言，选择保存在浏览器 `localStorage` 的 `svc-lang`。静态版同时发布 `index.html`、`index-en.html`、`index-ja.html`，首次打开按浏览器语言自动跳到对应版本；菜单选择在三个静态文件之间切换，并保留当前页面锚点。切回“自动”会重新使用系统/浏览器语言。
 - GitHub Pages 的传统分支发布有每小时 10 次构建软上限，因此不要改成每 5 分钟；10 分钟最多 6 次/小时。

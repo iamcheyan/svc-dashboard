@@ -321,10 +321,23 @@ def export_static(output_dir, lang=DEFAULT_LANG, cname=None):
     os.makedirs(out_static, exist_ok=True)
 
     # 复制静态资源 (app.css, app.js, icons/)
+    # 需求 #138：app.js/app.css 是原样拷到公开站的，而 app.js 里可能硬编码
+    # 内网 IP / Tailscale IP / 真实邮箱。只清洗 HTML 是不够的，这里对拷过去的
+    # 文本资源也做一次脱敏，避免源码里的私有信息随 GitHub Pages 发布。
     for fn in ("app.css", "app.js"):
         src = os.path.join(STATIC_DIR, fn)
-        if os.path.isfile(src):
-            shutil.copy2(src, os.path.join(out_static, fn))
+        if not os.path.isfile(src):
+            continue
+        dst = os.path.join(out_static, fn)
+        shutil.copy2(src, dst)
+        try:
+            text = open(dst, "r", encoding="utf-8").read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        masked = sanitize_text(mask_secret(text), mask_ips=True, mask_paths=True)
+        if masked != text:
+            with open(dst, "w", encoding="utf-8") as fp:
+                fp.write(masked)
     icons_src = os.path.join(STATIC_DIR, "icons")
     if os.path.isdir(icons_src):
         shutil.copytree(icons_src, os.path.join(out_static, "icons"), dirs_exist_ok=True)

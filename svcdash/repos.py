@@ -21,7 +21,57 @@ _repo_ev_lock = threading.Lock()
 _repo_stats_cache = {"t": 0.0, "data": None}
 _REPO_STATS_PATH = Path("/home/tetsuya/.cache/svc-dashboard/repos.json")
 _REPO_EVENTS_PATH = Path("/home/tetsuya/.cache/svc-dashboard/events.json")
+# 需求 #138: 仓库清单与逐仓库提交事件都落盘缓存，
+# 避免每分钟重复 walk 文件系统、重复解析未变动仓库的 git log。
+_REPO_LIST_PATH = Path("/home/tetsuya/.cache/svc-dashboard/repos-list.json")
+_REPO_PER_PATH = Path("/home/tetsuya/.cache/svc-dashboard/repo-events-cache.json")
+_REPO_LIST_TTL = 600        # 仓库清单 10 分钟重扫一次
 _repo_refresh_lock = threading.Lock()
+
+
+def _load_repo_list():
+    """读取磁盘仓库清单；无缓存或损坏时返回 None。"""
+    try:
+        data = json.loads(_REPO_LIST_PATH.read_text())
+        if isinstance(data, dict) and isinstance(data.get("repos"), list):
+            return data
+    except (OSError, ValueError, TypeError):
+        pass
+    return None
+
+
+def _save_repo_list(repos):
+    try:
+        _REPO_LIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _REPO_LIST_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"updated": time.time(),
+                                   "repos": [os.path.realpath(p) for p in repos]},
+                                  ensure_ascii=False, separators=(",", ":")))
+        os.replace(tmp, _REPO_LIST_PATH)
+    except OSError:
+        pass
+
+
+def _load_repo_events_cache():
+    """每仓库事件缓存: {path: {"sig": str, "events": [...]}}。"""
+    try:
+        data = json.loads(_REPO_PER_PATH.read_text())
+        if isinstance(data, dict) and isinstance(data.get("repos"), dict):
+            return data["repos"]
+    except (OSError, ValueError, TypeError):
+        pass
+    return {}
+
+
+def _save_repo_events_cache(cache):
+    try:
+        _REPO_PER_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _REPO_PER_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"updated": time.time(), "repos": cache},
+                                  ensure_ascii=False, separators=(",", ":")))
+        os.replace(tmp, _REPO_PER_PATH)
+    except OSError:
+        pass
 
 
 def _load_repo_events_snapshot():
@@ -110,11 +160,24 @@ def _git_root(path):
         p = parent
 
 
-def agent_repos():
-    """development 下全部 Git 仓库，并补充 agent/goal 使用过的仓库根。"""
+def agent_repos(force: bool = False):
+    """development 下全部 Git 仓库，并补充 agent/goal 使用过的仓库根。
+
+    仓库清单落盘缓存 _REPO_LIST_TTL 秒（需求 #138 轻量化），
+    但每次只用 os.path.isdir 校验存活，不重新 walk 文件系统。
+    """
     now = time.time()
-    if _repo_set_cache["repos"] is not None and now - _repo_set_cache["t"] < 60:
+    if not force and _repo_set_cache["repos"] is not None and now - _repo_set_cache["t"] < 60:
         return _repo_set_cache["repos"]
+    if not force:
+        cached_list = _load_repo_list()
+        if cached_list:
+            updated = float(cached_list.get("updated") or 0)
+            if now - updated < _REPO_LIST_TTL:
+                alive = [p for p in cached_list["repos"] if os.path.isdir(p)]
+                if alive:
+                    _repo_set_cache.update({"t": now, "repos": alive})
+                    return alive
     roots = {}
     for scan_root in (_DEVELOPMENT_ROOT, _HERMES_WORKTREES_ROOT):
         if os.path.isdir(scan_root):
@@ -127,6 +190,21 @@ def agent_repos():
                         roots[repo] = 0.0
                     dirs.remove(".git") if ".git" in dirs else None
                 dirs[:] = [d for d in dirs if d not in _REPO_SKIP_DIRS]
+    # 家目录顶层的独立仓库（如 ~/chezmoi、~/dotfiles、~/nvim）不在
+    # ~/development 下，但也是用户关心的活动来源。只查一层，不做深度 walk。
+    home = os.path.expanduser("~")
+    try:
+        for entry in os.scandir(home):
+            if not entry.is_dir(follow_symlinks=False):
+                continue
+            if os.path.isdir(os.path.join(entry.path, ".git")):
+                repo = os.path.realpath(entry.path)
+                try:
+                    roots[repo] = os.path.getmtime(os.path.join(repo, ".git"))
+                except OSError:
+                    roots[repo] = 0.0
+    except OSError:
+        pass
     # Linked worktrees share one common Git directory and should appear as one repo.
     grouped = {}
     for repo, mtime in roots.items():
@@ -162,11 +240,69 @@ def agent_repos():
             roots[r] = 0.0
     repos = [p for p, _ in sorted(roots.items(), key=lambda kv: -kv[1])]
     _repo_set_cache.update({"t": now, "repos": repos})
+    _save_repo_list(repos)
     return repos
 
 
+def _parse_one_repo(repo, per_repo=30):
+    """解析单个仓库的最近提交事件（含改动文件）。"""
+    name = os.path.basename(repo.rstrip("/"))
+    text = _git(repo, ["log", "--all", "-n", str(per_repo), "--name-status",
+                       "--format=COMMIT%x1f%h%x1f%ct%x1f%s%x1f%an"])
+    out = []
+    cur = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("COMMIT\x1f"):
+            if cur:
+                out.append(cur)
+            parts = line.split("\x1f")
+            if len(parts) != 5:
+                cur = None
+                continue
+            _, h, ct, subj, author = parts
+            try:
+                ts = float(ct)
+            except ValueError:
+                cur = None
+                continue
+            cur = {
+                "ts": ts,
+                "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)),
+                "gid": h,
+                "name": name,
+                "repo": name,
+                "kind": "commit",
+                "text": f"{subj} — {author}",
+                "subject": subj,
+                "author": author,
+                "src": "commit",
+                "files": [],
+            }
+        elif cur and "\t" in raw_line:
+            f_parts = raw_line.split("\t")
+            st = f_parts[0].strip()[:1].upper() if f_parts[0].strip() else "M"
+            cur["files"].append({"status": st, "path": f_parts[-1].strip()})
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _repo_signature(repo):
+    """轻量签名: 一次 git 调用取全部分支最新提交号+时间。
+    签名不变则说明该仓库没有新提交，可直接复用缓存，不跑 log --name-status。"""
+    text = _git(repo, ["log", "--all", "-1", "--format=%H%x1f%ct"]).strip()
+    return text
+
+
 def _parse_repo_commits_sync(per_repo=30, total=150, force=False):
-    """Rebuild and persist the repo commit feed; used by the periodic collector."""
+    """Rebuild and persist the repo commit feed; used by the periodic collector.
+
+    需求 #138: 逐仓库增量——先用一次 git log -1 拿签名，未变动的仓库
+    直接复用磁盘缓存事件，只有 HEAD/分支变化时才跑完整的 log --name-status。
+    """
     with _repo_ev_lock:
         now = time.time()
         if _repo_ev_cache["data"] is None:
@@ -178,53 +314,30 @@ def _parse_repo_commits_sync(per_repo=30, total=150, force=False):
         if not force and _repo_ev_cache["data"] is not None and now - _repo_ev_cache["t"] < 60:
             return _repo_ev_cache["data"]
         repos = agent_repos()
+        prev = _load_repo_events_cache()
+        new_cache = {}
         out = []
         seen_commits = set()
         for repo in repos:
-            name = os.path.basename(repo.rstrip("/"))
-            text = _git(repo, ["log", "--all", "-n", str(per_repo), "--name-status",
-                               "--format=COMMIT%x1f%h%x1f%ct%x1f%s%x1f%an"])
-            cur = None
-            for raw_line in text.splitlines():
-                line = raw_line.strip()
-                if not line:
+            sig = _repo_signature(repo)
+            ent = prev.get(repo)
+            if (sig and ent and ent.get("sig") == sig
+                    and isinstance(ent.get("events"), list)):
+                repo_events = ent["events"]
+            else:
+                repo_events = _parse_one_repo(repo, per_repo=per_repo)
+            new_cache[repo] = {"sig": sig, "events": repo_events}
+            for e in repo_events:
+                gid = e.get("gid")
+                if gid in seen_commits:
                     continue
-                if line.startswith("COMMIT\x1f"):
-                    if cur:
-                        out.append(cur)
-                    parts = line.split("\x1f")
-                    if len(parts) != 5:
-                        cur = None
-                        continue
-                    _, h, ct, subj, author = parts
-                    if h in seen_commits:
-                        cur = None
-                        continue
-                    seen_commits.add(h)
-                    try:
-                        ts = float(ct)
-                    except ValueError:
-                        cur = None
-                        continue
-                    cur = {
-                        "ts": ts,
-                        "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)),
-                        "gid": h,
-                        "name": name,
-                        "repo": name,
-                        "kind": "commit",
-                        "text": f"{subj} — {author}",
-                        "subject": subj,
-                        "author": author,
-                        "src": "commit",
-                        "files": [],
-                    }
-                elif cur and "\t" in raw_line:
-                    f_parts = raw_line.split("\t")
-                    st = f_parts[0].strip()[:1].upper() if f_parts[0].strip() else "M"
-                    cur["files"].append({"status": st, "path": f_parts[-1].strip()})
-            if cur:
-                out.append(cur)
+                seen_commits.add(gid)
+                out.append(e)
+        # 签名集合未变且事件数量一致时不必重写磁盘（省 I/O）。
+        prev_sigs = {k: v.get("sig") for k, v in prev.items()}
+        new_sigs = {k: v.get("sig") for k, v in new_cache.items()}
+        if prev_sigs != new_sigs:
+            _save_repo_events_cache(new_cache)
         try:
             from svcdash.github import fetch_github_events, merge_commits
             out = merge_commits(out, fetch_github_events(), total=total)

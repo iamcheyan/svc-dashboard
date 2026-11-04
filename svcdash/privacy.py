@@ -33,6 +33,14 @@ SECRET_PATTERNS = [
     ("Secret Assignment", re.compile(r'''(?i)(["']?(?:api[_-]?key|access[_-]?key(?:[_-]?id)?|secret[_-]?access[_-]?key|secret(?:[_-]?key)?|client[_-]?secret|(?:refresh|id|session)[_-]?token|token|password|passwd|authorization|auth[_-]?header|credentials?|cookie|webhook|connection[_-]?string|account[_-]?key|secretid|private[_-]?key)["']?\s*[:=]\s*)(["']?)([^"'\s,;}\]]{8,})(\2)''')),
 ]
 
+# 统一脱敏掩码。需求 #138: 命中的敏感内容一律替换成 ******,
+# 宁可误杀也不要泄漏; 静态页/活动流/接口的全部对外输出都用它。
+MASK = "******"
+
+# 邮箱与电话号码: 公开活动流里的提交信息可能夹带, 统一掩码。
+EMAIL_RE = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b')
+PHONE_RE = re.compile(r'(?<![\d.])(?:\+\d{1,3}[ -]?)?0\d{2,3}[ -]\d{3,4}[ -]\d{4}(?![\d.])')
+
 # 私有 IP 地址特征
 PRIVATE_IP_RE = re.compile(r'\b(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})\b')
 TAILSCALE_IP_RE = re.compile(r'\b(100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b')
@@ -114,18 +122,18 @@ def mask_secret(text: str) -> str:
             def replace_arg(match):
                 if not _secret_assignment_is_credential(match.group(3), match.group(2)):
                     return match.group(0)
-                return match.group(1) + match.group(2) + "***REDACTED***" + match.group(2)
+                return match.group(1) + match.group(2) + MASK + match.group(2)
             out = pat.sub(replace_arg, out)
         elif name == "Generic Secret Key-Val":
-            out = pat.sub(r'\1***REDACTED***\3', out)
+            out = pat.sub(r'\1' + MASK + r'\3', out)
         elif name == "Secret Assignment":
             def replace_assignment(match):
                 if not _secret_assignment_is_credential(match.group(3), match.group(2)):
                     return match.group(0)
-                return match.group(1) + match.group(2) + "***REDACTED***" + match.group(2)
+                return match.group(1) + match.group(2) + MASK + match.group(2)
             out = pat.sub(replace_assignment, out)
         else:
-            out = pat.sub("[REDACTED_SECRET]", out)
+            out = pat.sub(MASK, out)
 
     return out
 
@@ -136,6 +144,9 @@ def sanitize_text(text: str, mask_ips: bool = True, mask_paths: bool = True) -> 
         return text
 
     out = mask_secret(text)
+    # 邮箱与电话一律打码（宁可误杀）。公开页不需要展示任何联系方式。
+    out = EMAIL_RE.sub(MASK, out)
+    out = PHONE_RE.sub(MASK, out)
 
     if mask_paths:
         out = HOME_DIR_RE.sub("~", out)
@@ -166,7 +177,7 @@ def deep_sanitize(data, mask_ips: bool = True, mask_paths: bool = True):
             if key_norm in ("haskey", "keypresent"):
                 new_d[k] = False
             elif key_norm in _SENSITIVE_KEY_NAMES:
-                new_d[k] = "***REDACTED***"
+                new_d[k] = MASK
             else:
                 new_d[k] = deep_sanitize(v, mask_ips=mask_ips, mask_paths=mask_paths)
         return new_d
@@ -504,4 +515,6 @@ def redact_marker_re(lang="zh") -> str:
     parts.append(r"\[[^\[\]\n]{0,60}?(?:已脱敏|已隐藏|已屏蔽|非公開|[Rr]edacted|[Hh]idden)\]")
     parts.append(r"\b[A-Za-z0-9]{1,4}\*\*\*[A-Za-z0-9]{0,3}")
     parts.append(r"\*{3}REDACTED\*{3}")
+    # 需求 #138 的统一掩码 ******
+    parts.append(r"\*{6}")
     return "|".join(parts)

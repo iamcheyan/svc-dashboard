@@ -8,9 +8,11 @@ const AUTO = BOOT.auto;
 const LANG = BOOT.lang;
 const LOCALE_TAG = { zh: "zh-CN", en: "en-US", ja: "ja-JP" }[LANG] || undefined;
 const TS_MODE = BOOT.tsMode;
-const TS_HOST = "100.76.219.104";
-const LAN_HOST = "192.168.3.82";
-const linkHost = (h) => (TS_MODE && (h === "192.168.3.82")) ? TS_HOST : h;  // 来源为 tailscale(100.64.0.0/10) 时链接主机改用 tailscale IP
+// 主机地址一律来自 BOOT.tl（静态导出时已脱敏），源码里不再硬编码内网/Tailscale IP。
+const TL_BOOT_HOSTS = (BOOT.tl && BOOT.tl.hosts) || {};
+const TS_HOST = TL_BOOT_HOSTS.tailscale || "";
+const LAN_HOST = TL_BOOT_HOSTS.lan || "";
+const linkHost = (h) => (TS_MODE && LAN_HOST && h === LAN_HOST) ? TS_HOST : h;  // 来源为 tailscale(100.64.0.0/10) 时链接主机改用 tailscale IP
 const getMagpieUrl = () => {
   const isTs = (window.__BOOT__ && window.__BOOT__.tsMode) ||
                (typeof TS_MODE !== "undefined" && TS_MODE) ||
@@ -1720,7 +1722,7 @@ function renderVms(d) {
       ipsHtml = `<span class="hp-vm-v" style="color:var(--text-muted);font-weight:400;">${escHtml(t("vm_no_agent"))}</span>`;
     }
 
-    const pveLink = linkHost(v.pve_url || "https://192.168.3.10:8006");
+    const pveLink = linkHost(v.pve_url || "");
 
     return `<div class="gpanel hp-vm-card" id="hp-vm-${escAttr(v.vmid)}" data-vmid="${escAttr(v.vmid)}" role="button" tabindex="0">
       <div class="hp-vm-head">
@@ -1881,7 +1883,7 @@ function renderVmDetailHeader(v) {
     ico.className = "hp-vm-ico " + (isRun ? "running" : "stopped");
   }
   if (pveLink) {
-    pveLink.href = linkHost(v.pve_url || `https://192.168.3.10:8006/#v1:0:=qemu%2F${v.vmid}:4:=notes::::::=notes`);
+    pveLink.href = linkHost(v.pve_url || "");
   }
 }
 
@@ -6761,10 +6763,11 @@ function renderMagpieRouting(data) {
     const poolsContainer = $("rt-pools-list");
     if (poolsContainer) {
       const pools = (data.pools && data.pools.length) ? data.pools : [
-        { provider: "workbuddy-ai", name: "WorkBuddy AI", icon: "cpu", kind: "account", who: ["bengkang0@gmail.com", "carby0716@gmail.com", "iamcheyan@gmail.com", "liukeke365@gmail.com", "tetsuya.ueno.jp@gmail.com", "uenotetsuyta@gmail.com"], routing: "usage", affinity: "" },
-        { provider: "kiro", name: "Kiro", icon: "spark", kind: "account", who: ["carby0716@gmail.com", "iamcheyan@gmail.com", "tetsuya.ueno.jp@gmail.com", "tetsuya.ueno@outlook.com"], routing: "", affinity: "" },
+        // 回退演示数据：绝不写真实邮箱，账户名一律用不透明标签。
+        { provider: "workbuddy-ai", name: "WorkBuddy AI", icon: "cpu", kind: "account", who: ["wba-acct-1", "wba-acct-2", "wba-acct-3", "wba-acct-4", "wba-acct-5", "wba-acct-6"], routing: "usage", affinity: "" },
+        { provider: "kiro", name: "Kiro", icon: "spark", kind: "account", who: ["kiro-acct-1", "kiro-acct-2", "kiro-acct-3", "kiro-acct-4"], routing: "", affinity: "" },
         { provider: "workbuddy", name: "WorkBuddy", icon: "cpu", kind: "account", who: ["wb-account-1", "wb-account-2"], routing: "", affinity: "" },
-        { provider: "qoder", name: "Qoder", icon: "bolt", kind: "account", who: ["carby0716@gmail.com", "liukeke365@gmail.com", "uenotetsuyta@gmail.com"], routing: "", affinity: "" }
+        { provider: "qoder", name: "Qoder", icon: "bolt", kind: "account", who: ["qoder-acct-1", "qoder-acct-2", "qoder-acct-3"], routing: "", affinity: "" }
       ];
 
       poolsContainer.innerHTML = pools.map(p => {
@@ -9367,18 +9370,29 @@ async function thOpenTask(number, keepScroll) {
   if (isPending) {
     const hosts = ((TH.hosts && TH.hosts.hosts) || []).filter(h => h.online !== false);
     const defHost = (TH.hosts && TH.hosts.default) || (hosts[0] || {}).id || "";
+    const repos = (TH.health && TH.health.repos) || ["iamcheyan/svc-dashboard", "iamcheyan/chezmoi", "iamcheyan/taskhub"];
     quickDispatchHtml = `
       <div class="th-quick-dispatch">
         <div class="th-qd-head">
           <span class="th-qd-title">🚀 准备派发该任务</span>
-          <span class="th-qd-hint">选择执行智能体与目标机器后即可一键运行</span>
+          <span class="th-qd-hint">默认分派给 Hermes 并创建专属 Telegram 话题实时汇报</span>
         </div>
         <div class="th-qd-row">
           <span class="th-qd-label">智能体</span>
           <div class="th-qd-opts" id="th-qd-agents">
-            <button class="th-qd-opt is-on" type="button" data-qd-agent="pi">⚡ pi (推荐·敏捷修改)</button>
+            <button class="th-qd-opt is-on" type="button" data-qd-agent="hermes">⚡ hermes (推荐·全流程 & TG话题)</button>
+            <button class="th-qd-opt" type="button" data-qd-agent="pi">pi (敏捷修改)</button>
             <button class="th-qd-opt" type="button" data-qd-agent="omp">omp (通用开发)</button>
-            <button class="th-qd-opt" type="button" data-qd-agent="hermes">hermes (复杂调度)</button>
+          </div>
+        </div>
+        <div class="th-qd-row">
+          <span class="th-qd-label">代码仓库</span>
+          <div class="th-qd-opts" id="th-qd-repos">
+            <button class="th-qd-opt is-on" type="button" data-qd-repo="">自动推断</button>
+            ${repos.map(r => `
+              <button class="th-qd-opt" type="button" data-qd-repo="${escAttr(r)}">
+                <span>${escHtml(r.split("/").pop())}</span>
+              </button>`).join("")}
           </div>
         </div>
         <div class="th-qd-row">
@@ -9410,9 +9424,10 @@ async function thOpenTask(number, keepScroll) {
   ].filter(Boolean).join("");
 
   const metaBits = [
-    d.repo || "",
+    (latest && latest.target_repo) || d.repo || "",
     latest ? thHostName(latest) : "",
-    latest && latest.branch ? latest.branch : ""
+    latest && latest.branch ? latest.branch : "",
+    latest && latest.notify_thread ? `TG话题 #${latest.notify_thread}` : ""
   ].filter(Boolean).map(x => `<span>${escHtml(x)}</span>`).join('<i class="th-head-sep"></i>');
 
   // 多 Tab 控制区（自适应默认值）
@@ -9496,7 +9511,8 @@ async function thOpenTask(number, keepScroll) {
 
   // 待派发场景下，绑定内置快捷派发面板交互
   if (isPending) {
-    let selAgent = "pi";
+    let selAgent = "hermes";
+    let selRepo = "";
     const hosts = ((TH.hosts && TH.hosts.hosts) || []).filter(h => h.online !== false);
     let selHost = (TH.hosts && TH.hosts.default) || (hosts[0] || {}).id || "";
 
@@ -9504,6 +9520,13 @@ async function thOpenTask(number, keepScroll) {
       btn.addEventListener("click", () => {
         selAgent = btn.dataset.qdAgent;
         det.querySelectorAll("[data-qd-agent]").forEach(b => b.classList.toggle("is-on", b === btn));
+      });
+    });
+
+    det.querySelectorAll("[data-qd-repo]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        selRepo = btn.dataset.qdRepo || "";
+        det.querySelectorAll("[data-qd-repo]").forEach(b => b.classList.toggle("is-on", b === btn));
       });
     });
 
@@ -9520,7 +9543,7 @@ async function thOpenTask(number, keepScroll) {
         launchBtn.disabled = true;
         launchBtn.textContent = `正在调度…`;
         try {
-          const r = await apiPost("/api/th/dispatch", { number: Number(issue.number), agent: selAgent, host: selHost });
+          const r = await apiPost("/api/th/dispatch", { number: Number(issue.number), agent: selAgent, host: selHost, target_repo: selRepo });
           const d = await r.json().catch(() => ({ ok: false, msg: "bad json" }));
           TH.health = null;
           if (!d.ok) {
@@ -9529,7 +9552,7 @@ async function thOpenTask(number, keepScroll) {
             launchBtn.textContent = `⚡ 开始执行任务`;
             return;
           }
-          uiNotice(`任务 #${issue.number} 已开始执行`);
+          uiNotice(`任务 #${issue.number} 已分派给 ${selAgent}`);
           thOpenTask(issue.number);
         } catch (e) {
           uiNotice("Error: " + e.message);
@@ -9729,15 +9752,18 @@ async function thNewTaskModal() {
   if (!TH.health || !TH.hosts) await thEnsureBase().catch(() => {});
   document.querySelectorAll(".th-new-modal").forEach(el => el.remove());
 
-  const agents = (TH.health && TH.health.agents) || ["pi", "omp", "hermes"];
+  const rawAgents = (TH.health && TH.health.agents) || ["hermes", "pi", "omp"];
+  const agents = ["hermes", ...rawAgents.filter(a => a !== "hermes")];
   const agentMeta = {
+    hermes: { name: "hermes", desc: `主力执行 & 创建专属 Telegram 话题汇报` },
     pi: { name: "pi", desc: `敏捷代码修改 · 直接交付` },
-    omp: { name: "omp", desc: `通用研发智能体 · 会话交互` },
-    hermes: { name: "hermes", desc: `自动路由分派 · 复杂任务` }
+    omp: { name: "omp", desc: `通用研发智能体 · 会话交互` }
   };
+  const repos = (TH.health && TH.health.repos) || ["iamcheyan/svc-dashboard", "iamcheyan/chezmoi", "iamcheyan/taskhub"];
   const hosts = ((TH.hosts && TH.hosts.hosts) || []).filter(h => h.online !== false);
 
-  let curAgent = "pi";
+  let curAgent = "hermes";
+  let curRepo = "";
   let curHost = (TH.hosts && TH.hosts.default) || (hosts[0] || {}).id || "";
 
   const modal = document.createElement("div");
@@ -9766,6 +9792,19 @@ async function thNewTaskModal() {
         <div class="th-field">
           <span class="th-field-label">任务需求 / Prompt 描述</span>
           <textarea class="th-textarea" id="th-new-input-body" placeholder="${escAttr(t("nt_ph_body"))}"></textarea>
+        </div>
+
+        <div class="th-field">
+          <span class="th-field-label">目标代码仓库</span>
+          <div class="th-opts">
+            <button class="th-opt is-on" type="button" data-sel-repo="">
+              <i class="th-opt-dot"></i><span>自动判断</span>
+            </button>
+            ${repos.map(r => `
+              <button class="th-opt" type="button" data-sel-repo="${escAttr(r)}">
+                <i class="th-opt-dot"></i><span>${escHtml(r.split("/").pop())}</span>
+              </button>`).join("")}
+          </div>
         </div>
 
         <div class="th-field">
@@ -9825,6 +9864,14 @@ async function thNewTaskModal() {
     });
   });
 
+  // 仓库选择
+  modal.querySelectorAll("[data-sel-repo]").forEach(opt => {
+    opt.addEventListener("click", () => {
+      curRepo = opt.dataset.selRepo || "";
+      modal.querySelectorAll("[data-sel-repo]").forEach(o => o.classList.toggle("is-on", o === opt));
+    });
+  });
+
   // 智能体选择
   modal.querySelectorAll("[data-sel-agent]").forEach(card => {
     card.addEventListener("click", () => {
@@ -9856,7 +9903,7 @@ async function thNewTaskModal() {
     submitBtn.textContent = `正在调度下发…`;
 
     try {
-      const r = await apiPost("/api/th/new", { title, body, agent: curAgent, host: curHost });
+      const r = await apiPost("/api/th/new", { title, body, agent: curAgent, host: curHost, target_repo: curRepo });
       const res = await r.json().catch(() => ({ ok: false, msg: `网络错误` }));
       if (!res.ok) {
         uiNotice(res.msg || `下发任务失败`);
@@ -9866,7 +9913,7 @@ async function thNewTaskModal() {
       }
 
       close();
-      uiNotice(`任务 #${res.number || ""} 已下发`);
+      uiNotice(`任务 #${res.number || ""} 已分派给 ${curAgent}`);
 
       // 切到任务 Tab 并刷新打开该任务
       const vTasks = $("tmux-view-tasks");
@@ -9895,16 +9942,17 @@ async function thDispatchModal(number, opts = {}) {
   const title = (opts && opts.title) || "";
   if (!TH.health || !TH.hosts) await thEnsureBase().catch(() => {});
   document.querySelectorAll(".th-dispatch-modal").forEach(el => el.remove());
-  const agents = (TH.health && TH.health.agents) || ["pi"];
+  const rawAgents = (TH.health && TH.health.agents) || ["hermes", "pi", "omp"];
+  const agents = ["hermes", ...rawAgents.filter(a => a !== "hermes")];
   const labels = (TH.health && TH.health.agent_labels) || {};
+  const repos = (TH.health && TH.health.repos) || ["iamcheyan/svc-dashboard", "iamcheyan/chezmoi", "iamcheyan/taskhub"];
   const hosts = ((TH.hosts && TH.hosts.hosts) || []).filter(h => h.online !== false);
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(TH_DISPATCH_KEY) || "{}") || {}; } catch (e) { saved = {}; }
-  const defAgent = agents.includes(saved.agent) ? saved.agent
-    : ((TH.health && TH.health.default_agent) || agents[0] || "");
+  const defAgent = "hermes";
   const defHost = hosts.some(h => h.id === saved.host) ? saved.host
     : ((TH.hosts && TH.hosts.default) || (hosts[0] || {}).id || "");
-  let agent = defAgent, hostId = defHost;
+  let agent = defAgent, hostId = defHost, targetRepo = "";
   const optBtn = (field, val, text, on) => `
     <button class="th-opt${on ? " is-on" : ""}" type="button" data-th-field="${field}"
       data-val="${escAttr(val)}" aria-pressed="${on ? "true" : "false"}">
@@ -9918,12 +9966,19 @@ async function thDispatchModal(number, opts = {}) {
           <span class="th-dlg-kicker">${escHtml(t("th_dispatch"))}</span>
           <h3 class="th-dlg-title" id="th-dlg-title"><span class="th-dlg-num">#${escHtml(String(number))}</span><span>${escHtml(title)}</span></h3>
         </div>
-        <button class="th-dlg-x" type="button" data-th-dlg-close="1" aria-label="${escAttr(t("m_close") || "关闭")}">✕</button>
+        <button class="th-dlg-x" type="button" data-th-dlg-close="1" aria-label="${escAttr(t("m_close"))}">✕</button>
       </div>
       <div class="th-dlg-body">
         <div class="th-field">
           <span class="th-field-label">${escHtml(t("th_agent"))}</span>
           <div class="th-opts">${agents.map(a => optBtn("agent", a, labels[a] || a, a === defAgent)).join("") || `<span class="th-field-none">—</span>`}</div>
+        </div>
+        <div class="th-field">
+          <span class="th-field-label">代码仓库</span>
+          <div class="th-opts">
+            ${optBtn("repo", "", `自动推断`, true)}
+            ${repos.map(r => optBtn("repo", r, r.split("/").pop(), false)).join("")}
+          </div>
         </div>
         <div class="th-field">
           <span class="th-field-label">${escHtml(t("th_host"))}</span>
@@ -9944,7 +9999,9 @@ async function thDispatchModal(number, opts = {}) {
   modal.querySelectorAll("[data-th-dlg-close]").forEach(el => el.addEventListener("click", close));
   modal.querySelectorAll(".th-opt").forEach(el => el.addEventListener("click", () => {
     const field = el.dataset.thField;
-    if (field === "agent") agent = el.dataset.val; else hostId = el.dataset.val;
+    if (field === "agent") agent = el.dataset.val;
+    else if (field === "repo") targetRepo = el.dataset.val;
+    else hostId = el.dataset.val;
     modal.querySelectorAll(`.th-opt[data-th-field="${field}"]`).forEach(x => {
       const on = x === el;
       x.classList.toggle("is-on", on);
@@ -9958,7 +10015,7 @@ async function thDispatchModal(number, opts = {}) {
     go.disabled = true;
     go.textContent = "…";
     try {
-      const r = await apiPost("/api/th/dispatch", { number: Number(number), agent, host: hostId });
+      const r = await apiPost("/api/th/dispatch", { number: Number(number), agent, host: hostId, target_repo: targetRepo });
       const d = await r.json().catch(() => ({ ok: false, msg: "bad json" }));
       TH.health = null;
       if (!d.ok) { uiNotice(d.msg || `派发失败`); go.disabled = false; go.textContent = label; return; }
