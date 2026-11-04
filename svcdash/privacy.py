@@ -8,14 +8,29 @@ import re, os, hashlib
 SECRET_PATTERNS = [
     ("OpenAI API Key", re.compile(r'\b(sk-(?!ant-)(?:proj-)?[A-Za-z0-9_-]{20,T3BlbkFJ[A-Za-z0-9_-]{20,}|sk-(?!ant-)[A-Za-z0-9_-]{32,})\b')),
     ("Anthropic API Key", re.compile(r'\b(sk-ant-[A-Za-z0-9_-]{20,})\b')),
-    ("GitHub Token", re.compile(r'\b(ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{22,}|gho_[A-Za-z0-9]{30,})\b')),
+    ("GitHub Token", re.compile(r'\b(ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{22,}|gh[osr]_[A-Za-z0-9]{30,}|ghu_[A-Za-z0-9]{30,})\b')),
     ("Google API Key", re.compile(r'\b(AIza[0-9A-Za-z-_]{35})\b')),
-    ("AWS Access Key", re.compile(r'\b(AKIA[0-9A-Z]{16})\b')),
+    ("AWS Access Key", re.compile(r'\b(?:AKIA|ASIA)[0-9A-Z]{16}\b')),
+    ("VolcEngine Access Key ID", re.compile(r'\bAKLT[A-Z0-9]{20,64}\b')),
+    ("Tencent Secret ID", re.compile(r'\bAKID[a-fA-F0-9]{32}\b')),
+    ("Alibaba Access Key ID", re.compile(r'\bLTAI[A-Za-z0-9]{12,40}\b')),
+    ("GitLab Token", re.compile(r'\bgl(?:pat|rt|cbt)-[A-Za-z0-9_-]{20,}\b')),
+    ("Slack Token", re.compile(r'\bxox[baprs]-[A-Za-z0-9-]{20,}\b')),
+    ("Stripe Secret Key", re.compile(r'\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b')),
+    ("SendGrid API Key", re.compile(r'\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{30,}\b')),
+    ("Mailgun API Key", re.compile(r'\bkey-[a-fA-F0-9]{32}\b')),
+    ("OpenRouter API Key", re.compile(r'\bsk-or-v1-[a-f0-9]{64}\b')),
+    ("Google OAuth Client Secret", re.compile(r'\bGOCSPX-[A-Za-z0-9_-]{20,}\b')),
+    ("Telegram Bot Token", re.compile(r'\b\d{8,12}:[A-Za-z0-9_-]{30,}\b')),
+    ("npm Access Token", re.compile(r'\bnpm_[A-Za-z0-9]{30,}\b')),
+    ("PyPI API Token", re.compile(r'\bpypi-[A-Za-z0-9_-]{50,}\b')),
+    ("Docker Hub Token", re.compile(r'\bdckr_pat_[A-Za-z0-9_-]{20,}\b')),
     ("HuggingFace Token", re.compile(r'\b(hf_[A-Za-z0-9]{30,})\b')),
-    ("Private Key", re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----')),
+    ("Private Key", re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----|$)')),
     ("JWT / Bearer Token", re.compile(r'\b(?:Bearer\s+|ey)[A-Za-z0-9_-]{25,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\b')),
-    ("Generic Secret Arg", re.compile(r'(?i)(--?(?:api[_-]?key|secret|token|password|auth|passwd)[=\s]+)(["\']?)([^"\'\s]{6,})\2')),
-    ("Generic Secret Key-Val", re.compile(r'(?i)("(?:api[_-]?key|secret|token|password|auth|passwd)"\s*:\s*")([^"\\]{6,})(")')),
+    ("Generic Secret Arg", re.compile(r'(?i)((?<![A-Za-z0-9_"\'])--?(?:api[_-]?key|access[_-]?key|secret[_-]?access[_-]?key|secret(?:[_-]?key)?|client[_-]?secret|(?:refresh|id|session)[_-]?token|token|password|passwd|authorization|auth[_-]?header|credential|cookie|webhook|connection[_-]?string|account[_-]?key)[=\s]+)(["\']?)([^"\'\s]{8,})\2')),
+    ("Generic Secret Key-Val", re.compile(r'(?i)("(?:api[_-]?key|secret|token|password|passwd)"\s*:\s*")([^"\\]{6,})(")')),
+    ("Secret Assignment", re.compile(r'''(?i)(["']?(?:api[_-]?key|access[_-]?key(?:[_-]?id)?|secret[_-]?access[_-]?key|secret(?:[_-]?key)?|client[_-]?secret|(?:refresh|id|session)[_-]?token|token|password|passwd|authorization|auth[_-]?header|credentials?|cookie|webhook|connection[_-]?string|account[_-]?key|secretid|private[_-]?key)["']?\s*[:=]\s*)(["']?)([^"'\s,;}\]]{8,})(\2)''')),
 ]
 
 # 私有 IP 地址特征
@@ -67,6 +82,26 @@ def sanitize_public_payload(data, lang="zh"):
     return data
 
 
+def _secret_assignment_is_credential(value, quote="", filename=""):
+    """Ignore code references; accept quoted values or unquoted config/random values."""
+    value = str(value)
+    if quote:
+        return True
+    if value.lower() in {"true", "false", "null", "none", "undefined", "n/a"}:
+        return False
+    if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_.$]*", value):
+        if "." in value or value.isupper():
+            return False
+    config_suffixes = (".env", ".yaml", ".yml", ".json", ".toml", ".ini", ".conf", ".properties")
+    if filename.lower().endswith(config_suffixes):
+        return True
+    if len(value) < 20 or len(set(value)) < 8:
+        return False
+    counts = [value.count(char) / len(value) for char in set(value)]
+    entropy = -sum(p * __import__("math").log2(p) for p in counts)
+    return entropy >= 3.0
+
+
 def mask_secret(text: str) -> str:
     """对字符串执行全局 API 密钥与凭证脱敏。"""
     if not isinstance(text, str):
@@ -76,11 +111,21 @@ def mask_secret(text: str) -> str:
     # 1. 明确匹配已知 API 密钥
     for name, pat in SECRET_PATTERNS:
         if name == "Generic Secret Arg":
-            out = pat.sub(r'\1\2***REDACTED***\2', out)
+            def replace_arg(match):
+                if not _secret_assignment_is_credential(match.group(3), match.group(2)):
+                    return match.group(0)
+                return match.group(1) + match.group(2) + "***REDACTED***" + match.group(2)
+            out = pat.sub(replace_arg, out)
         elif name == "Generic Secret Key-Val":
             out = pat.sub(r'\1***REDACTED***\3', out)
+        elif name == "Secret Assignment":
+            def replace_assignment(match):
+                if not _secret_assignment_is_credential(match.group(3), match.group(2)):
+                    return match.group(0)
+                return match.group(1) + match.group(2) + "***REDACTED***" + match.group(2)
+            out = pat.sub(replace_assignment, out)
         else:
-            out = pat.sub(r'[REDACTED_SECRET]', out)
+            out = pat.sub("[REDACTED_SECRET]", out)
 
     return out
 
@@ -102,15 +147,25 @@ def sanitize_text(text: str, mask_ips: bool = True, mask_paths: bool = True) -> 
     return out
 
 
+_SENSITIVE_KEY_NAMES = frozenset({
+    "apikey", "xapikey", "accesskey", "accesskeyid", "accesstoken", "secret",
+    "secretkey", "secretaccesskey", "clientsecret", "token", "refreshtoken",
+    "idtoken", "sessiontoken", "password", "passwd", "auth", "authheader", "authorization",
+    "credential", "credentials", "cookie", "webhook", "privatekey",
+    "connectionstring", "accountkey", "secretid",
+})
+
+
 def deep_sanitize(data, mask_ips: bool = True, mask_paths: bool = True):
     """递归脱敏数据结构（dict / list / str）。"""
     if isinstance(data, dict):
         new_d = {}
         for k, v in data.items():
             # 特殊敏感字段直接置空或脱敏
-            if k in ("has_key", "key_present"):
+            key_norm = re.sub(r"[^a-z0-9]", "", str(k).lower())
+            if key_norm in ("haskey", "keypresent"):
                 new_d[k] = False
-            elif any(s in k.lower() for s in ("token", "password", "secret", "private_key")):
+            elif key_norm in _SENSITIVE_KEY_NAMES:
                 new_d[k] = "***REDACTED***"
             else:
                 new_d[k] = deep_sanitize(v, mask_ips=mask_ips, mask_paths=mask_paths)
@@ -384,24 +439,28 @@ def sanitize_agent_detail_for_public(detail: dict, lang: str = "zh") -> dict:
 
 
 def scan_for_secrets(content: str) -> list:
-    """审计文本内容，检测是否包含未加密的高危 API 密钥与凭证。
-    返回: [(pattern_name, snippet), ...]
+    """Scan high-confidence credential formats and secret-named assignments.
+
+    Findings contain only a detector name and a fixed redaction marker; never
+    return part of the credential to logs or callers.
     """
     found = []
     if not isinstance(content, str):
         return found
 
+    placeholders = ("redacted", "example", "dummy", "sample", "placeholder",
+                    "your_token", "your-key", "changeme", "change-me", "xxxx")
     for name, pat in SECRET_PATTERNS:
-        # 跳过通用参数名匹配，只报高确信度的真实密钥特征
-        if "Generic" in name:
-            continue
-        for m in pat.finditer(content):
-            val = m.group(0)
-            if "REDACTED" in val or "example" in val.lower() or "dummy" in val.lower():
+        for match in pat.finditer(content):
+            value = match.group(3) if name in ("Secret Assignment", "Generic Secret Arg") else match.group(0)
+            if name in ("Secret Assignment", "Generic Secret Arg") and not _secret_assignment_is_credential(value, match.group(2)):
                 continue
-            snip = val[:6] + "..." + val[-4:] if len(val) > 12 else val[:4] + "***"
-            found.append((name, snip))
-
+            low = value.lower()
+            if any(marker in low for marker in placeholders):
+                continue
+            if name == "Secret Assignment" and not re.search(r"[A-Za-z0-9+/=_-]{8,}", value):
+                continue
+            found.append((name, "[REDACTED]"))
     return found
 
 # ---------------- 本地化脱敏占位符 ----------------

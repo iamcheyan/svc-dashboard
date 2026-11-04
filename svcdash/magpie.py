@@ -591,6 +591,9 @@ def sanitize_magpie_providers_for_public(providers_data: dict, lang: str = "zh")
             continue
         p.pop("proxy", None)
         p.pop("authHeader", None)
+        # Magpie's newer provider schema stores a credential identifier (and
+        # sometimes its secret) under accessKey; the public UI does not use it.
+        p.pop("accessKey", None)
         acc = p.get("account")
         if isinstance(acc, dict):
             if acc.get("user"):
