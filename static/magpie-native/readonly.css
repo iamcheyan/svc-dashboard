@@ -1,0 +1,25 @@
+/* Keep the original display and interactions; remove the application's shell. */
+html,body { height:100%; margin:0; }
+body { --side-w:0px !important; --side-width:0px !important; }
+header.top,aside.side,footer.foot,#sideToggle,#navBack,#prefs,#sync,#open,#quit,#openMain { display:none !important; }
+#view-settings,#view-agents,#view-plugins { display:none !important; }
+.rt-gedit,.rt-group>.text,.rt-gon { display:none !important; }
+.rt-group,.rt-pool { cursor:default !important; }
+.rt-group .tag,.rt-pool .ctl { pointer-events:none; }
+.row.provider { cursor:default; }
+.row.provider .ag-handle,.row.provider .use { cursor:default; pointer-events:none; }
+.discovery,.provider-discovery { display:none !important; }
+#usageClear,.us-more,.us-grip,.ctx-tune-foot button { display:none !important; }
+
+.svc-static-note { flex:none; padding:8px 12px; color:var(--muted); font:12px/1.5 system-ui; border-bottom:1px solid var(--line); }
+
+.ci-auto,.ci-now,.quota-refresh,.acct-warm { display:none !important; }
+
+.svc-setting-state { color:var(--muted); font-size:11.5px; padding-inline:6px; }
+
+.rt-act .fix,.rt-read,.rt-signin { display:none !important; }
+
+/* Visual consistency only: snapshot data is already irreversibly redacted. */
+.redact-mosaic,.redact-mosaic:hover {
+  filter:blur(2.2px); opacity:.5; user-select:none; -webkit-user-select:none;
+}
