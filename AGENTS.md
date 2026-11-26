@@ -41,6 +41,7 @@ static/               前端：index.html(壳+占位) app.css app.js
 | `/static/*` | GET | CSS/JS（ETag + immutable 缓存，304） |
 | `/api` | GET | 服务列表 JSON（ip/port/pids/cmdline/cwd/type/unit） |
 | `/api/sys` | GET | 负载/CPU/内存/磁盘/开机时长 + 水位 + top 进程 |
+| `/api/sys/chart` | GET | 轻量实时趋势采样（load/CPU/内存/Swap；前端图表可见时每秒请求） |
 | `/api/tailscale` | GET | Tailscale 节点状态、Serve 代理、已连机器与外网检测 |
 | `POST /api/tailscale/ping` | POST | `{peer}` Tailscale 节点 ping 延迟测速 |
 | `POST /api/tailscale/netcheck` | POST | 触发 Tailscale 完整网络体检（DERP 延迟/UDP 连通） |
@@ -111,20 +112,24 @@ python3 dashboard.py --selftest          # 离线自检（单测 + 真实数据�
 
 HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）。
 
-## 六、活动流 Git 采集器
+## 六、活动流与 GitHub 快照
 
-在线活动 API 只读取 `~/.cache/svc-dashboard/events.json`，不在请求过程中遍历仓库。
-用户级 `svc-dashboard-activity.timer` 每分钟运行一次 `scripts/collect_activity.py`，扫描 `~/development` 下的 Git 仓库（并补充 `~/.hermes/worktrees`、家目录顶层独立仓库、agent worktree），合并最新提交与 GitHub 动态后原子更新 JSON。新仓库会在下一轮扫描自动纳入；活动页读取新快照无需重启 dashboard。
+活动流提交只来自 GitHub 用户 Atom 订阅 `https://github.com/iamcheyan.atom`，通过 `svcdash.github.fetch_github_events()` 获取并在进程内缓存 5 分钟。活动 API 不扫描本地仓库、不读取本地 `git log`，也不依赖活动事件磁盘快照；GitHub 暂时不可用时显示为空或沿用进程内最近成功结果。
 
-### 增量采集（#138）
+用户级 `svc-dashboard-github.timer` 每 5 分钟刷新首页贡献日历、PR 与 chezmoi Issues 的 GitHub 快照，入口是 `scripts/collect_github_snapshots.py`。该采集器不遍历本机仓库。
 
-每分钟一次全量 `git log --all -n 30 --name-status` 扫 100+ 仓库太贵（实测 13–18s、峰值 138–512MB）。现在分两层缓存：
+### 安装与检查 GitHub 快照采集器
 
-- `~/.cache/svc-dashboard/repos-list.json`：仓库清单，10 分钟重扫一次；
-- `~/.cache/svc-dashboard/repo-events-cache.json`：逐仓库提交事件 + HEAD 签名。
+```bash
+install -Dm644 systemd/svc-dashboard-github.service ~/.config/systemd/user/svc-dashboard-github.service
+install -Dm644 systemd/svc-dashboard-github.timer ~/.config/systemd/user/svc-dashboard-github.timer
+systemctl --user daemon-reload
+systemctl --user enable --now svc-dashboard-github.timer
+systemctl --user start svc-dashboard-github.service
+systemctl --user status svc-dashboard-github.timer svc-dashboard-github.service
+```
 
-每轮只对每个仓库跑一次 `git log --all -1 --format=%H%x1f%ct` 取签名；签名未变直接复用缓存事件，只有有新提交的仓库才跑完整的 `--name-status`。稳态约 0.7–1.1s、峰值内存约 58MB。签名集合未变化时不写盘。
-
+日志：`journalctl --user -u svc-dashboard-github.service -n 30 --no-pager`。
 ### 隐私打码（#138）
 
 - `scripts/check_secrets.py --staged --fix`：pre-commit 时把命中的密钥/内网 IP/Tailscale IP/邮箱/电话就地改成 `******` 并重新 `git add`，不再阻断提交。
@@ -134,18 +139,6 @@ HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）�
 - 验证：`python3 scripts/verify_static_masking.py`（真实导出 + 逐文件扫描）与
   `--self-test`（注入用例）。
 
-安装/更新：
-
-```bash
-install -Dm644 systemd/svc-dashboard-activity.service ~/.config/systemd/user/svc-dashboard-activity.service
-install -Dm644 systemd/svc-dashboard-activity.timer ~/.config/systemd/user/svc-dashboard-activity.timer
-systemctl --user daemon-reload
-systemctl --user enable --now svc-dashboard-activity.timer
-systemctl --user start svc-dashboard-activity.service
-systemctl --user status svc-dashboard-activity.timer svc-dashboard-activity.service
-```
-
-采集日志：`journalctl --user -u svc-dashboard-activity.service -n 30 --no-pager`。验证快照中的 `paths` 包含新项目，`events` 中出现其新提交。
 
 
 用户手机经 Tailscale（CGNAT 段 `100.64/10`，本机 TS IP=`<TS-IP>`）访问时，
@@ -199,7 +192,7 @@ systemctl --user status svc-dashboard-activity.timer svc-dashboard-activity.serv
 - 因此活动页出现“部分正常、部分 `[内容已脱敏]`”是预期行为，不是导出失败：前者是公开 Git 活动，后者是 Agent/Goal 内部日志。
 - 自动发布器产生的 `svc-dashboard` / `Update sanitized static snapshot ...` 维护提交只保留最新一条作为运行状态，其余历史在首页和活动页折叠；活动页可展开全部自动发布历史。匹配仅针对提交说明以 `Update sanitized static snapshot` 开头的自动构建提交，其他 `svc-dashboard` Git 提交照常显示。
 - 只读静态快照顶部的“在线版”入口用于切回实时 dashboard：从内网地址打开时回到当前内网主机，从 Tailscale 地址打开时回到当前 Tailscale 主机，从公网 GitHub Pages 打开时默认回到本机 Tailscale 地址（`BOOT.tl.hosts.tailscale`）。该入口只在静态只读版显示。
-- 静态快照的负载/CPU 图不依赖访客浏览器的 `localStorage`：发布器把每次快照的系统采样保存到 `~/.cache/svc-dashboard-static/chart.json`，导出最多 24 个点并注入 `BOOT.chartData`；首次发布用当前采样填满窗口，后续定时发布逐步形成真实趋势。在线版仍使用浏览器实时采样。
+- 静态快照的负荷/CPU 图注入发布器缓存的真实 1 秒采样：每次生成时采集 48 点写入 `~/.cache/svc-dashboard-static/chart.json`，`BOOT.chartData` 携带这批数据。页面按时间顺序每秒将可视 24 点窗口向左推进，播放到缓存末尾后从头重播；不请求在线 API，也不生成合成读数。
 - 界面语言支持中文、英文、日文：在线版默认遵从浏览器 `Accept-Language`，也可用 `?lang=zh|en|ja` 指定；顶部语言菜单可以选择“自动”或固定语言，选择保存在浏览器 `localStorage` 的 `svc-lang`。静态版同时发布 `index.html`、`index-en.html`、`index-ja.html`，首次打开按浏览器语言自动跳到对应版本；菜单选择在三个静态文件之间切换，并保留当前页面锚点。切回“自动”会重新使用系统/浏览器语言。
 - GitHub Pages 的传统分支发布有每小时 10 次构建软上限，因此不要改成每 5 分钟；10 分钟最多 6 次/小时。
 - Pages 从推送到公网可见还可能有缓存/构建延迟；静态版适合趋势和状态查看，不适合实时控制。
@@ -319,3 +312,42 @@ Agent（4 个运行时子页）、网络页头。新增页面照此四段式接�
   叠加会把渲染线程和后端一起拖慢。
 - 用浏览器验收时注意静态资源缓存：`Page.reload` 要带 `ignoreCache=True`，否则看到的是旧
   app.js（表现为"改了没生效"）。
+
+
+## 当前 Magpie 与导航集成（2026-11-11）
+
+- 主导航为「概览 / 活动 / Agent / 服务」；任务位于活动的「活动记录 / 我的 PR / 任务」第三项。
+  `#cat=tmux` 兼容跳转活动任务。原 `#tmux-panel` 整体移入 `#activity-tasks`，保留其 CSS 作用域。
+- 任务展示 `iamcheyan/chezmoi` 的未关闭/已关闭 Issues 与评论；不再展示 TaskHub 派发操作。
+- Agent 的「实时路由」与「Magpie 用量」复用当前运行版本的 Magpie 展示资源，保留拓扑、决策、
+  上下文、请求、会话与额度信息。`static/magpie-view.js` 将真实 DOM 挂入开放 ShadowRoot，
+  隔离原版样式与全局变量，并映射 SVC 设计 token；没有 iframe，也不创建独立浏览上下文。
+- `static/magpie-native/` 是带 MIT LICENSE 的版本化展示资源。升级 Magpie 后显式运行
+  `python3 scripts/sync_magpie_native.py` 同步（含按需加载脚本），再完成桌面/手机和静态验收。
+  此脚本不保存登录 Cookie、boot 偏好或实时 API 数据。
+- 私有实时数据走 `/api/magpie/native/*`，由 `svcdash/magpie_native.py` 限定只读端点。
+  唯一 POST 形状的例外是 `gateway/session-titles` 批量读取；CSV/原文下载走 GET。
+  编辑、签到、重置卡、积分开关等动作由界面移除且后端拒绝；不要扩大到通用代理。
+- 静态导出使用同一真实 DOM 和本地 `snapshot.js`；账号、会话标题/正文、命令和路径脱敏，
+  保留指标，分别采集各时间范围。请求明细只保存最近采样；静态版不得访问任何实时 API。
+- 清洗可执行资源须用 `sanitize_text(..., source_code=True)`，避免将 `const token = expression`
+  一类代码误当凭据。真实快照继续使用严格字段脱敏。导出后逐个 `node --check` 所有 JS，
+  并运行 `scripts/verify_static_masking.py`；仅通过隐私正则扫描不足以证明页面能运行。
+
+
+## 首页用量与 GitHub 贡献（2026-11-11）
+
+- 主导航为「概览 / 活动 / Agent / 用量 / 服务」；移动端索引依次为 0–4。
+  `#usage-page` 为独立页面，包含「消费 / 用量」两项；Agent 保留路由、供应商、运行时。
+- 「消费」页的「消费趋势」是随「今日 / 近7天 / 近30天 / 全部」切换的成本折线图（`renderUsageTrend`），
+  悬停/触摸显示参考线、数据点与费用/请求/Token/失败详情，键盘左右键可逐点浏览；
+  数据来自 `/api/magpie/usage` 的 `series[].cost`；不再渲染「提供商额度与账号池」，额度详情统一在「用量」的原生 Magpie 视图查看。
+- 首页顶部 `#hp-usage` 复用同一 `magpieKpisHtml()`，固定读取 `period=today`；更多进入 `#cat=usage`。
+  不得随用量页所选周期变化，不得在请求失败时伪造零用量。
+- `svcdash/githubheatmap.py` 通过本机 gh GraphQL 采集公开贡献日历，每分钟更新一次，复用活动采集 timer；
+  HTTP `/api/github/contributions` 只读缓存。采集失败保留最后成功的数据和时间；不在访客请求中访问 GitHub。
+  在线页面定期读取；静态导出写入 `BOOT.githubContributions`，不访问在线 API。
+- 点击运行时子页必须始终渲染缓存数据；不能只在 `!rtCache` 时渲染，否则首页预热缓存会造成永久加载中。
+
+- 当前首页顺序（以用户最新要求为准）：今日用量 → GitHub 贡献 → 系统状态/趋势图。今日用量只保留外层面板，五项统计不画内层边框或背景。
+- 运行时采集由 `_scan_lock` 合并并发请求；缓存时间从采集完成时起算，前端也复用正在进行的读取，避免慢采集刚完成就过期重扫。

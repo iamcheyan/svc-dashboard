@@ -201,7 +201,7 @@ def classify(cgroup_text):
         if mm:
             unit = mm.group(1)
             # tmux-spawn-*.scope / session-*.scope 是终端会话 scope,不是服务
-            if unit.startswith(("user@", "session-", "tmux-spawn-", "app-", "systemd-")):
+            if unit.startswith(("user@", "session-", "tmux-spawn-", "app-")) or (unit.startswith("systemd-") and unit.endswith(".scope")):
                 continue
             if unit == self_unit:
                 # dashboard 自身及它后台拉起的子进程(手动服务): 直接进程

@@ -89,7 +89,7 @@ def is_false_positive(val: str, line: str) -> bool:
     """过滤误报（代码中的占位符、注释、规则定义等）。"""
     v_lower = val.lower()
     l_lower = line.lower()
-    if any(k in v_lower for k in ("example", "dummy", "sample", "redacted", "your_token", "placeholder")):
+    if any(k in v_lower for k in ("example", "dummy", "sample", "redacted", "your_token", "placeholder", "******")):
         return True
     if any(k in l_lower for k in ("re.compile", "pattern", "mock", "<your-key>", "xxx")):
         return True

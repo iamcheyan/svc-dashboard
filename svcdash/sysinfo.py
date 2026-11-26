@@ -1,4 +1,4 @@
-import os, shutil, socket, time
+import os, shutil, socket, threading, time
 from svcdash.i18n import t, DEFAULT_LANG
 from svcdash.procscan import read
 def _read_proc_stat():
@@ -79,6 +79,39 @@ def sys_info():
                         "zone": zone, "n": n,
                         "cpu_top": tops["cpu"], "mem_top": tops["mem"]}
     return info
+
+
+_chart_lock = threading.Lock()
+_chart_prev = None
+_chart_cache = (0.0, None)
+
+
+def sys_chart_info():
+    """Fast real samples for the live 1s chart; avoid the full 0.3s CPU probe and top-process scan."""
+    global _chart_prev, _chart_cache
+    with _chart_lock:
+        now = time.monotonic()
+        cached_at, cached = _chart_cache
+        if cached is not None and now - cached_at < 0.75:
+            return cached
+
+        idle, total = _read_proc_stat()
+        cpu_usage = None
+        if _chart_prev is not None:
+            prev_idle, prev_total = _chart_prev
+            idle_delta, total_delta = idle - prev_idle, total - prev_total
+            if total_delta > 0:
+                cpu_usage = round(100 * (1 - idle_delta / total_delta), 1)
+        _chart_prev = (idle, total)
+
+        try:
+            loadavg = [round(x, 2) for x in os.getloadavg()]
+        except OSError:
+            loadavg = None
+        result = {"loadavg": loadavg, "cpu_usage": cpu_usage,
+                  "cpu_count": os.cpu_count() or 0, "mem": mem_info()}
+        _chart_cache = (now, result)
+        return result
 
 
 def fmt_bytes(n):

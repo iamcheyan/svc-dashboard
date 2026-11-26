@@ -9,6 +9,9 @@ from svcdash.i18n import L10N, LANG_KEYS
 from svcdash.icons import ICONS
 from svcdash.render import _render_shell_core, _svc_rows, icon_files
 from svcdash.tools import tools_conf
+from svcdash.pullrequests import read_snapshot as read_pr_snapshot
+from svcdash.githubheatmap import read_snapshot as read_heatmap_snapshot
+from svcdash.chezissues import read_snapshot as read_chez_snapshot
 
 
 from svcdash.privacy import (  # noqa: F401
@@ -24,37 +27,43 @@ from svcdash.privacy import (  # noqa: F401
 )
 
 
-def _static_chart_history(sysdata, limit=24):
-    """为静态快照保留发布器自己的趋势历史，不依赖访客浏览器 localStorage。"""
-    now = time.time()
-    mem = sysdata.get("mem") or {}
-    sample = {
-        "t": int(now * 1000),
-        "load": ((sysdata.get("loadavg") or [None])[0]),
-        "cpu": sysdata.get("cpu_usage"),
-        "mem": mem.get("percent"),
-        "swap": mem.get("swap_percent"),
-    }
+def _static_chart_history(sysdata, limit=48):
+    """为只读快照采集并缓存真实的 1 秒趋势点，供静态页回放。"""
+    history = []
+    attempts = 0
+    while len(history) < limit and attempts < limit + 3:
+        try:
+            sample = sysinfo.sys_chart_info()
+        except Exception:
+            break
+        attempts += 1
+        if sample.get("cpu_usage") is not None:
+            mem = sample.get("mem") or {}
+            history.append({
+                "t": int(time.time() * 1000),
+                "load": (sample.get("loadavg") or [None])[0],
+                "cpu": sample["cpu_usage"],
+                "mem": mem.get("percent"),
+                "swap": mem.get("swap_percent"),
+            })
+        if len(history) < limit:
+            time.sleep(1)
+
+    if not history and sysdata.get("cpu_usage") is not None:
+        mem = sysdata.get("mem") or {}
+        history.append({
+            "t": int(time.time() * 1000),
+            "load": (sysdata.get("loadavg") or [None])[0],
+            "cpu": sysdata["cpu_usage"],
+            "mem": mem.get("percent"),
+            "swap": mem.get("swap_percent"),
+        })
+
     state_dir = os.environ.get(
         "SVC_DASHBOARD_STATIC_STATE",
         os.path.expanduser("~/.cache/svc-dashboard-static"),
     )
     state_path = os.path.join(state_dir, "chart.json")
-    history = []
-    try:
-        with open(state_path, encoding="utf-8") as fp:
-            loaded = json.load(fp)
-        if isinstance(loaded, list):
-            history = [x for x in loaded if isinstance(x, dict)][-limit:]
-    except (OSError, ValueError, TypeError):
-        pass
-
-    history.append(sample)
-    # 首次发布也给前端一个完整窗口，避免只在最右侧显示一个点。
-    if len(history) == 1:
-        history = [dict(sample, t=sample["t"] - (limit - i - 1) * 600000) for i in range(limit)]
-    else:
-        history = history[-limit:]
     try:
         os.makedirs(state_dir, exist_ok=True)
         tmp = state_path + ".tmp"
@@ -120,6 +129,7 @@ def _collect_static_snapshot(lang=DEFAULT_LANG):
     clean_tl = {lg: sanitize_tools_conf_for_public(tools_conf(), lg) for lg in LANG_KEYS}
 
     # Magpie 网关数据收集 (用量/路由/供应商)
+    clean_magpie_periods = {}
     clean_magpie_usage = {}
     clean_magpie_routing = {}
     clean_magpie_providers = {}
@@ -129,7 +139,10 @@ def _collect_static_snapshot(lang=DEFAULT_LANG):
             get_magpie_routing, sanitize_magpie_routing_for_public,
             get_magpie_providers, sanitize_magpie_providers_for_public
         )
-        raw_mp = get_magpie_usage("today", force=True)
+        for period in ("today", "7d", "30d", "all"):
+            raw = get_magpie_usage(period, force=True)
+            clean_magpie_periods[period] = {lg: sanitize_magpie_usage_for_public(raw, lg) for lg in LANG_KEYS}
+        raw_mp = get_magpie_usage("today")
         clean_magpie_usage = {lg: sanitize_magpie_usage_for_public(raw_mp, lg) for lg in LANG_KEYS}
         raw_routing = get_magpie_routing(force=True)
         clean_magpie_routing = {lg: sanitize_magpie_routing_for_public(raw_routing, lg) for lg in LANG_KEYS}
@@ -161,12 +174,20 @@ def _collect_static_snapshot(lang=DEFAULT_LANG):
         clean_vms = {lg: {"ok": False, "vms": []} for lg in LANG_KEYS}
         clean_vms_detail = {lg: {} for lg in LANG_KEYS}
 
+    from .magpie_native import public_snapshot
+    try:
+        native_magpie = public_snapshot()
+    except Exception:
+        native_magpie = {"trace":{"mine":True,"seq":0,"routes":[],"totals":{}},"usage":{}}
+
     return {
+        "native_magpie": native_magpie,
         "now": now, "clean_services": clean_services, "sysdata": sysdata,
         "chart_data": chart_data, "goals_data": goals_data,
         "repos_data": repos_data, "clean_tmux": clean_tmux,
         "clean_runtimes": clean_runtimes, "clean_agent_details": clean_agent_details,
         "clean_tl": clean_tl, "clean_magpie_usage": clean_magpie_usage,
+        "clean_magpie_periods": clean_magpie_periods,
         "clean_magpie_routing": clean_magpie_routing,
         "clean_magpie_providers": clean_magpie_providers,
         "clean_vms": clean_vms,
@@ -182,12 +203,11 @@ def _collect_public_tasks():
     带 private / secret / no-publish 标签的 issue 直接跳过。
     """
     try:
-        from . import taskhub as th_mod
-        d = th_mod.issues(mode="open")
+        d = read_chez_snapshot(public=True)
         if d.get("ok") is False:
-            return {"items": [], "error": d.get("msg") or "taskhub unavailable"}
+            return {"items": [], "error": d.get("msg") or "chezmoi snapshot unavailable"}
         items = []
-        for it in (d.get("issues") or []):
+        for it in (d.get("items") or []):
             labels = [str(l).lower() for l in (it.get("labels") or [])]
             if any(l in {"private", "secret", "no-publish"} for l in labels):
                 continue
@@ -265,6 +285,12 @@ def gather_static_payload(lang=DEFAULT_LANG, snapshot=None):
     boot = {
         "static": True,
         "readonly": True,
+        "magpieNativeVersion": snapshot.get("native_version", ""),
+        "magpieNativeHasRouting": bool((snapshot.get("native_magpie") or {}).get("trace", {}).get("routes") or (snapshot.get("native_magpie") or {}).get("groups", {}).get("groups")),
+        "magpieNativeHasUsage": any(
+            (usage or {}).get("calls") or (usage or {}).get("agents") or (usage or {}).get("models")
+            for usage in (snapshot.get("native_magpie") or {}).get("usage", {}).values()
+        ),
         "auto": 0,
         "lang": lang,
         "tsMode": False,
@@ -288,6 +314,10 @@ def gather_static_payload(lang=DEFAULT_LANG, snapshot=None):
         # 通用内容规则，否则 quota.bucket.label 会被误判为私密文本。
         "runtimesData": clean_runtimes,
         "agentDetails": (snapshot.get("clean_agent_details") or {}).get(lang, {}),
+        "chezmoiIssues": read_chez_snapshot(public=True),
+        "pullrequests": read_pr_snapshot(public=True),
+        "githubContributions": read_heatmap_snapshot(),
+        "magpieUsagePeriods": {period: data.get(lang, {}) for period, data in (snapshot.get("clean_magpie_periods") or {}).items()},
         "magpieUsage": (snapshot.get("clean_magpie_usage") or {}).get(lang, {}),
         "magpieRouting": (snapshot.get("clean_magpie_routing") or {}).get(lang, {}),
         "magpieProviders": (snapshot.get("clean_magpie_providers") or {}).get(lang, {}),
@@ -324,7 +354,7 @@ def export_static(output_dir, lang=DEFAULT_LANG, cname=None):
     # 需求 #138：app.js/app.css 是原样拷到公开站的，而 app.js 里可能硬编码
     # 内网 IP / Tailscale IP / 真实邮箱。只清洗 HTML 是不够的，这里对拷过去的
     # 文本资源也做一次脱敏，避免源码里的私有信息随 GitHub Pages 发布。
-    for fn in ("app.css", "app.js"):
+    for fn in ("app.css", "app.js", "magpie-view.js"):
         src = os.path.join(STATIC_DIR, fn)
         if not os.path.isfile(src):
             continue
@@ -334,7 +364,7 @@ def export_static(output_dir, lang=DEFAULT_LANG, cname=None):
             text = open(dst, "r", encoding="utf-8").read()
         except (OSError, UnicodeDecodeError):
             continue
-        masked = sanitize_text(mask_secret(text), mask_ips=True, mask_paths=True)
+        masked = sanitize_text(text, mask_ips=True, mask_paths=True, source_code=True)
         if masked != text:
             with open(dst, "w", encoding="utf-8") as fp:
                 fp.write(masked)
@@ -342,13 +372,40 @@ def export_static(output_dir, lang=DEFAULT_LANG, cname=None):
     if os.path.isdir(icons_src):
         shutil.copytree(icons_src, os.path.join(out_static, "icons"), dirs_exist_ok=True)
 
+    # Vendor assets contain no runtime data. The snapshot transport is written
+    # before upstream code starts, so the public component never calls a live API.
+    native_source = os.path.join(STATIC_DIR, "magpie-native")
+    native_output = os.path.join(out_static, "magpie-native")
+    if os.path.isdir(native_source):
+        shutil.copytree(native_source, native_output, dirs_exist_ok=True)
+        for root, _dirs, files in os.walk(native_output):
+            for name in files:
+                if name.endswith((".js", ".css", ".html", ".json", ".svg")):
+                    path = os.path.join(root, name)
+                    text = open(path, encoding="utf-8").read()
+                    with open(path, "w", encoding="utf-8") as fp:
+                        fp.write(sanitize_text(text, mask_ips=True, mask_paths=True, source_code=True))
+
     # 各语言页面共用同一份采集快照，避免语言版本之间数据不一致或重复采样。
     snapshot = _collect_static_snapshot(DEFAULT_LANG)
+    if os.path.isdir(native_output):
+        payload = json.dumps(snapshot.get("native_magpie", {}), ensure_ascii=False).replace("</", "<\\/")
+        snapshot_path = os.path.join(native_output, "snapshot.js")
+        with open(snapshot_path, "w", encoding="utf-8") as fp:
+            fp.write("window.SVC_MAGPIE_SNAPSHOT = " + payload + ";\n")
+        index_path = os.path.join(native_output, "index.html")
+        html = open(index_path, encoding="utf-8").read()
+        for asset in ("snapshot.js", "readonly.js", "readonly.css"):
+            digest = hashlib.sha256(open(os.path.join(native_output, asset), "rb").read()).hexdigest()[:12]
+            html = re.sub(re.escape(asset) + r"\?v=[0-9a-f]+", asset + "?v=" + digest, html)
+        with open(index_path, "w", encoding="utf-8") as fp: fp.write(html)
+        snapshot["native_version"] = hashlib.sha256(html.encode()).hexdigest()[:12]
+
     # GitHub Pages/CDN 会长时间缓存静态资源；固定版本号会让旧 JS 继续运行，
     # 即使 index.html 已经更新。用本次实际资源内容生成 cache-busting 版本。
     asset_bytes = b"".join(
         open(os.path.join(out_static, fn), "rb").read()
-        for fn in ("app.css", "app.js")
+        for fn in ("app.css", "app.js", "magpie-view.js")
         if os.path.isfile(os.path.join(out_static, fn))
     )
     asset_version = hashlib.sha256(asset_bytes).hexdigest()[:12]
@@ -356,6 +413,7 @@ def export_static(output_dir, lang=DEFAULT_LANG, cname=None):
         html = gather_static_payload(lang=page_lang, snapshot=snapshot)
         html = re.sub(r'(app\.css\?v=)[^"\']+', r'\g<1>' + asset_version, html)
         html = re.sub(r'(app\.js\?v=)[^"\']+', r'\g<1>' + asset_version, html)
+        html = re.sub(r'(magpie-view\.js\?v=)[^"\']+', r'\g<1>' + asset_version, html)
         filename = "index.html" if page_lang == DEFAULT_LANG else f"index-{page_lang}.html"
         with open(os.path.join(output_dir, filename), "w", encoding="utf-8") as f:
             f.write(html)

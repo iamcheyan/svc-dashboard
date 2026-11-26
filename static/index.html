@@ -51,6 +51,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:20}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
 <main>
 <div id="pages">
+<section class="gpanel" id="hp-usage"><div class="page-head"><h2>{{T:hp_usage_today}}</h2><a class="hp-portal-jump" href="#cat=usage" data-nav="usage">{{T:hp_more}} {{ICO:chevron:12}}</a></div><div class="agent-kpi-grid mp-kpis" id="hp-usage-kpis"></div></section>
+<section class="gpanel" id="hp-github"><div class="page-head"><h2>{{T:hp_github_title}}</h2><a class="hp-portal-jump" href="https://github.com/iamcheyan" target="_blank" rel="noopener">GitHub {{ICO:ext:12}}</a></div><div id="hp-github-chart"></div></section>
 {{SYSBAR}}
 <div class="gpanel" id="chart-wrap">
   <h2>{{T:chart_title}} <span class="ghint" id="chart-win"></span></h2>
@@ -136,6 +138,13 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       <span class="page-hint">{{T:act_hint}}</span>
     </div>
   </div>
+  <nav class="page-subnav" id="activity-subnav">
+    <button type="button" class="page-subnav-btn active" data-acttab="feed">{{T:pr_feed}}</button>
+    <button type="button" class="page-subnav-btn" data-acttab="prs">{{T:pr_title}}</button>
+    <button type="button" class="page-subnav-btn" data-acttab="tasks">{{T:nav_tasks}}</button>
+  </nav>
+  <section id="pr-panel" hidden></section>
+  <section id="activity-tasks" hidden></section>
   <div class="filters act-filters" id="act-filters">
     <span class="chip active" data-af="all" role="button" tabindex="0">{{T:act_all}} <span id="n-act-all"></span></span>
     <span class="chip" data-af="commit" role="button" tabindex="0">{{T:act_commits}} <span id="n-act-commit"></span></span>
@@ -153,23 +162,27 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <h2>{{T:tab_svc}}</h2>
     <span class="page-hint">{{T:svc_page_hint}}</span>
   </div>
+  <div class="page-head-actions" id="svc-manage-tools" hidden><button class="btn" type="button" data-svc-mode="manage">{{T:svc_tab_manage}}</button><button class="btn" type="button" data-svc-mode="watchdog">{{T:chip_watchdog}}</button></div>
 </div>
-<div class="page-subnav" id="svc-subnav">
-  <button class="page-subnav-btn active" data-sv="svc" type="button">{{ICO:file:13}} <span>{{T:tab_svc}}</span></button>
-  <button class="page-subnav-btn" data-sv="cron" type="button">{{ICO:retry:13}} <span>{{T:tl_cron_title}}</span></button>
+<div class="page-subnav" id="svc-subnav" aria-label="{{T:tab_svc}}">
+  <button class="page-subnav-btn active" data-sv="svc" type="button">{{T:tab_svc}}</button>
+  <button class="page-subnav-btn" data-sv="manage" type="button">{{T:svc_tab_manage}}</button>
+  <button class="page-subnav-btn" data-sv="network" type="button">{{T:svc_tab_network}}</button>
+  <button class="page-subnav-btn" data-sv="cron" type="button">{{T:tl_cron_title}}</button>
+  <button class="page-subnav-btn" data-sv="logs" type="button">{{T:svc_tab_logs}}</button>
 </div>
-<div class="filters" id="filters">
-  <span class="chip" data-f="user" role="button" tabindex="0">{{T:chip_user}} <span id="n-user"></span></span>
-  <span class="chip" data-f="web" role="button" tabindex="0">{{T:chip_web}} <span id="n-web"></span></span>
-  <span class="chip" data-f="docker" role="button" tabindex="0">{{T:chip_docker}} <span id="n-docker"></span></span>
-  <span class="chip" data-f="system" role="button" tabindex="0">{{T:chip_system}} <span id="n-system"></span></span>
-  <span class="chip" data-f="all" role="button" tabindex="0">{{T:chip_all}} <span id="n-all"></span></span>
-  <span class="spacer"></span>
-  <span class="chip" data-f="tailscale" role="button" tabindex="0">{{ICO:network:13}} Tailscale <span id="n-tailscale"></span></span>
-  <span class="chip" data-f="omp" role="button" tabindex="0">{{T:chip_omp}} <span id="n-omp"></span></span>
-  <span class="chip" data-f="watchdog" role="button" tabindex="0">{{T:chip_watchdog}} <span id="n-watchdog"></span></span>
-  <span class="chip" data-f="tmux" role="button" tabindex="0">{{T:chip_tmux}} <span id="n-tmux"></span></span>
-  <span class="chip" data-f="manage" role="button" tabindex="0">{{T:chip_manage}} <span id="n-manage"></span></span>
+<div id="filters" class="svc-toolbar">
+  <div class="svc-search-row"><input id="svc-search" type="search" placeholder="{{T:svc_search}}" aria-label="{{T:svc_search}}" autocomplete="off">
+    <button class="btn" id="svc-refresh" type="button">{{ICO:retry:13}} {{T:refresh}}</button></div>
+  <div class="filters svc-types">
+    <button class="chip" data-f="user" type="button">{{T:chip_user}} <span id="n-user"></span></button>
+    <button class="chip" data-f="web" type="button">{{T:chip_web}} <span id="n-web"></span></button>
+    <button class="chip" data-f="docker" type="button">{{T:chip_docker}} <span id="n-docker"></span></button>
+    <button class="chip" data-f="system" type="button">{{T:chip_system}} <span id="n-system"></span></button>
+    <button class="chip" data-f="paused" type="button">{{T:svc_paused}} <span id="n-paused"></span></button>
+    <button class="chip" data-f="all" type="button">{{T:chip_all}} <span id="n-all"></span></button>
+  </div>
+  <div class="svc-list-meta"><span id="svc-list-summary"></span><div class="svc-sort" aria-label="{{T:svc_sort}}"><button type="button" class="active" data-svc-sort="port">{{T:svc_sort_port}}</button><button type="button" data-svc-sort="memory">{{T:svc_sort_mem}}</button></div></div>
 </div>
 <div class="gpanel" id="network-page" hidden>
   <div class="page-head ts-header">
@@ -198,6 +211,12 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   </div>
 </div>
 <div id="tasks" hidden></div>
+<section class="gpanel" id="logpage" hidden>
+  <div class="page-head"><div class="page-head-main"><h2>{{T:syslog_title}}</h2><span class="page-hint">{{T:syslog_hint}}</span></div>
+    <div class="page-head-actions"><select id="syslog-priority" class="btn" aria-label="{{T:syslog_priority}}"><option value="">{{T:syslog_all}}</option><option value="0">{{T:syslog_emergency}}</option><option value="1">{{T:syslog_alert}}</option><option value="2">{{T:syslog_critical}}</option><option value="3">{{T:syslog_error}}</option><option value="4">{{T:syslog_warning}}</option><option value="5">{{T:syslog_notice}}</option><option value="6">{{T:syslog_info}}</option><option value="7">{{T:syslog_debug}}</option></select><button class="btn" id="syslog-refresh" type="button">{{ICO:retry:13}} {{T:refresh}}</button></div>
+  </div>
+  <div id="logbody" aria-live="polite"></div>
+</section>
 <div class="gpanel svc-panel" id="svc-panel">
 <table id="svc">
   <thead><tr>
@@ -227,17 +246,14 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       <a class="btn-agent-top btn-magpie-portal" id="btn-agent-magpie" href="#" target="_blank" rel="noopener" title="{{T:mp_open_console}}" hidden>
         {{ICO:ext:13}} <span>Magpie ↗</span>
       </a>
-      <button class="btn-agent-top" id="btn-refresh-quota" title="{{T:rt_refresh}}">
-        {{ICO:retry:13}} <span>{{T:rt_refresh}}</span>
+      <button class="btn-agent-top" id="btn-refresh-quota" title="{{T:refresh}}">
+        {{ICO:retry:13}} <span>{{T:refresh}}</span>
       </button>
     </div>
   </div>
   <div class="agent-subnav" id="agent-subnav">
     <button class="agent-subnav-btn active" id="btn-atab-routing" data-atab="routing" type="button">
       {{ICO:branch:13}} <span>{{T:agent_sub_routing}}</span>
-    </button>
-    <button class="agent-subnav-btn" id="btn-atab-usage" data-atab="usage" type="button">
-      {{ICO:chart:13}} <span>{{T:agent_sub_usage}}</span>
     </button>
     <button class="agent-subnav-btn" id="btn-atab-providers" data-atab="providers" type="button">
       {{ICO:box:13}} <span>{{T:agent_sub_providers}}</span>
@@ -246,19 +262,33 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       {{ICO:bolt:13}} <span>{{T:agent_sub_runtimes}}</span>
     </button>
   </div>
-  <div id="agent-view-routing">
-    <div class="row-head rt-head-bar">
-      <span class="label">{{T:mp_routing_title}}</span>
-      <span class="rt-livedot" aria-hidden="true"></span>
-      <span class="note">{{T:mp_routing_hint}}</span>
-      <span class="grow"></span>
-      <button class="text rt-mask" id="rtMask" aria-pressed="false" type="button" title="{{T:mp_mask_tip}}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg>
-        <span>{{T:mp_hide_accounts}}</span>
-      </button>
+  <div id="agent-view-routing"></div>
+  <div id="agent-view-providers" hidden>
+    <div class="mp-pv-card-panel">
+      <div class="mp-pv-table" id="mp-providers-list"></div>
     </div>
-    <section class="rt" id="rt"></section>
-    <div class="rt-more" id="rtMore"></div>
+  </div>
+  <div id="agent-view-runtimes" hidden>
+    <div class="agent-kpi-grid" id="agent-kpis"></div>
+    <div id="agent-low-quota-wrap" hidden></div>
+    <div class="filters agent-filters" id="agent-filters">
+      <span class="chip active" data-rtf="all" role="button" tabindex="0">{{T:rt_f_all}} <span id="n-rtf-all"></span></span>
+      <span class="chip" data-rtf="run" role="button" tabindex="0"><span class="agent-status-dot on"></span> {{T:rt_f_run}} <span id="n-rtf-run"></span></span>
+      <span class="chip" data-rtf="tasks" role="button" tabindex="0">{{ICO:terminal:13}} {{T:rt_f_tasks}} <span id="n-rtf-tasks"></span></span>
+      <span class="chip" data-rtf="quota" role="button" tabindex="0">{{ICO:gauge:13}} {{T:rt_f_quota}} <span id="n-rtf-quota"></span></span>
+      <span class="chip" data-rtf="none" role="button" tabindex="0">{{T:rt_f_none}} <span id="n-rtf-none"></span></span>
+    </div>
+    <div id="agent-cards-container"><div class="gempty">{{T:a_loading}}</div></div>
+    <div id="agent-models-section"></div>
+    <div id="agent-env-section"></div>
+  </div>
+</div>
+<section class="gpanel" id="usage-page" hidden>
+  <div class="page-head"><div><h2>{{T:tab_usage}}</h2><span class="page-hint">{{T:usage_hint}}</span></div><div class="page-head-actions"><button class="btn-agent-top" id="btn-refresh-usage" type="button">{{ICO:retry:13}} {{T:refresh}}</button></div></div>
+  <div class="page-subnav agent-subnav" id="usage-subnav">    <button class="agent-subnav-btn" id="btn-atab-usage" data-utab="usage" type="button">
+      {{ICO:chart:13}} <span>{{T:agent_sub_usage}}</span>
+    </button>
+    <button class="agent-subnav-btn" data-utab="magpie-usage" type="button">{{ICO:chart:13}} <span>{{T:agent_sub_magpie_usage}}</span></button>
   </div>
   <div id="agent-view-usage" hidden>
     <div class="mp-period-bar">
@@ -275,20 +305,10 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
         <button class="mp-tool-btn" id="mp-btn-mask" type="button" title="{{T:mp_mask_toggle}}">
           {{ICO:lock:12}} <span id="mp-mask-label">{{T:mp_mask_toggle}}</span>
         </button>
-        <button class="mp-tool-btn active" id="mp-btn-mode" type="button" title="{{T:mp_view_mode_remain}} / {{T:mp_view_mode_used}}">
-          <span id="mp-mode-label">{{T:mp_view_mode_remain}}</span>
-        </button>
         <div class="mp-period-fresh" id="mp-fresh-time"></div>
       </div>
     </div>
     <div class="agent-kpi-grid mp-kpis" id="mp-kpis"></div>
-    <!-- Provider Quotas & Accounts Section -->
-    <div class="mp-quota-section" id="mp-quota-section">
-      <div class="mp-section-header">
-        <h4>{{ICO:gauge:14}} <span>{{T:mp_quotas_title}}</span></h4>
-      </div>
-      <div class="mp-quota-grid" id="mp-quota-grid"></div>
-    </div>
     <div class="mp-chart-card" id="mp-chart-card">
       <div class="mp-card-header">
         <h4>{{ICO:chart:14}} <span id="mp-trend-title">{{T:mp_trend_title}}</span></h4>
@@ -317,26 +337,8 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       <div class="mp-accounts-grid" id="mp-accounts-grid"></div>
     </div>
   </div>
-  <div id="agent-view-providers" hidden>
-    <div class="mp-pv-card-panel">
-      <div class="mp-pv-table" id="mp-providers-list"></div>
-    </div>
-  </div>
-  <div id="agent-view-runtimes" hidden>
-    <div class="agent-kpi-grid" id="agent-kpis"></div>
-    <div id="agent-low-quota-wrap" hidden></div>
-    <div class="filters agent-filters" id="agent-filters">
-      <span class="chip active" data-rtf="all" role="button" tabindex="0">{{T:rt_f_all}} <span id="n-rtf-all"></span></span>
-      <span class="chip" data-rtf="run" role="button" tabindex="0"><span class="agent-status-dot on"></span> {{T:rt_f_run}} <span id="n-rtf-run"></span></span>
-      <span class="chip" data-rtf="tasks" role="button" tabindex="0">{{ICO:terminal:13}} {{T:rt_f_tasks}} <span id="n-rtf-tasks"></span></span>
-      <span class="chip" data-rtf="quota" role="button" tabindex="0">{{ICO:gauge:13}} {{T:rt_f_quota}} <span id="n-rtf-quota"></span></span>
-      <span class="chip" data-rtf="none" role="button" tabindex="0">{{T:rt_f_none}} <span id="n-rtf-none"></span></span>
-    </div>
-    <div id="agent-cards-container"><div class="gempty">{{T:a_loading}}</div></div>
-    <div id="agent-models-section"></div>
-    <div id="agent-env-section"></div>
-  </div>
-</div>
+  <div id="agent-view-magpie-usage" hidden></div>
+</section>
 </div>
 </main>
 <nav id="tabbar" aria-label="{{T:title}}">
@@ -344,10 +346,9 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 8.5 8 3l6 5.5V14H9.5v-4h-5v4H2z"/></svg><span class="tlabel">{{T:tab_home}}</span><span class="tbadge-dot" id="tab-alert-badge" hidden></span></span>
   <span class="tab" data-p="1" role="button" tabindex="0" aria-label="{{T:tab_activity}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.5 8.5h3l2.2-5.5 3 10.5 2-6.5h2.8"/></svg><span class="tlabel">{{T:tab_activity}}</span></span>
-  <span class="tab" data-p="2" role="button" tabindex="0" aria-label="{{T:tab_tmux}}">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="m5 6.5 2 1.5-2 1.5M9 10h2"/></svg><span class="tlabel">{{T:tab_tmux}}</span></span>
-  <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_agent}}">
+  <span class="tab" data-p="2" role="button" tabindex="0" aria-label="{{T:tab_agent}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="10" height="9" rx="2"/><circle cx="6" cy="8.5" r="1" fill="currentColor"/><circle cx="10" cy="8.5" r="1" fill="currentColor"/><path d="M8 1.5v2.5M6 1.5h4M5 11h6"/></svg><span class="tlabel">{{T:tab_agent}}</span></span>
+  <span class="tab" data-p="3" role="button" tabindex="0" aria-label="{{T:tab_usage}}">{{ICO:chart:16}}<span class="tlabel">{{T:tab_usage}}</span></span>
   <span class="tab" data-p="4" role="button" tabindex="0" aria-label="{{T:tab_svc}}">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3.5" rx="1"/><rect x="2" y="9.5" width="12" height="3.5" rx="1"/></svg><span class="tlabel">{{T:tab_svc}}</span></span>
 </nav>
@@ -435,45 +436,6 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     <div class="gempty">{{T:st_loading}}</div>
   </div>
 </div>
-<!-- 新建任务弹层 (New Task Dialog)：左边执行者，右边 Issue 正文 -->
-<div class="ui-modal" id="tmux-new-modal" hidden role="presentation">
-  <div class="ui-dialog tmux-new-dialog nt-dialog" role="dialog" aria-modal="true">
-    <div class="tmux-new-header">
-      <div class="tmux-new-title">{{ICO:term:18}} <span>{{T:nt_title}}</span></div>
-      <button class="btn-tmux-close" id="btn-tmux-new-close" type="button" aria-label="{{T:m_close}}">✕</button>
-    </div>
-    <div class="nt-body">
-      <aside class="nt-side">
-        <div class="nt-side-label">{{T:nt_agent}}</div>
-        <div class="nt-agents" id="tmux-new-agent-grid">
-          <div class="nt-agent active" data-agent="omp" role="button" tabindex="0">
-            <span class="nt-agent-name">omp</span>
-            <span class="nt-agent-desc">{{T:nt_agent_omp}}</span>
-          </div>
-          <div class="nt-agent" data-agent="pi" role="button" tabindex="0">
-            <span class="nt-agent-name">pi</span>
-            <span class="nt-agent-desc">{{T:nt_agent_pi}}</span>
-          </div>
-        </div>
-        <div class="nt-side-label">{{T:nt_host}}</div>
-        <div class="nt-hosts" id="nt-host-chips"></div>
-        <div class="nt-note">{{T:nt_repo_note}}</div>
-      </aside>
-      <section class="nt-main">
-        <input type="text" class="tmux-form-input nt-title-input" id="nt-title"
-               placeholder="{{T:nt_title_ph}}" maxlength="160" autocomplete="off" />
-        <textarea class="tmux-form-textarea nt-body-input" id="nt-body"
-                  placeholder="{{T:nt_body_ph}}"></textarea>
-      </section>
-    </div>
-    <div class="tmux-new-footer">
-      <button type="button" class="btn-ts-action" id="btn-tmux-new-cancel">{{T:m_cancel}}</button>
-      <button type="button" class="btn-ts-action btn-tmux-primary" id="btn-tmux-new-submit">
-        {{ICO:play:14}} <span>{{T:nt_create}}</span>
-      </button>
-    </div>
-  </div>
-</div>
 <!-- Tmux 全屏/大屏实时终端查看器 -->
 <div class="tmux-sheet" id="tmux-term-sheet" hidden>
   <div class="tmux-sheet-top">
@@ -532,6 +494,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   </div>
 </div>
 <script>window.__BOOT__={{BOOT_JSON}};</script>
+<script src="/static/magpie-view.js?v=1" defer></script>
 <script src="/static/app.js?v=297cb5b4b059" defer></script>
 </body>
 </html>

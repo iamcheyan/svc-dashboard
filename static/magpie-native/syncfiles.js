@@ -1,0 +1,301 @@
+// Settings › Sync's forms: the server's (WebDAV, S3 or GitHub), Export and
+// Import, what putting a file's sign-ins in came to (qianxunji,
+// curtinp118 on Discord), and the asks before a Restore or an Upload
+// (#847, #5720). app.js imports this when one of them opens (syncFile), so
+// it weighs nothing on the core.
+
+// davForm: the kind picked shows one set of fields; drafts survive switching.
+// Inactive servers keep their settings for moving sync back.
+window.davForm = function (v) {
+  const ed = el("div", "editor sync-form");
+  const active = v.on ? (v.kind || "webdav") : "";
+  let kind = active || "webdav";
+  const saved = t("saved · type a new one to replace it");
+  const servers = syncServers(v);
+  const server = (k) => active === k ? v : servers[k] || {};
+  const dav = server("webdav"), bk = server("s3"), gh = server("github");
+  const url = input(dav.url || "", "https://dav.jianguoyun.com/dav/");
+  const user = input(dav.user || "", t("user name"));
+  const pass = input("", dav.passwordSet ? saved : t("password, or an app password"), "password");
+  // s3://bucket/prefix, as the address is kept
+  const [bucketName, prefixName] = (() => { const m = /^s3:\/\/([^/]*)\/?(.*)$/i.exec(bk.url || ""); return m ? [m[1], m[2]] : ["", ""]; })();
+  const endpoint = input(bk.endpoint || "", "https://<account>.r2.cloudflarestorage.com");
+  const bucket = input(bucketName, t("bucket name"));
+  const prefix = input(prefixName, t("optional"));
+  const region = input(bk.region || "", t("us-east-1, or auto for R2"));
+  const keyID = input(bk.user || "", "AKIA…");
+  const secret = input("", bk.passwordSet ? saved : t("secret access key"), "password");
+  const [pathL, pathStyle] = tick(t("Path-style: the bucket in the path, not the host name"), !!bk.pathStyle);
+  const ghParts = /^github:\/\/([^/]+\/[^/]+)\/?(.*)$/i.exec(gh.url || "");
+  const repo = input(ghParts?.[1] || "", "owner/repo");
+  const branch = input(gh.branch || "", t("default branch"));
+  const ghPrefix = input(ghParts?.[2] || "", t("optional"));
+  const token = input("", gh.passwordSet ? saved : t("GitHub token"), "password");
+  const phrase = input("", v.passphraseSet ? saved : t("the same on every computer"), "password");
+  const [keysL, keys] = tick(t("Providers' API keys"), v.keys !== false);
+  const [agentsL, agents] = tick(t("Agents' models"), v.agents !== false);
+  const [libL, lib] = tick(t("Library: instructions, MCP servers, skills, hooks and subagents"), v.library !== false);
+  const [memL, mem] = tick(t("Memory: what the agents know, merged memory by memory"), v.memory !== false);
+  // usage: off unless picked, each computer its own (#542)
+  const [useL, use] = tick(t("Usage: this computer's calls, for the Usage page on the others"), !!v.usage);
+  // sign-ins: off unless picked, sealed with the passphrase like the rest
+  // (qianxunji, curtinp118 on Discord); what it lets in is said beside it
+  const [siL, si] = tick(t("Sign-ins: subscription accounts and plugin sign-ins"), !!v.signIns);
+  const siSay = el("div", "hint sync-signins-say", t("Another computer that syncs is signed in without signing in again. Anyone with the passphrase and the server's file can use these accounts. An account used on two computers can be signed out on one when the other renews it."));
+  siSay.hidden = !si.checked;
+  si.onchange = () => { siSay.hidden = !si.checked; };
+  const what = el("div", "stack");
+  what.append(keysL, agentsL, libL, memL, useL, siL, siSay);
+  const davFields = [...field(t("Address"), url, t("A folder named magpie is made in it.")),
+    ...field(t("User"), user),
+    ...field(t("Password"), pass)];
+  const s3Fields = [...field(t("Endpoint"), endpoint, t("Empty for AWS S3; for R2, B2, MinIO and the like, their S3 API address.")),
+    ...field(t("Bucket"), bucket),
+    ...field(t("Prefix"), prefix, t("The backup goes in a folder named magpie under it.")),
+    ...field(t("Region"), region),
+    ...field(t("Access key"), keyID),
+    ...field(t("Secret"), secret),
+    ...field("", pathL, t("MinIO and most NAS servers need it."))];
+  const ghFields = [...field(t("Repository"), repo, t("An existing private GitHub repository, in owner/repo form.")),
+    ...field(t("Branch"), branch, t("Empty uses the repository's default branch. Empty repositories are initialized by the first sync; other branches must already exist.")),
+    ...field(t("Folder"), ghPrefix, t("The encrypted backup goes in <folder>/magpie/magpie.magpie-backup. Each update creates a commit.")),
+    ...field(t("GitHub token"), token, t("A fine-grained token for this repository with Contents: read and write. Kept on this computer, separately from the library's GitHub token."))];
+  // which one is synced to, and that the other's settings stay
+  const to = field(t("Sync to"), segs(Object.entries(syncNames).map(([id, n]) => [id, id === active ? t("{kind} · on", { kind: n }) : n]), kind, (k) => { kind = k; show(); }), " ");
+  const where = to[1].querySelector(".hint");
+  const save = el("button", "text primary", "");
+  const other = Object.keys(servers).map((k) => syncNames[k]).filter(Boolean).join(" / ");
+  const show = () => {
+    for (const x of davFields) x.hidden = kind !== "webdav";
+    for (const x of s3Fields) x.hidden = kind !== "s3";
+    for (const x of ghFields) x.hidden = kind !== "github";
+    where.textContent = !active ? ""
+      : kind === active ? (other ? t("Syncing here now. The {other} settings are kept, not synced to: pick {other} to see them.", { other }) : t("Syncing here now."))
+      : t("{active} is synced to now. Saving moves sync here; the {active} settings are kept for moving back.", { active: syncNames[active] });
+    where.hidden = !active;
+    save.textContent = !active ? t("Turn on") : kind === active ? t("Save") : t("Move sync to {kind}", { kind: syncNames[kind] });
+  };
+  ed.append(...to,
+    ...davFields, ...s3Fields, ...ghFields,
+    ...field(t("Passphrase"), phrase, t("The file is sealed with it on this computer; the server only ever sees it sealed. Keep it: without it the file can't be opened.")),
+    ...field(t("Also sync"), what, t("Usage goes as a file a day: times, tokens, models and costs, never what was said. Turn it on on each computer that shares its own.")));
+  show();
+  const off = v.on ? el("button", "text danger", t("Turn off")) : el("span");
+  const cancel = el("button", "text", t("Cancel"));
+  const say = syncBar(ed, "", off, el("span", "grow"), cancel, save);
+  cancel.onclick = () => { syncOpen = ""; renderSync(); };
+  off.onclick = async () => { syncOpen = ""; renderSync(await api("davsync/off", {}).catch(() => null) || undefined); };
+  save.onclick = async () => {
+    const b = bucket.value.trim(), p = prefix.value.trim().replace(/^\/+|\/+$/g, "");
+    if (kind === "s3" && !b) return say(t("Name the bucket"));
+    const repository = repo.value.trim().replace(/^https:\/\/github\.com\//i, "").replace(/\/+$/, "").replace(/\.git$/i, "");
+    const ghFolder = ghPrefix.value.trim().replace(/^\/+|\/+$/g, "");
+    if (kind === "github" && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) return say(t("Name the GitHub repository as owner/repo"));
+    if (kind === "github" && !gh.passwordSet && !token.value.trim()) return say(t("Enter a GitHub token with Contents read and write permission"));
+    if (!v.passphraseSet && !phrase.value) return say(t("Pick a passphrase: the file is sealed with it"));
+    save.classList.add("busy");
+    const where = kind === "github"
+      ? { url: "github://" + repository + (ghFolder ? "/" + ghFolder : ""), branch: branch.value.trim(), password: token.value.trim() }
+      : kind === "s3"
+      ? { url: "s3://" + b + (p ? "/" + p : ""), user: keyID.value.trim(), password: secret.value, endpoint: endpoint.value.trim(), region: region.value.trim(), pathStyle: pathStyle.checked }
+      : { url: url.value.trim(), user: user.value.trim(), password: pass.value };
+    try {
+      const r = await api("davsync/save", { ...where, passphrase: phrase.value, keys: keys.checked, agents: agents.checked, library: lib.checked, memory: mem.checked, ...(use.checked || v.usage ? { usage: use.checked } : {}), ...(si.checked || v.signIns ? { signIns: si.checked } : {}) });
+      if (!r.error) syncOpen = "";
+      renderSync(r);
+      if (r.error) return;
+      refreshAfterSync();
+    } catch (e) {
+      save.classList.remove("busy");
+      say(e.message);
+    }
+  };
+  return ed;
+};
+
+window.exportForm = function () {
+  const ed = el("div", "editor sync-form");
+  const p1 = input("", t("passphrase"), "password");
+  const p2 = input("", t("again"), "password");
+  const [keysL, keys] = tick(t("With the providers' API keys"), true);
+  const [libL, lib] = tick(t("With the library: instructions, MCP servers, skills, hooks and subagents"), true);
+  const [memL, mem] = tick(t("With memory: what the agents know"), true);
+  // sign-ins: off unless picked (qianxunji, curtinp118 on Discord)
+  const [siL, si] = tick(t("With the sign-ins: subscription accounts and plugin sign-ins"), false);
+  const what = el("div", "stack");
+  what.append(keysL, libL, memL, siL);
+  const passF = field(t("Passphrase"), p1, t("Needed to open the file. Subscriptions aren't in it: sign in to them on the other computer."));
+  const passSay = passF[1].querySelector(".hint");
+  si.onchange = () => {
+    passSay.textContent = si.checked ? t("Needed to open the file. The sign-ins are in it: anyone with the file and the passphrase can use those accounts, so pick a strong one.")
+      : t("Needed to open the file. Subscriptions aren't in it: sign in to them on the other computer.");
+  };
+  ed.append(...passF, ...field("", p2), ...field("", what));
+  const go = el("button", "text primary", t("Export"));
+  const cancel = el("button", "text", t("Cancel"));
+  const say = syncBar(ed, "", el("span", "grow"), cancel, go);
+  cancel.onclick = () => { syncOpen = ""; renderSync(); };
+  go.onclick = async () => {
+    if (!p1.value) return say(t("Pick a passphrase: the file is sealed with it"));
+    if (p1.value !== p2.value) return say(t("The two passphrases differ"));
+    go.classList.add("busy");
+    try {
+      const r = await api("backup/export", { pass: p1.value, keys: keys.checked, library: lib.checked, memory: mem.checked, signIns: si.checked });
+      ed.replaceChildren(el("div", "done", t("Saved to {path}", { path: r.path })));
+    } catch (e) {
+      go.classList.remove("busy");
+      say(e.message);
+    }
+  };
+  return ed;
+};
+
+// signInsSaid: what putting a backup's sign-ins in did, as lines
+window.signInsSaid = function (r) {
+  const lines = [t("Sign-ins: {added} added, {updated} updated, {kept} kept as they are here", { added: r.added || 0, updated: r.updated || 0, kept: r.kept || 0 })];
+  if (r.kept) lines.push(t("One kept as it is here was renewed later here, or is the account the agent itself is signed in with."));
+  if (r.codex) lines.push(t("Codex is signed in with the backup's account."));
+  return lines;
+};
+
+window.importForm = function () {
+  const ed = el("div", "editor sync-form");
+  let data = "";
+  const file = el("input");
+  file.type = "file";
+  file.accept = ".magpie-backup";
+  file.hidden = true;
+  const name = el("span", "fname", t("No file chosen"));
+  const pick = el("button", "text", t("Choose…"));
+  pick.onclick = () => file.click();
+  file.onchange = async () => {
+    const f = file.files[0];
+    if (!f) return;
+    // as base64 in JSON: the app's web view drops a File sent as the body
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    data = btoa(bin);
+    name.textContent = f.name;
+  };
+  const pf = el("div", "pair");
+  pf.append(name, pick, file);
+  const pass = input("", t("passphrase"), "password");
+  const [agentsL, agents] = tick(t("Set the agents' models too"), true);
+  const [libL, lib] = tick(t("Bring in the library too: instructions, MCP servers, skills, hooks and subagents"), true);
+  const [memL, mem] = tick(t("Bring in memory too, merged with the memories here"), true);
+  const [siL, si] = tick(t("Bring in the sign-ins too, when the file has them"), true);
+  const what = el("div", "stack");
+  what.append(agentsL, libL, memL, siL);
+  ed.append(...field(t("File"), pf), ...field(t("Passphrase"), pass), ...field("", what, t("Providers with the same id are replaced; one that came without a key keeps the key it has here. The library replaces the one here, which is kept with its backups.")));
+  const go = el("button", "text primary", t("Import"));
+  const cancel = el("button", "text", t("Cancel"));
+  const say = syncBar(ed, "", el("span", "grow"), cancel, go);
+  cancel.onclick = () => { syncOpen = ""; renderSync(); };
+  go.onclick = async () => {
+    if (!data) return say(t("Choose a file first"));
+    go.classList.add("busy");
+    try {
+      const r = await api("backup/import", { data, pass: pass.value, agents: agents.checked, library: lib.checked, memory: mem.checked, signIns: si.checked });
+      const lines = [t("Providers: {added} added, {replaced} replaced; {profiles} profiles; {agents} agent settings changed", { added: r.Added, replaced: r.Replaced, profiles: r.Profiles, agents: r.Agents })];
+      if (r.NeedKey?.length) lines.push(t("Needs a key: {names}", { names: r.NeedKey.join(", ") }));
+      if (r.SignIns) lines.push(...signInsSaid(r.SignIns));
+      // a backup carries a subscription's settings, its sign-in only when
+      // made with them
+      if (r.SignIn?.length) lines.push(r.SignIns
+        ? t("This backup's settings use {names}, which isn't signed in on this computer, and the backup has no sign-in for it. To use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(r.SignIn) })
+        : t("This backup's settings use {names}, which isn't signed in on this computer. A backup carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(r.SignIn) }));
+      if (r.Plugins?.length) lines.push(t("Plugins added: {names}", { names: r.Plugins.join(", ") }));
+      for (const [spec, error] of Object.entries(r.PluginErrors || {})) lines.push(t("Couldn't add the plugin {spec}: {error}", { spec, error }));
+      if (r.Library) lines.push(t("Library brought in and written into the agents"));
+      for (const p of r.LibraryProblems || []) lines.push(t("{agent} couldn't get {what}: {error}", { agent: p.agent, what: p.what, error: p.error }));
+      ed.replaceChildren(...lines.map((l) => el("div", "done", l)));
+      refreshAfterSync();
+    } catch (e) {
+      go.classList.remove("busy");
+      say(e.message);
+    }
+  };
+  return ed;
+};
+
+// askRestore asks before the server's setup replaces this computer's
+// (#847); what is here is kept, and the notice it leaves can undo it.
+window.askRestore = function (v, parts) {
+  const ed = el("div", "editor restore-ask");
+  const head = el("div", "ehead");
+  head.append(el("b", "", t("Restore from the server?")));
+  ed.append(head);
+  const goes = ["providers", "settings", "profiles"];
+  if (v.agents !== false) goes.push("agents");
+  if (v.library !== false) goes.push("library");
+  ed.append(el("p", "lib-confirm", t("This computer's {parts} become the ones on the server, as your other computers last synced them. Whatever was changed here since is replaced.", { parts: parts(goes) })));
+  ed.append(el("p", "lib-confirm", t("What is here now is sealed into the sync folder first, and Undo puts it back.")));
+  const err = el("p", "editor-error", "");
+  ed.append(err);
+  const bar = el("div", "bar");
+  const go = el("button", "text primary danger-fill", t("Restore setup"));
+  go.onclick = async (e) => {
+    e.stopPropagation();
+    go.disabled = true;
+    go.classList.add("busy");
+    try {
+      const r = await api("davsync/restore", {});
+      closeConfirmAsk();
+      renderSync(r);
+      if (r.error) return;
+      if (r.brought?.length) refreshAfterSync();
+      else status(t("This computer's setup is already the server's: nothing to restore"), "ok");
+    } catch (x) {
+      go.disabled = false;
+      go.classList.remove("busy");
+      err.textContent = x.message;
+    }
+  };
+  const cancel = el("button", "text", t("Cancel"));
+  cancel.onclick = cancelAsk;
+  bar.append(el("span", "grow"), cancel, go);
+  ed.append(bar);
+  confirmAsk = ed;
+  openModal(ed);
+  $("#modal").classList.add("lib");
+  cancel.focus(NO_SCROLL);
+};
+
+// askUpload asks before this computer's setup replaces a server file that
+// isn't a backup; the server's file is kept in the sync folder first.
+window.askUpload = function (f) {
+  const ed = el("div", "editor restore-ask upload-ask");
+  const head = el("div", "ehead");
+  head.append(el("b", "", t("Replace the file on the server?")));
+  ed.append(head);
+  ed.append(el("p", "lib-confirm", t("This computer's setup goes up in place of the file on the server, and your other computers sync with it from then on.")));
+  if (f.what === "cut") ed.append(el("p", "lib-confirm", t("What another computer wrote into that file and has nowhere else is lost. If one of them synced it last, Sync now there may rebuild it instead.")));
+  ed.append(el("p", "lib-confirm", t("The file on the server is kept in the sync folder first.")));
+  const err = el("p", "editor-error", "");
+  ed.append(err);
+  const bar = el("div", "bar");
+  const go = el("button", "text primary danger-fill", t("Upload this computer's setup"));
+  go.onclick = async (e) => {
+    e.stopPropagation();
+    go.disabled = true;
+    go.classList.add("busy");
+    try {
+      const r = await api("davsync/upload", {});
+      closeConfirmAsk();
+      renderSync(r);
+    } catch (x) {
+      go.disabled = false;
+      go.classList.remove("busy");
+      err.textContent = x.message;
+    }
+  };
+  const cancel = el("button", "text", t("Cancel"));
+  cancel.onclick = cancelAsk;
+  bar.append(el("span", "grow"), cancel, go);
+  ed.append(bar);
+  confirmAsk = ed;
+  openModal(ed);
+  $("#modal").classList.add("lib");
+  cancel.focus(NO_SCROLL);
+};

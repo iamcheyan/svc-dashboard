@@ -6,8 +6,7 @@ from svcdash.i18n import t, DEFAULT_LANG
 # ---------------- 仓库层: development git 仓库 + agent/goal 改动仓库 ----------------
 # 仓库集合包括 ~/development 下的 Git 项目，也补充 Hermes worktree 与
 # agent/goal 使用过的仓库根。只跳过依赖与缓存目录。
-# 提交事件(git log)60s 缓存;仓库统计600s缓存并异步刷新,
-# /api/repos?refresh=1 按需强制重算。
+# 本地仓库清单与统计仅供轨迹页按需读取；活动提交只读 GitHub Atom feed。
 
 _DEVELOPMENT_ROOT = "/home/tetsuya/development"
 _HERMES_WORKTREES_ROOT = "/home/tetsuya/.hermes/worktrees"
@@ -16,15 +15,9 @@ _REPO_SKIP_DIRS = {".git", ".hg", ".svn", ".venv", "venv", "node_modules",
                    "target", "build", "dist", "vendor"}
 
 _repo_set_cache = {"t": 0.0, "repos": None}
-_repo_ev_cache = {"t": 0.0, "data": None, "paths": []}
-_repo_ev_lock = threading.Lock()
 _repo_stats_cache = {"t": 0.0, "data": None}
 _REPO_STATS_PATH = Path("/home/tetsuya/.cache/svc-dashboard/repos.json")
-_REPO_EVENTS_PATH = Path("/home/tetsuya/.cache/svc-dashboard/events.json")
-# 需求 #138: 仓库清单与逐仓库提交事件都落盘缓存，
-# 避免每分钟重复 walk 文件系统、重复解析未变动仓库的 git log。
 _REPO_LIST_PATH = Path("/home/tetsuya/.cache/svc-dashboard/repos-list.json")
-_REPO_PER_PATH = Path("/home/tetsuya/.cache/svc-dashboard/repo-events-cache.json")
 _REPO_LIST_TTL = 600        # 仓库清单 10 分钟重扫一次
 _repo_refresh_lock = threading.Lock()
 
@@ -48,52 +41,6 @@ def _save_repo_list(repos):
                                    "repos": [os.path.realpath(p) for p in repos]},
                                   ensure_ascii=False, separators=(",", ":")))
         os.replace(tmp, _REPO_LIST_PATH)
-    except OSError:
-        pass
-
-
-def _load_repo_events_cache():
-    """每仓库事件缓存: {path: {"sig": str, "events": [...]}}。"""
-    try:
-        data = json.loads(_REPO_PER_PATH.read_text())
-        if isinstance(data, dict) and isinstance(data.get("repos"), dict):
-            return data["repos"]
-    except (OSError, ValueError, TypeError):
-        pass
-    return {}
-
-
-def _save_repo_events_cache(cache):
-    try:
-        _REPO_PER_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = _REPO_PER_PATH.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"updated": time.time(), "repos": cache},
-                                  ensure_ascii=False, separators=(",", ":")))
-        os.replace(tmp, _REPO_PER_PATH)
-    except OSError:
-        pass
-
-
-def _load_repo_events_snapshot():
-    try:
-        data = json.loads(_REPO_EVENTS_PATH.read_text())
-        if isinstance(data, dict) and isinstance(data.get("events"), list):
-            updated = data.get("updated")
-            snapshot_time = float(updated) if isinstance(updated, (int, float)) else 0.0
-            _repo_ev_cache.update({"t": snapshot_time, "data": data["events"],
-                                   "paths": data.get("paths") or []})
-    except (OSError, ValueError, TypeError):
-        pass
-
-
-def _save_repo_events_snapshot(data, repos):
-    try:
-        _REPO_EVENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = _REPO_EVENTS_PATH.with_suffix(".tmp")
-        payload = {"updated": time.time(), "paths": [os.path.realpath(p) for p in repos],
-                   "events": data}
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
-        os.replace(tmp, _REPO_EVENTS_PATH)
     except OSError:
         pass
 
@@ -244,121 +191,10 @@ def agent_repos(force: bool = False):
     return repos
 
 
-def _parse_one_repo(repo, per_repo=30):
-    """解析单个仓库的最近提交事件（含改动文件）。"""
-    name = os.path.basename(repo.rstrip("/"))
-    text = _git(repo, ["log", "--all", "-n", str(per_repo), "--name-status",
-                       "--format=COMMIT%x1f%h%x1f%ct%x1f%s%x1f%an"])
-    out = []
-    cur = None
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if line.startswith("COMMIT\x1f"):
-            if cur:
-                out.append(cur)
-            parts = line.split("\x1f")
-            if len(parts) != 5:
-                cur = None
-                continue
-            _, h, ct, subj, author = parts
-            try:
-                ts = float(ct)
-            except ValueError:
-                cur = None
-                continue
-            cur = {
-                "ts": ts,
-                "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)),
-                "gid": h,
-                "name": name,
-                "repo": name,
-                "kind": "commit",
-                "text": f"{subj} — {author}",
-                "subject": subj,
-                "author": author,
-                "src": "commit",
-                "files": [],
-            }
-        elif cur and "\t" in raw_line:
-            f_parts = raw_line.split("\t")
-            st = f_parts[0].strip()[:1].upper() if f_parts[0].strip() else "M"
-            cur["files"].append({"status": st, "path": f_parts[-1].strip()})
-    if cur:
-        out.append(cur)
-    return out
-
-
-def _repo_signature(repo):
-    """轻量签名: 一次 git 调用取全部分支最新提交号+时间。
-    签名不变则说明该仓库没有新提交，可直接复用缓存，不跑 log --name-status。"""
-    text = _git(repo, ["log", "--all", "-1", "--format=%H%x1f%ct"]).strip()
-    return text
-
-
-def _parse_repo_commits_sync(per_repo=30, total=150, force=False):
-    """Rebuild and persist the repo commit feed; used by the periodic collector.
-
-    需求 #138: 逐仓库增量——先用一次 git log -1 拿签名，未变动的仓库
-    直接复用磁盘缓存事件，只有 HEAD/分支变化时才跑完整的 log --name-status。
-    """
-    with _repo_ev_lock:
-        now = time.time()
-        if _repo_ev_cache["data"] is None:
-            _load_repo_events_snapshot()
-        # Reload the snapshot so an independent collector invocation sees the
-        # latest persisted version before deciding whether a refresh is needed.
-        if _repo_ev_cache["data"] is not None:
-            _load_repo_events_snapshot()
-        if not force and _repo_ev_cache["data"] is not None and now - _repo_ev_cache["t"] < 60:
-            return _repo_ev_cache["data"]
-        repos = agent_repos()
-        prev = _load_repo_events_cache()
-        new_cache = {}
-        out = []
-        seen_commits = set()
-        for repo in repos:
-            sig = _repo_signature(repo)
-            ent = prev.get(repo)
-            if (sig and ent and ent.get("sig") == sig
-                    and isinstance(ent.get("events"), list)):
-                repo_events = ent["events"]
-            else:
-                repo_events = _parse_one_repo(repo, per_repo=per_repo)
-            new_cache[repo] = {"sig": sig, "events": repo_events}
-            for e in repo_events:
-                gid = e.get("gid")
-                if gid in seen_commits:
-                    continue
-                seen_commits.add(gid)
-                out.append(e)
-        # 签名集合未变且事件数量一致时不必重写磁盘（省 I/O）。
-        prev_sigs = {k: v.get("sig") for k, v in prev.items()}
-        new_sigs = {k: v.get("sig") for k, v in new_cache.items()}
-        if prev_sigs != new_sigs:
-            _save_repo_events_cache(new_cache)
-        try:
-            from svcdash.github import fetch_github_events, merge_commits
-            out = merge_commits(out, fetch_github_events(), total=total)
-        except Exception:
-            out.sort(key=lambda x: -x["ts"])
-            out = out[:total]
-        _repo_ev_cache.update({"t": now, "data": out})
-        _save_repo_events_snapshot(out, repos)
-        return out
-
-
-def refresh_repo_commits():
-    """Collect all discovered project commits and atomically persist the shared feed."""
-    return _parse_repo_commits_sync(force=True)
-
-
 def parse_repo_commits(per_repo=30, total=150):
-    """Read the latest persisted activity feed without scanning repositories."""
-    with _repo_ev_lock:
-        _load_repo_events_snapshot()
-        return (_repo_ev_cache["data"] or [])[:total]
+    """Compatibility name for the GitHub-only Atom activity feed."""
+    from svcdash.github import github_events
+    return github_events(total=total)
 
 
 

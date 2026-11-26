@@ -43,14 +43,17 @@ def health():
     if not d.get("ok"):
         return {"ok": False, "msg": d.get("msg") or "引擎不可达"}
     agents = [a for a in (_req("/api/agents", timeout=8).get("agents") or []) if not a.get("hidden")]
-    preferred = d.get("default_agent") or ""
+    repos_res = _req("/api/repos", timeout=8)
+    repos_list = [r.get("slug") for r in (repos_res.get("repos") or []) if r.get("enabled") and r.get("slug")]
+    preferred = d.get("default_agent") or "hermes"
     ids = [a.get("id") for a in agents]
     if preferred in ids:
         ids.remove(preferred)
         ids.insert(0, preferred)
     return {"ok": True, "issue_repo": d.get("issue_repo"), "agents": ids,
+            "repos": repos_list,
             "agent_labels": {a.get("id"): a.get("label") or a.get("id") for a in agents},
-            "default_agent": preferred or (ids[0] if ids else "")}
+            "default_agent": preferred or (ids[0] if ids else "hermes")}
 
 
 _hosts_cache = {"t": 0.0, "data": None}
@@ -126,15 +129,15 @@ def run_log(rid, lines=300):
     return {"ok": True, "log": d.get("log") or ""}
 
 
-def dispatch(number, agent=None, host=None):
+def dispatch(number, agent=None, host=None, target_repo=None):
     h = health()
     if not h.get("ok"):
         return h
-    body = {"repo": h.get("issue_repo"), "issue_number": int(number)}
-    if agent:
-        body["agent"] = agent
+    body = {"repo": h.get("issue_repo"), "issue_number": int(number), "agent": agent or "hermes"}
     if host:
         body["host"] = host
+    if target_repo:
+        body["target_repo"] = target_repo
     d = _req("/api/runs", method="POST", body=body, timeout=90)
     if d.get("id"):
         return {"ok": True, "id": d["id"]}
@@ -143,7 +146,7 @@ def dispatch(number, agent=None, host=None):
     return {"ok": False, "msg": d.get("msg") or "派发失败"}
 
 
-def create(title, body, agent="pi", host=""):
+def create(title, body, agent="hermes", host="", target_repo=None):
     """新建任务：在 issue 仓库里开 issue，然后立刻派发。
 
     仓库判断不在这里做：TaskHub 解析不出来会先挂起并在 Telegram 里问，而不是让 UI 报错。
@@ -162,9 +165,11 @@ def create(title, body, agent="pi", host=""):
     if not d.get("ok") or not d.get("number"):
         return {"ok": False, "msg": d.get("msg") or "创建 Issue 失败"}
     number = int(d["number"])
-    run_body = {"repo": repo, "issue_number": number, "agent": agent or "pi"}
+    run_body = {"repo": repo, "issue_number": number, "agent": agent or "hermes"}
     if host:
         run_body["host"] = host
+    if target_repo:
+        run_body["target_repo"] = target_repo
     r = _req("/api/runs", method="POST", body=run_body, timeout=120)
     if r.get("needs_repo"):
         return {"ok": True, "number": number, "url": d.get("url"), "needs_repo": True,

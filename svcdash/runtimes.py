@@ -876,7 +876,19 @@ def _system_ai_env():
     return versions
 
 
+_scan_lock = __import__('threading').Lock()
+
+
 def scan_runtimes():
+    if _rt_cache["data"] is not None and time.time() - _rt_cache["t"] < 10:
+        return _rt_cache["data"]
+    with _scan_lock:
+        if _rt_cache["data"] is not None and time.time() - _rt_cache["t"] < 10:
+            return _rt_cache["data"]
+        return _scan_runtimes()
+
+
+def _scan_runtimes():
     now = time.time()
     if _rt_cache["data"] is not None and now - _rt_cache["t"] < 10:
         return _rt_cache["data"]
@@ -933,7 +945,7 @@ def scan_runtimes():
             "total_running": sum(len(v) for v in procs.values()),
             "env_tools": _system_ai_env(),
             "quota": qs, "ctl": ctl}
-    _rt_cache.update({"t": now, "data": data})
+    _rt_cache.update({"t": time.time(), "data": data})
     return data
 
 

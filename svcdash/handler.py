@@ -86,7 +86,7 @@ def _load_static(relpath):
 def _stamp_asset_versions(body):
     """把壳里 app.js/app.css 的 ?v= 替换为文件内容 sha1 前 8 位(与 ETag 同源)。
     静态资源 immutable 缓存因此只在内容真变时换 URL —— 手动维护 v= 的失步缺口根治。"""
-    for name in ("app.js", "app.css"):
+    for name in ("app.js", "app.css", "magpie-view.js"):
         ent = _load_static(name)
         if ent:
             h = ent[2].strip('"')[:8]
@@ -170,6 +170,7 @@ class Handler(BaseHTTPRequestHandler):
                      cache="no-cache" if etag else "no-store", etag=etag)
 
     def _send_static(self, relpath):
+        cache_policy = "no-cache" if relpath.startswith("magpie-native/") else "public, max-age=31536000, immutable"
         ent = _load_static(relpath)
         if not ent:
             self.send_error(404)
@@ -179,21 +180,21 @@ class Handler(BaseHTTPRequestHandler):
         if inm and etag in inm:
             self.send_response(304)
             self.send_header("ETag", etag)
-            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+            self.send_header("Cache-Control", cache_policy)
             self.end_headers()
             return
         if self._gz_ok():
             payload, enc = gz, "gzip"
         else:
             payload, enc = raw, None
-        ctype = "text/css; charset=utf-8" if relpath.endswith(".css") else (
+        ctype = "text/html; charset=utf-8" if relpath.endswith(".html") else "text/css; charset=utf-8" if relpath.endswith(".css") else (
                 "application/javascript; charset=utf-8" if relpath.endswith(".js") else (
                 "image/svg+xml" if relpath.endswith(".svg") else (
                 "image/webp" if relpath.endswith(".webp") else (
                 "image/png" if relpath.endswith(".png") else "application/octet-stream"))))
         self.send_response(200)
         self.send_header("Content-Type", ctype)
-        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        self.send_header("Cache-Control", cache_policy)
         self.send_header("ETag", etag)
         if enc:
             self.send_header("Content-Encoding", enc)
@@ -230,6 +231,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"updated": time.time(), "services": procscan.gather(lang)})
         elif path == "/api/sys":
             self._send_json(200, sysinfo.sys_info())
+        elif path == "/api/sys/chart":
+            self._send_json(200, sysinfo.sys_chart_info())
         elif path == "/api/fragment":
             lang = detect_lang(self.headers.get("Accept-Language", ""),
                                urlparse(self.path).query)
@@ -380,20 +383,42 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/tailscale":
             from . import tailscale
             self._send_json(200, tailscale.get_tailscale_status())
+        elif path == "/api/chezmoi/issues":
+            from .chezissues import read_snapshot
+            self._send_json(200, read_snapshot())
+        elif path == "/api/github/contributions":
+            from .githubheatmap import read_snapshot
+            self._send_json(200, read_snapshot())
+        elif path == "/api/system-log":
+            from . import systemlog
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                lines = int((qs.get("lines") or ["200"])[0])
+            except ValueError:
+                lines = 200
+            raw_priority = (qs.get("priority") or [""])[0]
+            self._send_json(200, systemlog.read(lines, raw_priority if raw_priority != "" else None))
+        elif path == "/api/pullrequests":
+            from .pullrequests import read_snapshot
+            self._send_json(200, read_snapshot())
+        elif path.startswith("/api/magpie/native/"):
+            from . import magpie_native
+            status, ctype, payload = magpie_native.read(path[len("/api/magpie/native/"):], urlparse(self.path).query)
+            self._finish(status, ctype, payload, cache="no-store")
         elif path == "/api/magpie/usage":
             from . import magpie
             qs = parse_qs(urlparse(self.path).query)
             period = (qs.get("period") or ["today"])[0]
-            self._send_json(200, magpie.get_magpie_usage(period))
+            self._send_json(200, magpie.get_magpie_usage(period, force=parse_qs(urlparse(self.path).query).get("refresh") == ["1"]))
         elif path == "/api/magpie/quotas":
             from . import magpie
-            self._send_json(200, magpie.get_magpie_quotas())
+            self._send_json(200, magpie.get_magpie_quotas(force=parse_qs(urlparse(self.path).query).get("refresh") == ["1"]))
         elif path == "/api/magpie/routing":
             from . import magpie
-            self._send_json(200, magpie.get_magpie_routing())
+            self._send_json(200, magpie.get_magpie_routing(force=parse_qs(urlparse(self.path).query).get("refresh") == ["1"]))
         elif path == "/api/magpie/providers":
             from . import magpie
-            self._send_json(200, magpie.get_magpie_providers())
+            self._send_json(200, magpie.get_magpie_providers(force=parse_qs(urlparse(self.path).query).get("refresh") == ["1"]))
         elif path == "/api/vms":
             from . import pve
             self._send_json(200, pve.get_pve_vms())
@@ -485,8 +510,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(400, {"ok": False, "msg": "missing title"})
                 return
             res = taskhub.create(title, str(body.get("body") or ""),
-                                 str(body.get("agent") or "pi"), str(body.get("host") or ""))
-            self.log_message("th_new issue=%s agent=%s host=%s", res.get("number"), body.get("agent"), body.get("host"))
+                                 str(body.get("agent") or "hermes"), str(body.get("host") or ""),
+                                 target_repo=(str(body.get("target_repo") or "").strip() or None))
+            self.log_message("th_new issue=%s agent=%s host=%s repo=%s", res.get("number"), body.get("agent"), body.get("host"), body.get("target_repo"))
             self._send_json(200 if res.get("ok") else 400, res)
             return
         if path == "/api/th/dispatch":
@@ -494,8 +520,9 @@ class Handler(BaseHTTPRequestHandler):
             if not num:
                 self._send_json(400, {"ok": False, "msg": "missing number"})
                 return
-            res = taskhub.dispatch(num, agent=(body.get("agent") or None), host=(body.get("host") or None))
-            self.log_message("th_dispatch issue=%s agent=%s host=%s", num, body.get("agent"), body.get("host"))
+            res = taskhub.dispatch(num, agent=(body.get("agent") or "hermes"), host=(body.get("host") or None),
+                                   target_repo=(str(body.get("target_repo") or "").strip() or None))
+            self.log_message("th_dispatch issue=%s agent=%s host=%s repo=%s", num, body.get("agent"), body.get("host"), body.get("target_repo"))
             self._send_json(200 if res.get("ok") else 400, res)
             return
         if path == "/api/th/state":

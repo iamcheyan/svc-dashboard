@@ -25,6 +25,16 @@ WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/svc-static-publish.XXXXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 echo "[static-publish] collecting and sanitizing snapshot"
+# The export runs in a fresh process, so start the local source when its user
+# unit exists. A failed start is harmless: export can use its last good cache.
+if [[ "$(systemctl --user show magpie.service -p LoadState --value 2>/dev/null || true)" == "loaded" ]] \
+   && ! systemctl --user is-active --quiet magpie.service; then
+  systemctl --user start magpie.service >/dev/null 2>&1 || true
+  for _attempt in {1..10}; do
+    if curl --max-time 1 --silent --output /dev/null http://127.0.0.1:3426/api/state; then break; fi
+    sleep 0.5
+  done
+fi
 python3 - "$REPO_DIR" "$WORK_DIR" "$CNAME" <<'PY'
 import os, sys
 repo_dir, output_dir, cname = sys.argv[1:]
@@ -55,6 +65,15 @@ for path in root.rglob("*"):
     for pattern, replacement in text_patterns:
         content = pattern.sub(replacement, content)
     path.write_text(content, encoding="utf-8")
+
+# Privacy scrubbing must leave the generated application executable.
+import shutil, subprocess
+node = shutil.which("node")
+if node:
+    for path in root.rglob("*.js"):
+        result = subprocess.run([node, "--check", str(path)], capture_output=True)
+        if result.returncode:
+            raise SystemExit("[static-publish] invalid generated JavaScript: " + str(path.relative_to(root)))
 PY
 
 HASH=$(find "$WORK_DIR" -type f -print0 \

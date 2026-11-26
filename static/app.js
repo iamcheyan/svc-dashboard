@@ -4,6 +4,15 @@ if (BOOT.readonly) {
   if (document.body) document.body.classList.add("is-readonly");
   else document.addEventListener("DOMContentLoaded", () => document.body.classList.add("is-readonly"));
 }
+const SVG_CHEV = `<svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m2 4.5 4 3.5 4-3.5"/></svg>`;
+const SVG_CHECK = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 6.5l3 3 5-5"/></svg>`;
+const _svcSelectMap = new WeakMap(); // sel -> { wrap, trigger, menuEl }
+let _svcSelectSeq = 0;
+// escHtml/escAttr 必须声明在 syncLogAgentPicker 与下方 IIFE 之前:
+// initLogAgentPicker 在模块求值期立即执行, const 放后面会触发 TDZ
+// ReferenceError 并杀死整个主脚本(catbar/hash 路由/load 全部不执行)。
+const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const escAttr = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const AUTO = BOOT.auto;
 const LANG = BOOT.lang;
 const LOCALE_TAG = { zh: "zh-CN", en: "en-US", ja: "ja-JP" }[LANG] || undefined;
@@ -123,8 +132,14 @@ let autoLocked = false;      // 长按锁定: true = 30s 自动刷新完全停�
 // TaskHub 状态容器：必须早于任何 setCat()/init 逻辑声明，否则 TDZ 报错。
 const TH = { tab: "events", mode: "open", q: "", issues: null, runs: null,
              hosts: null, health: null, logId: null, timer: null, sheet: null };
+const CI = { detailTab: "body", state: "OPEN", label: "", sort: "updated", selected: null, data: null, busy: false };
 let filter = "user"; // 默认只显示用户服务, 隐藏系统服务
 let services = [];
+const svcView = { tab: "svc", query: "", sort: "port", systemLogTimer: null, systemLogBusy: false };
+const nativeMagpieViews = {};
+let curUsageTab="usage";
+let homeUsageBusy=false,homeUsageAt=0;
+let githubHeatmapAt=0,githubHeatmapBusy=false,githubHeatmapAnimated=false;
 const $ = (id) => document.getElementById(id);
 
 const FILTERS = {
@@ -137,6 +152,7 @@ const FILTERS = {
   tmux:    () => false, // tmux 走独立面板
   tailscale: () => false, // tailscale 走独立面板
   manage:  () => false, // 服务管理走独立面板
+  paused: (e) => !!(e.paused || e.svcctl_paused),
   all:    () => true,
 };
 
@@ -161,7 +177,7 @@ function row(e, mobile) {
   const ctl = man
     ? `<span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span>`
     : "";
-  const svctl = svBtn(e);
+  const svctl = ctl ? "" : svBtn(e);
   const svBtnNamed = svctl ? svctl.replace("data-svcp=", `data-svcn='${esc(e.name.replace(/ \(docker\)| \(paused\)$/g, ""))}' data-svcp=`) : "";
   const res = fmtRes(e);
   const rres = e.res ? { cpu: Math.round(e.res.cpu), mem_mb: Math.round(e.res.mem_mb),
@@ -169,16 +185,21 @@ function row(e, mobile) {
   const dpayload = { name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids, res: rres, unit: e.unit || null, cid: e.container_id || null };
   const detailBtn = BOOT.readonly ? "" : `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(dpayload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
   const actions = `${detailBtn}${ctl}${svBtnNamed}`;
+  const displayName = svcIdentity(e).main || e.name;
+  detail = ""; // Technical identifiers live in the details dialog.
+  const access = loopback ? t("loopback") : t("svc_access_network");
+  const status = svPaused ? t("badge_paused") : t("ts_status_running");
+  const meta = `<span class="svc-row-meta">${esc(access)} · ${esc(status)}</span>`;
   if (mobile) {
-    return `<tr><td><div class='td-head'>${svcDot}<span class='svc'>${esc(e.name)}</span>` +
-      `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
+    return `<tr><td><div class='td-head'>${svcDot}<span class='svc'>${esc(displayName)}</span>` +
+      `<span class='badge ${badge[1]}'>${text}</span>` +
       `<span class='svc-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}' aria-label='${t("act_copy_addr")}'>${icon("copy", 15)}</span>` +
       `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>${icon("ext", 15)}</a></div>` +
-      `<div class='svc-summary'><a class='port' href='${link}' target='_blank' rel='noopener'>:${e.port}</a>` +
+      `${meta}<div class='svc-summary'><a class='port' href='${link}' target='_blank' rel='noopener'>:${e.port}</a>` +
       `<span class='svc-summary-res'>${res || "—"}</span><span class='svc-summary-detail'>${actions}</span></div></td></tr>`;
   }
   return `<tr>
-    <td class='name'>${svcDot}<span class='svc'>${esc(e.name)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
+    <td class='name'>${svcDot}<span class='svc'>${esc(displayName)}</span><span class='badge ${badge[1]}'>${text}</span>${meta}</td>
     <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
     <td class='res' data-label='${t("th_res")}'>${res || "—"}</td>
     <td class='svc-actions' data-label='${t("g_detail")}'>${actions}</td>
@@ -229,17 +250,42 @@ function hideAllServiceSubviews() {
   const lp = $("logpage"); if (lp) { lp.style.display = "none"; lp.hidden = true; }
 }
 
+function serviceEntries() {
+  const entries = new Map();
+  const local = e => /^(127\.|::1$|::ffff:127\.)/.test(e.ip || "");
+  for (const e of services) {
+    const key = [e.port, e.container_id || "", e.pids?.length ? e.pids.slice().sort().join(",") : e.ip + ":" + e.name].join("|");
+    const previous = entries.get(key);
+    const bindings = [...new Set([...(previous?.bindings || []), e.ip])];
+    entries.set(key, { ...(previous && !(local(previous) && !local(e)) ? previous : e), bindings });
+  }
+  return [...entries.values()];
+}
 function applyFilter() {
-  const shown = FILTERS[filter] ? services.filter(FILTERS[filter]) : [];
-  ["user", "web", "docker", "system", "all"].forEach(f => {
+  if (filter === "tailscale") svcView.tab = "network";
+  else if (["manage", "watchdog"].includes(filter)) svcView.tab = "manage";
+  syncSvcView();
+  const entries = serviceEntries();
+  const query = svcView.query.toLowerCase().trim();
+  const shown = (FILTERS[filter] ? entries.filter(FILTERS[filter]) : []).filter(e =>
+    !query || [e.name, e.port, e.unit, e.ip, (e.bindings || []).join(" "), svcIdentity(e).main].join(" ").toLowerCase().includes(query));
+  shown.sort((a,b) => svcView.sort === "memory" ? (b.res?.mem_mb || 0) - (a.res?.mem_mb || 0) || a.port-b.port : a.port-b.port);
+  const summary = $("svc-list-summary");
+  if (summary) summary.textContent = t("svc_results", { n: shown.length, total: entries.length });
+  ["user", "web", "docker", "system", "paused", "all"].forEach(f => {
     const el = $("n-" + f);
-    if (el) el.textContent = services.filter(FILTERS[f]).length;
+    if (el) el.textContent = entries.filter(FILTERS[f]).length;
   });
   document.querySelectorAll("#filters .chip").forEach(c =>
     c.classList.toggle("active", c.dataset.f === filter));
 
   // 严格隔离：切换任何分类时，其他所有画面一律彻底隐藏
   hideAllServiceSubviews();
+  if (svcView.tab === "cron" || svcView.tab === "logs") {
+    const panel = $(svcView.tab === "cron" ? "cron-panel" : "logpage");
+    if (panel) { panel.hidden = false; panel.style.display = ""; }
+    return;
+  }
 
   if (filter === "tailscale") {
     const np = $("network-page");
@@ -296,10 +342,9 @@ function applyFilter() {
   }
 
   // 常规服务端口过滤 (user, web, docker, system, all)
-  const sp = $("svc-panel"); if (sp) sp.style.display = "";
+  const sp = $("svc-panel"); if (sp) { sp.hidden = false; sp.style.display = ""; }
   const svc = $("svc"); if (svc) svc.style.display = "";
-  const cp = $("cron-panel"); if (cp) { cp.style.display = ""; cp.hidden = false; }
-  const lp = $("logpage"); if (lp) { lp.style.display = ""; lp.hidden = false; }
+
   const tbody = $("svc")?.querySelector("tbody");
   if (tbody) renderSvcRows(tbody, shown, isMobile());
   $("count").textContent = shown.length;
@@ -334,7 +379,6 @@ function renderSys(s) {
   ];
   $("sysbar").innerHTML = cards.map(([k, l, v, cls]) =>
     `<div class='stat' data-k='${k}'><div class='label'><span class='lb-ico'>${icon(SYS_ICONS[k] || "dot", 13)}</span>${l}</div><div class='value${cls}'>${v}</div></div>`).join("");
-  chartSample(s); // 趋势图采样并绘制
 }
 
 // --- 仓库面板: agent/goal 改动过的仓库(/api/repos; 客户端 60s 缓存) ---
@@ -576,7 +620,7 @@ async function loadAgents() {
     const r = await fetch("/api/omp", { cache: "no-store" });
     const data = await r.json();
     ompCache = { omp: data.omp || [], codex: data.codex || [] };
-    $("n-omp").textContent = (ompCache.omp.length + ompCache.codex.length) || "";
+    if ($("n-omp")) $("n-omp").textContent = (ompCache.omp.length + ompCache.codex.length) || "";
   } catch (err) { ompCache = { omp: [], codex: [] }; }
   return ompCache;
 }
@@ -782,7 +826,7 @@ async function loadTmux() {
     const r = await fetch("/api/tmux", { cache: "no-store" });
     const data = await r.json();
     tmuxCache = data.panes || [];
-    $("n-tmux").textContent = tmuxCache.length || "";
+    if ($("n-tmux")) $("n-tmux").textContent = tmuxCache.length || "";
   } catch (err) { tmuxCache = []; }
   return tmuxCache;
 }
@@ -843,7 +887,7 @@ async function loadTasks() {
     const r = await fetch("/api/tasks?lang=" + encodeURIComponent(LANG), { cache: "no-store" });
     const data = await r.json();
     tasksCache = data.tasks || [];
-    $("n-watchdog").textContent = tasksCache.length;
+    if ($("n-watchdog")) $("n-watchdog").textContent = tasksCache.length;
   } catch (err) {
     tasksCache = [];
   }
@@ -891,6 +935,10 @@ const MANAGE_LABELS = { start: t("m_start"), stop: t("m_stop"), restart: t("m_re
 
 async function loadManage() {
   const el = $("tasks");
+  if (BOOT.static) {
+    if (el) { el.hidden = false; el.innerHTML = `<div class="gempty">${escHtml(t("st_readonly"))} · ${escHtml(t("st_online_hint"))}</div>`; }
+    return;
+  }
   if (filter !== "manage") { el.hidden = true; return; }
   el.hidden = false;
   el.className = "watchdog-panel manage-panel";
@@ -1188,7 +1236,9 @@ function applyFragment(part, selector, html) {
     if (i >= 0) pagesHomeOrder[i] = next;
   }
   else if (part === "toolchips" && next) {
-    document.querySelector("#filters")?.before(next);
+    const home = isMobile() ? document.querySelector('.pg[data-p="0"]') : document.querySelector("#pages");
+    if (home) home.appendChild(next);
+    if (pagesHomeOrder && !pagesHomeOrder.includes(next)) pagesHomeOrder.push(next);
     if (!isMobile() && curCat !== "home") next.classList.add("cat-off");
   }
   else return false;
@@ -1238,6 +1288,7 @@ async function load(alsoSys) {
   const btns = [$("refresh"), $("fab-refresh")].filter(Boolean);
   btns.forEach(b => { b.classList.add("spinning"); b.setAttribute("aria-disabled", "true"); });
 
+  refreshHomeUsage(); refreshGithubHeatmap();
   refreshInFlight = (async () => {
     try {
       if (BOOT.static) {
@@ -1288,11 +1339,12 @@ async function triggerSharedRefresh(opts = {}) {
     if (typeof page !== "undefined") {
       if (page === 1 && typeof renderActivityPage === "function") {
         await renderActivityPage();
-      } else if (page === 2 && typeof renderTmuxPage === "function") {
-        await renderTmuxPage();
-      } else if (page === 3 && typeof initAgentsPage === "function") {
+      } else if (page === 2 && typeof initAgentsPage === "function") {
         await initAgentsPage();
+      } else if (page === 3) {
+        await refreshUsagePage(true);
       } else if (page === 4) {
+        loadSvcSubview();
         if (typeof filter !== "undefined" && filter === "tailscale" && typeof renderNetworkPage === "function") {
           await renderNetworkPage(true);
         } else if (typeof filter !== "undefined" && filter === "omp" && typeof loadAgents === "function") {
@@ -2352,11 +2404,13 @@ function updateBadge(n) {
 document.addEventListener("click", (e) => {
   const jump = e.target.closest("[data-nav]");
   if (jump) {
+    if(jump.dataset.nav === "usage"){e.preventDefault();curUsageTab="usage";isMobile()?setPage(3):setCat("usage");scrollTo({top:0,behavior:"smooth"});return;}
     if (e.target.closest("a[href]") || e.target.closest(".gcopy") || e.target.closest(".svctl-btn")) return;
     const nav = jump.dataset.nav;
     if (nav === "activity") { isMobile() ? setPage(1) : setCat("activity"); }
-    else if (nav === "tmux") { isMobile() ? setPage(2) : setCat("tmux"); }
-    else if (nav === "agent") { isMobile() ? setPage(3) : setCat("agent"); }
+    else if (nav === "tmux") { isMobile() ? openActivityTasks() : setCat("tmux"); }
+    else if (nav === "agent") { isMobile() ? setPage(2) : setCat("agent"); }
+    else if (nav === "usage") { curUsageTab="usage"; isMobile() ? setPage(3) : setCat("usage"); }
     else if (nav === "svc") { isMobile() ? setPage(4) : setCat("svc"); }
     else if (nav === "network" || nav === "ts") {
       if (isMobile()) setPage(4); else setCat("svc");
@@ -2379,7 +2433,7 @@ if (rcMore) rcMore.addEventListener("click", () => {
 });
 const hpMore = document.querySelector(".hp-more");
 if (hpMore) hpMore.addEventListener("click", () => {
-  if (typeof mqMobile !== "undefined" && mqMobile.matches) setPage(2);
+  if (typeof mqMobile !== "undefined" && mqMobile.matches) openActivityTasks();
   else setCat("tmux");
 });
 const recentBodyEl = $("recent-body");
@@ -2404,7 +2458,7 @@ document.addEventListener("click", (e) => {
     renderOverview(null);
     return;
   }
-  if (e.target.closest(".detail")) setPage(2);
+  if (e.target.closest(".detail")) openActivityTasks();
 });
 
 // --- 活动流 (Activity Stream: Git 提交 + 远程同步 + Goal/Watchdog) ---
@@ -2517,6 +2571,9 @@ function getRepoTheme(repo) {
 }
 
 async function renderActivityPage() {
+  bindActivityTabs();
+  if (prState().tab === "prs") { loadPullRequests(); return; }
+  if (prState().tab === "tasks") { tmuxInitSubnav(); renderTmuxPage(); return; }
   const ap = $("activity-page");
   if (ap) ap.hidden = false;
   const container = $("activity-body");
@@ -3421,7 +3478,7 @@ async function openTmuxSheet(sname, target) {
     dotEl.className = "tmux-status-dot " + (session?.attached ? "attached" : (session?.is_agent ? "agent" : "detached"));
   }
   if (badgeEl) badgeEl.textContent = initialTarget;
-  if (linesSel) linesSel.value = String(curTmuxSheet.lines || 300);
+  if (linesSel) { linesSel.value = String(curTmuxSheet.lines || 300); svcSelectSync(linesSel); }
 
   // 渲染多窗口快速切换 Tabs
   if (tabsEl && session && session.windows && session.windows.length > 0) {
@@ -3634,6 +3691,7 @@ function stopTmuxSheetLive() {
 
     const linesSel = $("tmux-sheet-lines");
     if (linesSel) {
+      svcSelect(linesSel, true);
       linesSel.addEventListener("change", (e) => {
         curTmuxSheet.lines = parseInt(e.target.value, 10) || 300;
         refreshTmuxSheetOutput();
@@ -3742,96 +3800,7 @@ function stopTmuxSheetLive() {
     });
   }
 
-  // 新建任务弹层：左边执行者 / 右边 Issue 正文，创建即派发到 chezmoi 的 Issue
-  const newOpenBtn = $("btn-tmux-new-open");
-  const newModal = $("tmux-new-modal");
-  const newCloseBtn = $("btn-tmux-new-close");
-  const newCancelBtn = $("btn-tmux-new-cancel");
-  const newSubmitBtn = $("btn-tmux-new-submit");
-  const agentGrid = $("tmux-new-agent-grid");
-  const hostChips = $("nt-host-chips");
-  const titleInput = $("nt-title");
-  const bodyInput = $("nt-body");
 
-  let ntAgent = "hermes";
-  let ntHost = "";
-
-  async function ntLoadHosts() {
-    if (!hostChips) return;
-    hostChips.innerHTML = `<span class="chip">…</span>`;
-    const d = await thGet("/api/th/hosts").catch(() => ({ ok: false }));
-    const hosts = ((d && d.hosts) || []).filter(h => h.online !== false);
-    ntHost = ntHost || (d && d.default) || (hosts[0] || {}).id || "";
-    hostChips.innerHTML = hosts.map(h =>
-      `<span class="chip ${h.id === ntHost ? "active" : ""}" data-host="${escAttr(h.id)}">${escHtml(h.label || h.id)}</span>`
-    ).join("") || `<span class="chip">—</span>`;
-  }
-
-  const closeNewModal = () => { if (newModal) newModal.hidden = true; };
-
-  if (newOpenBtn && newModal) {
-    newOpenBtn.addEventListener("click", () => {
-      newModal.hidden = false;
-      ntLoadHosts();
-      setTimeout(() => titleInput && titleInput.focus(), 60);
-    });
-  }
-  if (newCloseBtn) newCloseBtn.addEventListener("click", closeNewModal);
-  if (newCancelBtn) newCancelBtn.addEventListener("click", closeNewModal);
-  if (newModal) newModal.addEventListener("click", e => { if (e.target === newModal) closeNewModal(); });
-
-  if (agentGrid) {
-    agentGrid.addEventListener("click", e => {
-      const card = e.target.closest(".nt-agent");
-      if (!card) return;
-      agentGrid.querySelectorAll(".nt-agent").forEach(c => c.classList.remove("active"));
-      card.classList.add("active");
-      ntAgent = card.dataset.agent;
-    });
-  }
-  if (hostChips) {
-    hostChips.addEventListener("click", e => {
-      const chip = e.target.closest(".chip[data-host]");
-      if (!chip) return;
-      hostChips.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
-      chip.classList.add("active");
-      ntHost = chip.dataset.host;
-    });
-  }
-  if (bodyInput) {
-    bodyInput.addEventListener("keydown", e => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); newSubmitBtn && newSubmitBtn.click(); }
-    });
-  }
-
-  if (newSubmitBtn) {
-    newSubmitBtn.addEventListener("click", async () => {
-      const title = (titleInput && titleInput.value.trim()) || "";
-      const body = (bodyInput && bodyInput.value.trim()) || "";
-      if (!title) { uiNotice(t("nt_need_title") || `请先写标题`); titleInput && titleInput.focus(); return; }
-      newSubmitBtn.disabled = true;
-      const origText = newSubmitBtn.innerHTML;
-      newSubmitBtn.innerHTML = `${icon("wait", 14)} <span>...</span>`;
-      try {
-        const r = await apiPost("/api/th/new", { title, body, agent: ntAgent, host: ntHost });
-        const d = await r.json().catch(() => ({ ok: false, msg: "bad json" }));
-        if (!d.ok) { uiNotice(d.msg || `创建失败`); return; }
-        closeNewModal();
-        if (titleInput) titleInput.value = "";
-        if (bodyInput) bodyInput.value = "";
-        TH.health = null;
-        if (d.needs_repo) uiNotice(`#${d.number} 已创建 · 在 Telegram 里确认仓库后自动开始`);
-        else uiNotice(`#${d.number} 已派发 · ${ntAgent} @ ${ntHost || `默认机器`}`);
-        await thRenderTasks();
-        if (d.number) thOpenTask(d.number, true);
-      } catch (err) {
-        uiNotice("Error: " + err.message);
-      } finally {
-        newSubmitBtn.disabled = false;
-        newSubmitBtn.innerHTML = origText;
-      }
-    });
-  }
 })();
 
 // --- 日志页: 全局事件时间线(筛选 chips + 同goal循环折叠 + 详情默认折叠) ---
@@ -4104,7 +4073,7 @@ const ptrController = (function setupPullToRefresh() {
 })();
 
 document.querySelectorAll("#filters .chip").forEach(c =>
-  c.addEventListener("click", () => { filter = c.dataset.f; applyFilter(); }));
+  c.addEventListener("click", () => { svcView.tab = "svc"; filter = c.dataset.f; applyFilter(); }));
 document.querySelectorAll(".tcol").forEach(b =>
   b.addEventListener("click", () => {
     $("svc").dataset.col = b.dataset.col;
@@ -4168,10 +4137,10 @@ const haptic = (ms) => {
 // 移动端把各分区装进 5 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#sysbar", "#chart-wrap", "#hp-vms-grid", "#hp-portal-grid"],
+  ["#hp-usage", "#hp-github", "#sysbar", "#chart-wrap", "#hp-vms-grid", "#hp-portal-grid", "#toolchips"],
   ["#activity-page"],
-  ["#tmux-panel"],
   ["#agents-page"],
+  ["#usage-page"],
   ["#svc-head", "#svc-subnav", "#filters", "#network-page", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
 ];
 let pagesHomeOrder = null, pgWrappers = null, trackEl = null, headerHome = null;
@@ -4223,14 +4192,16 @@ mqMobile.addEventListener("change", () => {
   // 桌面分类过滤与移动分页互斥: 切到移动清 .cat-off(分页自身就按页隔离内容)
   if (mqMobile.matches) {
     document.querySelectorAll(".cat-off").forEach(el => el.classList.remove("cat-off"));
-  } else setCat(curCat, false);   // 切回桌面: 恢复选中分类的过滤
+    const currentIndex = CATS.findIndex(x => x[0] === curCat);
+    setPage(currentIndex >= 0 ? currentIndex : page);
+  } else setCat(CATS[page]?.[0] || curCat, false);   // 切回桌面: 恢复选中分类的过滤
 });
 // --- 分页(概览/活动/Tmux/Agent/服务) ---
 const pages = $("pages");
 const N_PAGES = 5;
 const PAGE_W = 100 / N_PAGES;   // 轨道宽 500%, 每页位移 = 轨道的 1/5
 var page = 0;   // var: 挂到 window, 便于外部调试/测试读取
-function pageLabels() { return [t("tab_home"), t("tab_activity"), t("tab_tmux"), t("tab_agent"), t("tab_svc")]; }
+function pageLabels() { return [t("tab_home"), t("tab_activity"), t("tab_agent"), t("tab_usage"), t("tab_svc")]; }
 function applyPagesX(withTransition) {
   const tr = trackEl; // 移动端才有轨道
   if (!tr) return;
@@ -4277,30 +4248,20 @@ function setPage(i, opts) {
   requestAnimationFrame(() => applyPagesX(false));
 }
 function activatePage(i) {
-  if (i === 0) requestAnimationFrame(drawChart);
+  if (i === 0) { requestAnimationFrame(drawChart); refreshHomeUsage(); refreshGithubHeatmap(); }
   if (i === 1) { const ap = $("activity-page"); if (ap) ap.hidden = false; renderActivityPage(); }
   if (i === 2) {
-    const tp = $("tmux-panel");
-    if (tp) tp.hidden = false;
-    tmuxInitSubnav();          // 任务列表 / 看门狗：桌面经 setCat 进入，手机经分页进入，两边都要初始化
-    renderTmuxPage();
-  }
-  if (i === 3) {
     const ap = $("agents-page");
     if (ap) ap.hidden = false;
     initAgentsPage();
   }
+  if (i === 3) initUsagePage();
   if (i === 4 && isMobile()) {       // 服务页: 骨架 → 渲染
     const tbody = $("svc").querySelector("tbody");
     if (!tbody.children.length) tbody.innerHTML = mobileSkel(4);
     applyFilter();
   }
-  if (i === 4) {                     // 服务页尾部 = 计划任务 + 日志区
-    const cp = $("cron-panel");
-    if (cp) cp.hidden = false;
-    cronLoad();
-    initLogPage(); renderLogTimeline();
-  }
+  if (i === 4) { applyFilter(); loadSvcSubview(); }
 }
 document.addEventListener("click", (e) => {
   const b = e.target.closest("#tabbar .tab");
@@ -4497,13 +4458,127 @@ function copyText(txt, btn) {
   else fallbackCopy(txt, done);
 }
 
+// --- svcSelect：自绘下拉，完全替代原生 <select> 弹层 ---
+// 用法: svcSelect(nativeSel, [compactClass])
+//   nativeSel  —— 页面上已存在的 <select> 元素（作为数据源和值容器，对用户不可见）
+//   compact    —— true 时使用 .svc-select-compact（行内紧凑尺寸）
+// 调用后 nativeSel 加 .svc-native-select，前面插入自绘触发器，菜单挂 body。
+// 更新选项时调用 svcSelectSync(nativeSel) 刷新文本和选项列表。
+
+function svcSelectSync(sel) {
+  const r = _svcSelectMap.get(sel);
+  if (!r) return;
+  const { trigger, menuEl } = r;
+  const selVal = sel.options[sel.selectedIndex];
+  trigger.querySelector('.svc-select-value').textContent = selVal?.textContent || '';
+  if (!menuEl.hidden) _svcSelectPopulate(sel, menuEl);
+}
+function _svcSelectPopulate(sel, menuEl) {
+  menuEl.innerHTML = [...sel.options].map((o, i) => {
+    const sel_i = i === sel.selectedIndex;
+    const dis = o.disabled;
+    return `<div class="svc-option${sel_i ? ' is-selected' : ''}${dis ? ' is-disabled' : ''}" data-idx="${i}" role="option" aria-selected="${sel_i}" tabindex="${dis ? -1 : 0}"><span class="svc-option-check${sel_i ? '' : ' is-empty'}">${sel_i ? SVG_CHECK : ''}</span><span class="svc-option-label">${escHtml(o.textContent)}</span></div>`;
+  }).join('');
+}
+function _svcSelectOpen(sel, wrap, trigger, menuEl) {
+  if (!menuEl.hidden) return;
+  document.querySelectorAll('.svc-select.is-open').forEach(otherWrap => {
+    if (otherWrap === wrap) return;
+    const otherSel = otherWrap.querySelector('select');
+    const other = otherSel && _svcSelectMap.get(otherSel);
+    if (other) _svcSelectClose(other.wrap, other.trigger, other.menuEl);
+  });
+  _svcSelectPopulate(sel, menuEl);
+  menuEl.hidden = false;
+  wrap.classList.add('is-open');
+  trigger.setAttribute('aria-expanded', 'true');
+  document.body.appendChild(menuEl);
+  const r = trigger.getBoundingClientRect();
+  const menuW = Math.min(Math.max(Math.min(r.width, 360), 180), window.innerWidth - 8);
+  const spaceBelow = window.innerHeight - r.bottom - 4;
+  const spaceAbove = r.top - 4;
+  const menuH = Math.min(280, Math.max(120, Math.max(spaceBelow, spaceAbove)));
+  menuEl.style.maxHeight = menuH + 'px';
+  menuEl.style.width = menuW + 'px';
+  const openDown = spaceBelow >= menuH || spaceBelow >= spaceAbove;
+  menuEl.style.top = (openDown ? Math.min(window.innerHeight - menuH - 4, r.bottom + 4) : Math.max(4, r.top - menuH - 4)) + 'px';
+  menuEl.style.left = Math.min(Math.max(4, r.left), Math.max(4, window.innerWidth - menuW - 4)) + 'px';
+  const active = menuEl.querySelector('.svc-option.is-selected') || menuEl.querySelector('.svc-option');
+  active?.scrollIntoView({ block: 'nearest' });
+}
+function _svcSelectClose(wrap, trigger, menuEl) {
+  if (menuEl.hidden) return;
+  menuEl.hidden = true;
+  wrap.classList.remove('is-open');
+  trigger.setAttribute('aria-expanded', 'false');
+  if (menuEl.parentNode === document.body) document.body.removeChild(menuEl);
+}
+function svcSelect(sel, compact = false) {
+  if (!sel || _svcSelectMap.has(sel)) return;
+  sel.classList.add('svc-native-select');
+  const wrap = document.createElement('div');
+  wrap.className = 'svc-select svc-select-btn' + (compact ? ' svc-select-compact' : '');
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'svc-select-trigger';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+  if (sel.getAttribute('aria-label')) trigger.setAttribute('aria-label', sel.getAttribute('aria-label'));
+  trigger.innerHTML = `<span class="svc-select-value">${escHtml(sel.options[sel.selectedIndex]?.textContent || '')}</span><span class="svc-select-chevron">${SVG_CHEV}</span>`;
+  const menuEl = document.createElement('div');
+  menuEl.className = 'svc-select-menu';
+  menuEl.id = `svc-select-menu-${++_svcSelectSeq}`;
+  menuEl.setAttribute('role', 'listbox');
+  menuEl.hidden = true;
+  trigger.setAttribute('aria-controls', menuEl.id);
+  _svcSelectMap.set(sel, { wrap, trigger, menuEl });
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menuEl.hidden) _svcSelectOpen(sel, wrap, trigger, menuEl); else _svcSelectClose(wrap, trigger, menuEl);
+  });
+  menuEl.addEventListener('click', (e) => {
+    const opt = e.target.closest('.svc-option:not(.is-disabled)');
+    if (!opt) return;
+    const idx = Number(opt.dataset.idx);
+    sel.selectedIndex = idx;
+    svcSelectSync(sel);
+    _svcSelectClose(wrap, trigger, menuEl);
+    trigger.focus();
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  menuEl.addEventListener('keydown', (e) => {
+    const opts = [...menuEl.querySelectorAll('.svc-option:not(.is-disabled)')];
+    const cur = document.activeElement;
+    const ci = opts.indexOf(cur);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (opts[ci + 1] || opts[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (opts[ci - 1] || opts[opts.length - 1])?.focus(); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cur?.click(); }
+    else if (e.key === 'Escape') { _svcSelectClose(wrap, trigger, menuEl); trigger.focus(); }
+  });
+  trigger.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      _svcSelectOpen(sel, wrap, trigger, menuEl);
+      requestAnimationFrame(() => (menuEl.querySelector('.svc-option.is-selected') || menuEl.querySelector('.svc-option:not(.is-disabled)'))?.focus());
+    } else if (e.key === 'Escape' && !menuEl.hidden) {
+      _svcSelectClose(wrap, trigger, menuEl);
+    }
+  });
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target) && !menuEl.contains(e.target)) _svcSelectClose(wrap, trigger, menuEl);
+  }, true);
+  window.addEventListener('scroll', (e) => {
+    const target = e.target;
+    if (target && target.closest && target.closest('.svc-select-menu')) return;
+    if (!menuEl.hidden) _svcSelectClose(wrap, trigger, menuEl);
+  }, { passive: true, capture: true });
+  window.addEventListener('resize', () => { if (!menuEl.hidden) _svcSelectClose(wrap, trigger, menuEl); }, { passive: true });
+  sel.parentNode.insertBefore(wrap, sel);
+  wrap.appendChild(sel);
+  wrap.appendChild(trigger);
+}
 // --- 日志页: agent 选择 + 事件时间线(长按复制) ---
 let logAgents = null;
-// escHtml/escAttr 必须声明在 syncLogAgentPicker 与下方 IIFE 之前:
-// initLogAgentPicker 在模块求值期立即执行, const 放后面会触发 TDZ
-// ReferenceError 并杀死整个主脚本(catbar/hash 路由/load 全部不执行)。
-const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const escAttr = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function syncLogAgentPicker() {
   const sel = $("logagent-sel"), menu = $("logagent-menu"), value = $("logagent-value"), picker = $("logagent-picker");
   if (!sel || !menu || !value || !picker) return;
@@ -4570,6 +4645,7 @@ function toastCopied(anchor) {
 // (escHtml/escAttr 已上移到 syncLogAgentPicker 之前, 此处勿重复声明)
 
 // --- Agent 运行时总览: 注册表 + 过滤分组 + 装卸 + 状态/进程/任务/额度 ---
+let rtLoadPromise=null;
 let agentsInit = false, rtCache = null, rtT = 0, rtTimer = null, rtFilter = null, rtModelTimer = null;
 async function loadRuntimes(force) {
   if (BOOT.static && BOOT.runtimesData) {
@@ -4578,9 +4654,9 @@ async function loadRuntimes(force) {
   }
   const n = Date.now();
   if (!force && rtCache && n - rtT < 15000) return rtCache;
-  rtCache = await tlGet("/api/runtimes");
-  rtT = n;
-  return rtCache;
+  if(rtLoadPromise)return rtLoadPromise;
+  rtLoadPromise=(async()=>{try {rtCache=await tlGet("/api/runtimes");rtT=Date.now();return rtCache;}finally{rtLoadPromise=null;}})();
+  return rtLoadPromise;
 }
 
 const rtState = a => !a.installed ? "none" : a.procs > 0 ? "run" : "idle";
@@ -4708,9 +4784,8 @@ function rtMatch(a, f) {
   return true;
 }
 
-let curAgentTab = "routing";
+let curAgentTab = BOOT.static ? "runtimes" : "routing";
 let curMagpiePeriod = "today";
-let curQuotaMode = "remain";
 let curAccountMasked = true;
 let curMagpieData = null;
 let curMagpieRoutingData = null;
@@ -4791,284 +4866,30 @@ function fmtRelTime(isoStr) {
   }
 }
 
-function renderSparkline(points) {
-  if (!points || points.length < 2) {
-    return `
-      <svg class="mp-sparkline-svg" viewBox="0 0 200 24" preserveAspectRatio="none">
-        <line x1="0" y1="18" x2="200" y2="18" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
-        <line x1="0" y1="12" x2="200" y2="12" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.6" />
-      </svg>
-    `;
-  }
-  const values = points.map(p => Number(p.amount) || 0);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = (max - min) || 1;
-  const W = 200, H = 24, padY = 3;
-  const polyPoints = points.map((p, i) => {
-    const x = Math.round((i / (points.length - 1)) * W);
-    const y = Math.round(H - padY - ((p.amount - min) / range) * (H - padY * 2));
-    return `${x},${y}`;
-  }).join(" ");
-
-  return `
-    <svg class="mp-sparkline-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-      <line x1="0" y1="${H-1}" x2="${W}" y2="${H-1}" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
-      <polyline fill="none" stroke="#38bdf8" stroke-width="1.8" points="${polyPoints}" />
-    </svg>
-  `;
-}
-
-function renderAccountRow(acc, provider, isSec = false) {
-  const isMaskedCls = curAccountMasked ? "is-masked" : "";
-  const userDisp = acc.user || (acc.balance ? "" : "API key");
-  const planDisp = acc.plan || "";
-
-  let windowsHtml = "";
-  if (acc.windows && acc.windows.length > 0) {
-    const isMultiWin = acc.windows.length > 1;
-    windowsHtml = `
-      <div class="mp-win-container" style="${isMultiWin ? '' : 'flex-direction:column;'}">
-        ${acc.windows.map(w => {
-          const usedPct = Number(w.used) || 0;
-          const remainPct = Math.max(0, Math.min(100, 100 - usedPct));
-          let valText = "";
-          let barPct = 0;
-
-          if (w.name === "Credits" || (w.display && w.display.includes("/"))) {
-            const parts = (w.display || "").split("/").map(s => parseFloat(s.trim()));
-            const fmtNum = (n) => {
-              if (n == null || isNaN(n)) return "0";
-              const num = Number(n);
-              return Number.isInteger(num) ? num.toLocaleString() : num.toFixed(2);
-            };
-            const totalLimit = fmtNum(w.limit || parts[1] || 50);
-            if (curQuotaMode === "remain") {
-              const remRaw = (w.runsOut != null) ? Number(w.runsOut) : ((parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) ? Math.max(0, parts[1] - parts[0]) : (w.limit && w.amount != null ? Math.max(0, w.limit - w.amount) : null));
-              const rem = remRaw != null ? fmtNum(remRaw) : remainPct.toFixed(1);
-              valText = `${rem} / ${totalLimit} ${t("mp_credits")} · ${t("mp_view_mode_remain")} ${remainPct.toFixed(1)}%`;
-              barPct = remainPct;
-            } else {
-              valText = `${w.display || `${fmtNum(w.amount || parts[0] || 0)} / ${totalLimit}`} ${t("mp_credits")} · ${t("mp_view_mode_used")} ${usedPct.toFixed(1)}%`;
-              barPct = usedPct;
-            }
-          } else {
-            if (curQuotaMode === "remain") {
-              valText = `${t("mp_view_mode_remain")} ${remainPct >= 10 ? remainPct.toFixed(0) : remainPct.toFixed(1)}%`;
-              barPct = remainPct;
-            } else {
-              valText = `${t("mp_view_mode_used")} ${usedPct >= 10 ? usedPct.toFixed(0) : usedPct.toFixed(1)}%`;
-              barPct = usedPct;
-            }
-          }
-
-          let metaHtml = "";
-          if (w.resetsAt) {
-            const dateStr = fmtResetDate(w.resetsAt);
-            const relStr = fmtRelTime(w.resetsAt);
-            let paceStr = "";
-            if (w.holds && w.holds.since) {
-              const s = new Date(w.holds.since).getTime();
-              const e = new Date(w.resetsAt).getTime();
-              const n = Date.now();
-              if (e > s && n >= s) {
-                const elRatio = (n - s) / (e - s);
-                const pace = Math.round((usedPct / 100 - elRatio) * 100);
-                paceStr = ` · ${t("mp_pace", { n: (pace >= 0 ? "+" : "") + pace })}`;
-              }
-            }
-            metaHtml += `<span>重置于 ${dateStr} · ${relStr}${paceStr}</span>`;
-          }
-          if (w.holds && w.holds.tokens) {
-            const tokStr = t("mp_window_tokens", { n: fmtTokens(w.holds.tokens) });
-            const costStr = w.holds.cost ? ` · ${t("mp_window_cost", { n: w.holds.cost.toFixed(2) })}` : "";
-            metaHtml += `<span>${tokStr}${costStr}</span>`;
-          }
-          if (w.runsOutAt) {
-            const daysLeft = Math.max(1, Math.round((new Date(w.runsOutAt).getTime() - Date.now()) / (86400 * 1000)));
-            const roStr = (w.runsOut != null) ? (Number.isInteger(Number(w.runsOut)) ? Number(w.runsOut).toLocaleString() : Number(w.runsOut).toFixed(2)) : "";
-            metaHtml += `<span>${roStr ? `${roStr} 积分 将于 ` : ""}${fmtMonthDayTime(w.runsOutAt)} 过期 · ${daysLeft} 天后</span>`;
-          }
-
-          // 与 Agent 概览额度条(hp-bucket)统一: 健康=绿, 警戒=橙, 危险=红
-          const fillCls = (curQuotaMode === "remain")
-            ? ((barPct <= 15) ? "low" : (barPct <= 50) ? "warn" : "")
-            : ((barPct >= 85) ? "low" : (barPct >= 50) ? "warn" : "");
-          const winNameDisp = (w.name === "5 hours" ? t("mp_win_5h") : w.name === "7 days" ? t("mp_win_7d") : w.name === "Credits" ? t("mp_credits") : w.name);
-
-          return `
-            <div class="mp-win-col">
-              <div class="mp-win-top">
-                <span class="mp-win-name">${escHtml(winNameDisp)}</span>
-                <span class="mp-win-val ${fillCls}">${escHtml(valText)}</span>
-              </div>
-              <div class="mp-win-track">
-                <div class="mp-win-fill ${fillCls}" style="width:${Math.max(2, Math.min(100, barPct))}%;"></div>
-              </div>
-              ${metaHtml ? `<div class="mp-win-meta">${metaHtml}</div>` : ""}
-            </div>
-          `;
-        }).join("")}
-      </div>
-    `;
-  }
-
-  let dailyHtml = "";
-  if (acc.daily && acc.daily.days && acc.daily.days.length > 0) {
-    const dUsed = acc.daily.days[0].used;
-    dailyHtml = `
-      <div class="mp-daily-burn">
-        <span>${t("mp_daily_used", { n: dUsed })}</span>
-        <span style="color:var(--text-dim);font-size:10px;">刚刚更新</span>
-      </div>
-    `;
-  }
-
-  let balanceHtml = "";
-  if (acc.balance != null) {
-    let statHtml = "";
-    if (acc.balanceTrend && acc.balanceTrend.runsOut) {
-      const daysLeft = Math.max(1, Math.round((new Date(acc.balanceTrend.runsOut).getTime() - Date.now()) / (86400 * 1000)));
-      statHtml = `按此速度，预计 ${daysLeft} 天后用完`;
-    }
-    balanceHtml = `
-      <div class="mp-balance-box">
-        <span class="mp-balance-lbl">${t("mp_balance")}</span>
-        <span class="mp-balance-val">${escHtml(acc.balance)}</span>
-      </div>
-      <div class="mp-trend-stat">
-        <span>${statHtml}</span>
-        <span style="color:var(--text-dim);font-size:10.5px;">刚刚更新</span>
-      </div>
-      ${renderSparkline(acc.balanceTrend ? acc.balanceTrend.points : null)}
-      <div class="mp-trend-stat" style="font-size:10.5px;color:var(--text-soft);">
-        <span><span class="mp-trend-dot"></span>${t("mp_balance")} ${escHtml(acc.balance)} ${(acc.balanceTrend && acc.balanceTrend.perDay != null && !isNaN(acc.balanceTrend.perDay)) ? `· 约每天 $${Number(acc.balanceTrend.perDay).toFixed(2)}` : ""}</span>
-      </div>
-    `;
-  }
-
-  let resetsHtml = "";
-  if (acc.resets && acc.resets.count > 0) {
-    const untilStr = acc.resets.until ? fmtMonthDayTime(acc.resets.until) : "";
-    resetsHtml = `
-      <div class="mp-reset-card-badge">
-        ${icon("retry", 12)}
-        <span>${t("mp_resets_card", { n: acc.resets.count })} ${untilStr ? `· ${untilStr}前有效` : ""}</span>
-      </div>
-    `;
-  }
-
-  let errorHtml = "";
-  if (acc.error) {
-    errorHtml = `<div class="mp-acc-error">${escHtml(acc.error)}</div>`;
-  }
-
-  return `
-    <div class="mp-account-row">
-      ${userDisp || planDisp ? `
-        <div class="mp-acc-head">
-          <span class="mp-acc-email ${isMaskedCls}" title="${escAttr(userDisp)}">${escHtml(userDisp)}</span>
-          ${planDisp ? `<span class="mp-acc-plan">${escHtml(planDisp)}</span>` : ""}
-        </div>
-      ` : ""}
-      ${windowsHtml}
-      ${balanceHtml}
-      ${dailyHtml}
-      ${resetsHtml}
-      ${errorHtml}
-    </div>
-  `;
-}
-
-function renderMagpieQuotas(quotas, container) {
-  if (!container) return;
-  if (!quotas || !quotas.length) {
-    container.innerHTML = `<div class="gempty" style="grid-column:1/-1;">${escHtml(t("mp_empty"))}</div>`;
-    return;
-  }
-  const groups = {};
-  quotas.forEach(q => {
-    const p = q.provider || "other";
-    if (!groups[p]) {
-      groups[p] = {
-        provider: p,
-        name: q.name || p,
-        items: []
-      };
-    }
-    groups[p].items.push(q);
-  });
-
-  const PROV_ORDER = ["antigravity", "agy", "dim", "codex", "grok", "kiro", "workbuddy-ai", "our-free-model", "openrouter", "deepseek"];
-  const sortedKeys = Object.keys(groups).sort((a, b) => {
-    const ia = PROV_ORDER.indexOf(a) !== -1 ? PROV_ORDER.indexOf(a) : 99;
-    const ib = PROV_ORDER.indexOf(b) !== -1 ? PROV_ORDER.indexOf(b) : 99;
-    return ia - ib;
-  });
-
-  const cardsHtml = sortedKeys.map(p => {
-    const g = groups[p];
-    const primary = g.items[0];
-    const secondaries = g.items.slice(1);
-    const hasSec = secondaries.length > 0;
-    const provIcon = (p === "antigravity" || p === "agy" ? "spark" : p === "dim" ? "cpu" : p === "codex" ? "bolt" : p === "workbuddy-ai" ? "cpu" : p === "deepseek" ? "spark" : p === "kiro" ? "spark" : p === "grok" ? "bolt" : p === "openrouter" ? "network" : "box");
-    const provCol = (p === "antigravity" || p === "agy" ? "#c084fc" : p === "dim" ? "#10b981" : p === "codex" ? "#10b981" : p === "workbuddy-ai" ? "#06b6d4" : p === "deepseek" ? "#3b82f6" : p === "kiro" ? "#8b5cf6" : p === "grok" ? "#e2e8f0" : p === "openrouter" ? "#f59e0b" : "#64748b");
-    const pDisplayName = (p === "antigravity" || p === "agy" ? "Antigravity (Gemini & Claude)" : p === "dim" ? "dim" : p === "grok" ? "Grok (SuperGrok)" : g.name);
-
-    return `
-      <div class="mp-quota-card" data-provider="${escAttr(p)}">
-        <div class="mp-quota-head">
-          <div class="mp-quota-provider" style="color:${provCol};">
-            ${quotaProvIcon(primary.icon, provIcon)} <span>${escHtml(pDisplayName)}</span>
-          </div>
-          ${hasSec ? `
-            <button class="mp-expand-btn" data-target="mp-sec-${escAttr(p)}" type="button">
-              ${escHtml(t("mp_expand_accounts", { n: secondaries.length }))}
-            </button>
-          ` : ""}
-        </div>
-        <div class="mp-primary-account">
-          ${renderAccountRow(primary, p)}
-        </div>
-        ${hasSec ? `
-          <div class="mp-secondary-accounts" id="mp-sec-${escAttr(p)}" hidden>
-            ${secondaries.map(sec => renderAccountRow(sec, p, true)).join("")}
-          </div>
-        ` : ""}
-      </div>
-    `;
-  }).join("");
-
-  container.innerHTML = cardsHtml;
-}
 
 async function loadMagpieUsage(period = "today", force = false) {
   if (BOOT.static && BOOT.magpieUsage) {
+    if (BOOT.magpieUsagePeriods?.[period]) return BOOT.magpieUsagePeriods[period];
     if (period === "today") return BOOT.magpieUsage;
     return { ok: false, static: true, calls: 0, cost: 0, agents: [], models: [], series: [] };
   }
-  if (!force && magpieUsageCache[period]) {
+  if (!force && magpieUsageCache[period] && Date.now() / 1000 - magpieUsageCache[period].fetched_at < 15) {
     return magpieUsageCache[period];
   }
   try {
-    const r = await tlGet(`/api/magpie/usage?period=${encodeURIComponent(period)}`);
-    if (r) {
+    const r = await tlGet(`/api/magpie/usage?period=${encodeURIComponent(period)}${force ? "&refresh=1" : ""}`);
+    if (r?.ok && !r.stale) {
       magpieUsageCache[period] = r;
       return r;
     }
+    return magpieUsageCache[period] ? { ...magpieUsageCache[period], stale: true } : r;
   } catch (e) {
     console.warn("loadMagpieUsage error:", e);
   }
-  return magpieUsageCache[period] || { ok: false, calls: 0, cost: 0, agents: [], models: [], series: [] };
+  return magpieUsageCache[period] ? { ...magpieUsageCache[period], stale: true } : { ok: false };
 }
 
-function renderMagpieUsage(d) {
-  const el = $("agent-view-usage");
-  if (!el || !d) return;
-  curMagpieData = d;
-
-  const kpisEl = $("mp-kpis");
-  if (kpisEl) {
+function magpieKpisHtml(d) {
     const totalCalls = d.calls || 0;
     const estCost = fmtCost(d.cost);
     const totalTokens = (d.input || 0) + (d.output || 0) + (d.reasoning || 0) + (d.cache_read || 0);
@@ -5081,11 +4902,11 @@ function renderMagpieUsage(d) {
       ? fmtLatency(d.ttft_ms / d.timed)
       : "—";
 
-    kpisEl.innerHTML = `
+    return `
       <div class="agent-kpi-card mp-kpi-card">
         <div class="agent-kpi-val mp-kpi-val" style="color:var(--c-blue);">${totalCalls.toLocaleString()}</div>
         <div class="agent-kpi-lbl">${escHtml(t("mp_kpi_calls"))}</div>
-        <div class="mp-kpi-sub">${d.errors ? `<span style="color:var(--c-red);">${d.errors} ${escHtml(t("mp_errors"))}</span>` : `<span style="color:var(--c-green);">100% OK</span>`}</div>
+        <div class="mp-kpi-sub">${d.errors ? `<span style="color:var(--c-red);">${d.errors} ${escHtml(t("mp_errors"))}</span>` : `<span style="color:var(--c-green);">${totalCalls ? "100% OK" : "—"}</span>`}</div>
       </div>
       <div class="agent-kpi-card mp-kpi-card">
         <div class="agent-kpi-val mp-kpi-val" style="color:var(--c-green);">${estCost}</div>
@@ -5110,42 +4931,222 @@ function renderMagpieUsage(d) {
         <div class="mp-kpi-sub">${d.timed || 0} samples</div>
       </div>
     `;
+}
+
+function trendMax(v) {
+  if (!(v > 0)) return 1;
+  const base = 10 ** Math.floor(Math.log10(v));
+  const n = v / base;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * base;
+}
+
+let trendGeom = null;
+let trendIndex = -1;
+
+function trendAxisLabel(s, period) {
+  return period === "today" ? `${String(s.label).padStart(2, "0")}:00` : s.label;
+}
+
+function trendTipLabel(s, period) {
+  const date = new Date(s.time || Date.now());
+  if (period === "today")
+    return date.toLocaleString(LOCALE_TAG, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleDateString(LOCALE_TAG, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function renderUsageTrend(d) {
+  const el = $("mp-timeline-chart");
+  if (!el) return;
+  const series = d.series || [];
+  if (!series.length) {
+    trendGeom = null;
+    trendIndex = -1;
+    el.innerHTML = `<div class="gempty">${escHtml(t("mp_empty"))}</div>`;
+    return;
+  }
+  const W = Math.max(280, Math.round(el.clientWidth || 680));
+  const H = Math.min(220, Math.max(170, Math.round(W * 0.26)));
+  const L = 48, R = 14, T = 14, B = 26;
+  const iw = W - L - R, ih = H - T - B;
+  const costs = series.map(s => Math.max(0, Number(s.cost) || 0));
+  const max = trendMax(Math.max(...costs, 0.01));
+  const X = i => L + (series.length === 1 ? iw / 2 : i * iw / (series.length - 1));
+  const Y = v => T + ih - (v / max) * ih;
+  const money = v => v === 0 ? "$0" : v >= 10 ? `$${v.toFixed(0)}` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toFixed(3)}`;
+  const pts = costs.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const grid = [0, 0.5, 1].map(f => {
+    const y = T + ih - f * ih;
+    return `<line class="mp-trend-grid" x1="${L}" y1="${y}" x2="${W - R}" y2="${y}"></line>` +
+      `<text class="mp-trend-axis" x="${L - 8}" y="${y + 3.5}" text-anchor="end">${money(max * f)}</text>`;
+  }).join("");
+  const step = Math.max(1, Math.ceil(series.length / 7));
+  const xLabels = series.map((s, i) => i).filter(i => i % step === 0 || i === series.length - 1).map(i =>
+    `<text class="mp-trend-axis" x="${X(i)}" y="${H - 6}" text-anchor="middle">${escHtml(trendAxisLabel(series[i], d.period))}</text>`
+  ).join("");
+  const dots = series.map((s, i) =>
+    `<circle class="mp-trend-dot" cx="${X(i)}" cy="${Y(costs[i])}" r="2.4"></circle>`
+  ).join("");
+  el.innerHTML = `<svg class="mp-trend-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escAttr(t("mp_spend_trend"))}">
+    <defs>
+      <linearGradient id="mp-trend-area-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" style="stop-color:var(--ch-cpu);stop-opacity:.28"></stop>
+        <stop offset="100%" style="stop-color:var(--ch-cpu);stop-opacity:.02"></stop>
+      </linearGradient>
+    </defs>
+    ${grid}
+    <polygon class="mp-trend-area" points="${L},${T + ih} ${pts} ${W - R},${T + ih}" fill="url(#mp-trend-area-grad)"></polygon>
+    <polyline class="mp-trend-line" points="${pts}"></polyline>
+    <line id="mp-trend-guide" class="mp-trend-guide" x1="0" y1="${T}" x2="0" y2="${T + ih}" visibility="hidden"></line>
+    <circle id="mp-trend-focus" class="mp-trend-focus" cx="0" cy="0" r="4.2" visibility="hidden"></circle>
+    ${dots}${xLabels}
+  </svg>
+  <div id="mp-trend-tip" class="mp-trend-tip" role="status" aria-live="polite" hidden></div>`;
+  trendGeom = {
+    W, H, series, period: d.period, index: -1,
+    points: series.map((s, i) => ({ x: X(i), y: Y(costs[i]) }))
+  };
+  trendIndex = -1;
+}
+
+function trendShow(index) {
+  if (!trendGeom) return;
+  const n = trendGeom.series.length;
+  index = Math.max(0, Math.min(n - 1, index));
+  trendIndex = index;
+  const s = trendGeom.series[index];
+  const p = trendGeom.points[index];
+  const guide = $("mp-trend-guide");
+  const focus = $("mp-trend-focus");
+  if (guide) {
+    guide.setAttribute("x1", p.x);
+    guide.setAttribute("x2", p.x);
+    guide.setAttribute("visibility", "visible");
+  }
+  if (focus) {
+    focus.setAttribute("cx", p.x);
+    focus.setAttribute("cy", p.y);
+    focus.setAttribute("visibility", "visible");
+  }
+  const tip = $("mp-trend-tip");
+  if (!tip) return;
+  const tokens = (s.input || 0) + (s.output || 0) + (s.reasoning || 0) + (s.cache_read || 0);
+  const errors = Number(s.errors) || 0;
+  const cache = Number(s.cache_read) || 0;
+  tip.innerHTML = `<div class="mp-trend-tip-kicker">${escHtml(trendTipLabel(s, trendGeom.period))}</div>
+    <div class="mp-trend-tip-cost">${fmtCost(s.cost)}</div>
+    <div class="mp-trend-tip-rows">
+      <span>${escHtml(t("mp_tip_req"))}</span><b>${(s.calls || 0).toLocaleString()}</b>
+      <span>${escHtml(t("mp_tip_tok"))}</span><b>${fmtTokens(tokens)}</b>
+      <span>${escHtml(t("mp_tip_io"))}</span><b>${fmtTokens(s.input)} / ${fmtTokens(s.output)}</b>
+      ${cache ? `<span>${escHtml(t("mp_tip_cache"))}</span><b>${fmtTokens(cache)}</b>` : ""}
+      ${errors ? `<span class="bad">${escHtml(t("mp_errors"))}</span><b class="bad">${errors}</b>` : ""}
+    </div>`;
+  tip.hidden = false;
+  const tw = tip.offsetWidth || 180, th = tip.offsetHeight || 120;
+  let left = Math.max(tw / 2 + 6, Math.min(trendGeom.W - tw / 2 - 6, p.x));
+  let top, mode = "above";
+  if (p.y - th - 12 >= 0) {
+    top = p.y - 12;
+  } else if (p.y + th + 12 <= trendGeom.H) {
+    mode = "below";
+    top = p.y + 12;
+  } else {
+    mode = "side";
+    top = Math.max(6, Math.min(trendGeom.H - th - 6, p.y - th / 2));
+    const right = p.x + 14, leftSide = p.x - tw - 14;
+    left = right + tw <= trendGeom.W - 6 ? right : Math.max(6, leftSide);
+  }
+  tip.classList.toggle("below", mode === "below");
+  tip.classList.toggle("side", mode === "side");
+  tip.style.left = left + "px";
+  tip.style.top = top + "px";
+}
+
+function trendHide() {
+  trendIndex = -1;
+  const guide = $("mp-trend-guide"), focus = $("mp-trend-focus"), tip = $("mp-trend-tip");
+  if (guide) guide.setAttribute("visibility", "hidden");
+  if (focus) focus.setAttribute("visibility", "hidden");
+  if (tip) tip.hidden = true;
+}
+
+function trendIndexAt(clientX) {
+  if (!trendGeom) return -1;
+  const rect = $("mp-timeline-chart")?.getBoundingClientRect();
+  if (!rect || !rect.width) return -1;
+  const x = (clientX - rect.left) * (trendGeom.W / rect.width);
+  let best = 0, dist = Infinity;
+  trendGeom.points.forEach((p, i) => {
+    const d = Math.abs(p.x - x);
+    if (d < dist) { dist = d; best = i; }
+  });
+  return best;
+}
+
+
+function bindTrendInteraction() {
+  const el = $("mp-timeline-chart");
+  if (!el || el.dataset.trendBound) return;
+  el.dataset.trendBound = "1";
+  el.tabIndex = 0;
+  el.setAttribute("role", "group");
+  el.setAttribute("aria-label", t("mp_spend_trend"));
+  el.addEventListener("pointermove", (e) => {
+    if (!trendGeom || (e.pointerType === "touch" && !e.buttons)) return;
+    const i = trendIndexAt(e.clientX);
+    if (i >= 0 && i !== trendIndex) trendShow(i);
+  });
+  el.addEventListener("pointerdown", (e) => {
+    const i = trendIndexAt(e.clientX);
+    if (i >= 0) trendShow(i);
+  });
+  el.addEventListener("pointerleave", (e) => {
+    if (e.pointerType === "mouse") trendHide();
+  });
+  el.addEventListener("blur", trendHide);
+  el.addEventListener("keydown", (e) => {
+    if (!trendGeom) return;
+    const n = trendGeom.series.length;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const cur = trendIndex < 0 ? n - 1 : trendIndex;
+      trendShow(cur + (e.key === "ArrowRight" ? 1 : -1));
+    } else if (e.key === "Home") {
+      e.preventDefault(); trendShow(0);
+    } else if (e.key === "End") {
+      e.preventDefault(); trendShow(n - 1);
+    } else if (e.key === "Escape") {
+      trendHide();
+    }
+  });
+  el.addEventListener("focus", () => {
+    if (trendGeom && trendIndex < 0) trendShow(trendGeom.series.length - 1);
+  });
+}
+function renderMagpieUsage(d) {
+  const el = $("agent-view-usage");
+  if (!el || !d) return;
+  curMagpieData = d;
+  if (!d.ok) {
+    for (const id of ["mp-kpis", "mp-timeline-chart", "mp-agents-list", "mp-models-list", "mp-accounts-grid"]) {
+      const target = $(id);
+      if (target) target.innerHTML = `<div class="gempty">${escHtml(t("a_fail", { e: "Magpie" }))}</div>`;
+    }
+    const fresh = $("mp-fresh-time");
+    if (fresh) fresh.textContent = "—";
+    return;
   }
 
-  const quotaGrid = $("mp-quota-grid");
-  if (quotaGrid) {
-    renderMagpieQuotas(d.quotas || [], quotaGrid);
-  }
+  const kpisEl=$("mp-kpis");if(kpisEl)kpisEl.innerHTML=magpieKpisHtml(d);
+
 
   const trendTitle = $("mp-trend-title");
-  if (trendTitle) {
-    trendTitle.textContent = (d.period === "today") ? t("mp_trend_title") : t("mp_trend_title_days");
-  }
+  if (trendTitle) trendTitle.textContent = t("mp_spend_trend");
   const trendSub = $("mp-chart-summary");
   if (trendSub) {
     trendSub.textContent = `${(d.calls || 0).toLocaleString()} reqs · ${fmtCost(d.cost)}`;
   }
-  const chartEl = $("mp-timeline-chart");
-  if (chartEl) {
-    const series = d.series || [];
-    if (!series.length) {
-      chartEl.innerHTML = `<div class="gempty" style="width:100%;">${escHtml(t("mp_empty"))}</div>`;
-    } else {
-      const maxCalls = Math.max(1, ...series.map(s => s.calls || 0));
-      chartEl.innerHTML = series.map(s => {
-        const calls = s.calls || 0;
-        const pct = Math.max(calls > 0 ? 6 : 2, Math.round((calls / maxCalls) * 100));
-        const tip = `${s.label}: ${calls} calls · ${fmtCost(s.cost)} · ${fmtTokens((s.input||0) + (s.output||0))} tokens`;
-        const activeColor = calls > 0 ? "var(--ch-cpu)" : "rgba(128,128,128,.2)";
-        return `
-          <div class="mp-bar-col" title="${escHtml(tip)}">
-            <div class="mp-bar-fill" style="height:${pct}%;background:${activeColor};"></div>
-            <span class="mp-bar-label">${escHtml(s.label)}</span>
-          </div>
-        `;
-      }).join("");
-    }
-  }
+  renderUsageTrend(d);
 
   const agentsList = $("mp-agents-list");
   if (agentsList) {
@@ -5169,7 +5170,7 @@ function renderMagpieUsage(d) {
             <div class="mp-track">
               <div class="mp-track-fill" style="width:${pct}%;"></div>
             </div>
-            <div class="mp-item-header" style="font-size:11px;color:var(--text-dim);">
+            <div class="mp-item-header" style="font-size:var(--agent-font-meta);color:var(--text-dim);">
               <span>${fmtTokens(totalTokens)} tk (${fmtTokens(a.input)} in / ${fmtTokens(a.output)} out)</span>
               <span>${a.timed ? `TTFT ${fmtLatency(a.ttft_ms / a.timed)}` : ""} ${a.errors ? `· <span style="color:var(--c-red);">${a.errors} err</span>` : ""}</span>
             </div>
@@ -5202,7 +5203,7 @@ function renderMagpieUsage(d) {
             <div class="mp-track">
               <div class="mp-track-fill" style="width:${pct}%;background:var(--c-violet);"></div>
             </div>
-            <div class="mp-item-header" style="font-size:11px;color:var(--text-dim);">
+            <div class="mp-item-header" style="font-size:var(--agent-font-meta);color:var(--text-dim);">
               <span>${escHtml(m.sub || m.provider || "")}</span>
               <span>${fmtTokens(totalTokens)} tk · ${spd !== "—" ? spd : `TTFT ${fmtLatency(m.ttft_ms / (m.timed || 1))}`}</span>
             </div>
@@ -5241,22 +5242,25 @@ function renderMagpieUsage(d) {
   const freshEl = $("mp-fresh-time");
   if (freshEl && d.fetched_at) {
     const dateStr = new Date(d.fetched_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    freshEl.textContent = `Updated ${dateStr}`;
+    freshEl.textContent = `${d.stale ? "⚠ " : ""}Updated ${dateStr}`;
   }
 }
 
 async function refreshMagpieUsage(force = false) {
   const container = $("agent-view-usage");
   if (!container || container.hidden) return;
-  const d = await loadMagpieUsage(curMagpiePeriod, force);
-  renderMagpieUsage(d);
+  const kpis = $("mp-kpis");
+  if(kpis && !kpis.children.length) kpis.innerHTML=`<div class="gempty mp-loading">${escHtml(t("a_loading"))}</div>`;
+  const requestedPeriod = curMagpiePeriod;
+  const d = await loadMagpieUsage(requestedPeriod, force);
+  if(curMagpiePeriod === requestedPeriod) renderMagpieUsage(d);
 }
 
 async function loadMagpieRouting(force = false) {
   if (BOOT.static && BOOT.magpieRouting) return BOOT.magpieRouting;
-  if (!force && magpieRoutingCache) return magpieRoutingCache;
+  if (!force && magpieRoutingCache && Date.now()/1000 - magpieRoutingCache.fetched_at < 8) return magpieRoutingCache;
   try {
-    const r = await tlGet("/api/magpie/routing");
+    const r = await tlGet(`/api/magpie/routing${force ? "?refresh=1" : ""}`);
     if (r) { magpieRoutingCache = r; return r; }
   } catch (e) { console.warn("loadMagpieRouting error:", e); }
   return magpieRoutingCache || { ok: false, routes: [], totals: {} };
@@ -5264,38 +5268,8 @@ async function loadMagpieRouting(force = false) {
 
 
 let curRoutingPicked = null;
-let routingResizeObs = null;
 let routingReqTab = "all";
-let routingBySession = false;
 let routingMaskAccounts = false;
-let curRoutingAccountFilter = null;
-let curRoutingGroupFilter = null;
-let ctxActiveTab = "all";
-let ctxShowAll = false;
-let curRoutingGroupEdit = null;
-
-const ROUTE_OPTS = [["", "Smart"], ["order", "In order"], ["rotate", "In turn"], ["usage", "Least used"]];
-const AFF_OPTS = [["", "Auto"], ["session", "Session"], ["turn", "Within a turn"], ["off", "Off"]];
-const AFF_HINT = {
-  "": "A conversation stays with the account or key that answered it while what the vendor cached of it is worth keeping — within a turn always, across turns while it's fresh.",
-  session: "A conversation stays with the account or key that answered it for the whole session, while it can answer.",
-  turn: "A conversation stays put within a turn, while the agent sends tool results back; when you speak again, routing decides afresh.",
-  off: "Every request is routed afresh, whoever answered its conversation before.",
-};
-const GROUP_HINT = {
-  "": "Smart, over every member's accounts and keys together: of the subscriptions with quota to spare, the one whose allowance renews soonest goes first; one resting after a failure goes last.",
-  order: "In order: the first model until it can't answer, then the next — each over its own accounts or keys as its provider routes them.",
-  rotate: "In turn: each conversation's next turn goes to the next member's account or key, spreading the load.",
-  usage: "Least used first: the account or key with the most of its allowance left goes first.",
-};
-const EFFORT_OPTS = ["low", "medium", "high", "xhigh", "max"];
-
-function splitMemberId(id) {
-  id = id || "";
-  if (id.startsWith("group/")) return [id, ""];
-  const m = /^(.+):(none|minimal|low|medium|high|xhigh|max)$/i.exec(id);
-  return m ? [m[1], m[2].toLowerCase()] : [id, ""];
-}
 
 function ruleSummaryText(r) {
   const bits = [];
@@ -5316,108 +5290,6 @@ function getRoutingModesMap() {
   };
 }
 
-function showRoutingToolsModal(r) {
-  if (!r) return;
-  const parts = r.prompt?.parts || [];
-  const toolsPart = parts.find(p => p.kind === "tools");
-  const resultsPart = parts.find(p => p.kind === "results");
-  const declaredTools = toolsPart?.items || [];
-  const toolResults = resultsPart?.items || [];
-
-  const overlay = document.createElement("div");
-  overlay.className = "rt-modal-overlay";
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-
-  let toolsListHtml = "";
-  if (declaredTools.length) {
-    toolsListHtml = declaredTools.map(item => `
-      <div class="rt-tool-item">
-        <span class="ic">${renderProviderIcon("tools", "T")}</span>
-        <span class="t-name">${escHtml(item.name || "tool")}</span>
-        <span class="t-tokens">${fmtTokens(item.tokens || 0)} tokens</span>
-      </div>
-    `).join("");
-  } else {
-    toolsListHtml = `<div class="gempty" style="padding:16px;">${t("rt_tools_none")}</div>`;
-  }
-
-  let resultsListHtml = "";
-  if (toolResults.length) {
-    resultsListHtml = toolResults.map(item => `
-      <div class="rt-tool-item">
-        <span class="ic">${renderProviderIcon("tools", "T")}</span>
-        <span class="t-name">${escHtml(item.name || "tool")}</span>
-        <span style="font-size:11px;color:var(--accent);margin-left:auto;">${item.n ? t("rt_tools_calls_count", { n: item.n }) : ""}</span>
-        <span class="t-tokens">${fmtTokens(item.tokens || 0)} tokens</span>
-      </div>
-    `).join("");
-  }
-
-  overlay.innerHTML = `
-    <div class="rt-modal-card">
-      <div class="rt-modal-head">
-        <div>
-          <b>${t("rt_tools_title")}</b>
-          <span style="font-size:11px;color:var(--muted);margin-left:8px;">#${escHtml(String(r.seq || r.id || ""))} · ${escHtml(r.agent || "agent")}</span>
-        </div>
-        <button type="button" class="rt-modal-close-btn" aria-label="${t("rt_modal_close")}">✕</button>
-      </div>
-      <div class="rt-modal-body">
-        <div style="font-size:12px;color:var(--text-soft);">${t("rt_tools_desc")}</div>
-        <div>
-          <b style="font-size:12px;display:block;margin-bottom:6px;">${t("rt_tools_declared")} (${declaredTools.length})</b>
-          <div style="display:grid;gap:6px;">${toolsListHtml}</div>
-        </div>
-        ${toolResults.length ? `
-          <div style="margin-top:8px;">
-            <b style="font-size:12px;display:block;margin-bottom:6px;">${t("rt_tools_results")} (${toolResults.length})</b>
-            <div style="display:grid;gap:6px;">${resultsListHtml}</div>
-          </div>
-        ` : ""}
-      </div>
-    </div>
-  `;
-  overlay.querySelector(".rt-modal-close-btn").onclick = () => overlay.remove();
-  document.body.appendChild(overlay);
-}
-
-function showRoutingPolicyModal(curMode) {
-  const overlay = document.createElement("div");
-  overlay.className = "rt-modal-overlay";
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-
-  const policies = [
-    { id: "", key: "smart", title: t("rt_mode_smart"), desc: t("rt_mode_smart_desc") },
-    { id: "order", key: "order", title: t("rt_mode_order"), desc: t("rt_mode_order_desc") },
-    { id: "rotate", key: "rotate", title: t("rt_mode_rotate"), desc: t("rt_mode_rotate_desc") },
-    { id: "usage", key: "usage", title: t("rt_mode_usage"), desc: t("rt_mode_usage_desc") }
-  ];
-
-  overlay.innerHTML = `
-    <div class="rt-modal-card">
-      <div class="rt-modal-head">
-        <b>${t("rt_policy_title")}</b>
-        <button type="button" class="rt-modal-close-btn" aria-label="${t("rt_modal_close")}">✕</button>
-      </div>
-      <div class="rt-modal-body">
-        <div class="rt-policy-grid">
-          ${policies.map(p => {
-            const isActive = (p.id === curMode || (!curMode && p.key === "smart"));
-            return `
-              <div class="rt-policy-item ${isActive ? "active" : ""}">
-                <b>${isActive ? "✓ " : ""}${escHtml(p.title)}</b>
-                <p>${escHtml(p.desc)}</p>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      </div>
-    </div>
-  `;
-  overlay.querySelector(".rt-modal-close-btn").onclick = () => overlay.remove();
-  document.body.appendChild(overlay);
-}
-
 function setGlobalAccountsMask(masked) {
   routingMaskAccounts = masked;
   curAccountMasked = masked;
@@ -5434,26 +5306,6 @@ function setGlobalAccountsMask(masked) {
     const lbl = $("mp-mask-label");
     if (lbl) lbl.textContent = masked ? t("mp_show_accounts") : t("mp_mask_toggle");
   }
-  document.querySelectorAll(".mp-acc-email").forEach(el => {
-    el.classList.toggle("is-masked", masked);
-  });
-}
-
-const RTHUES = {
-  claude: "#d97757", codex: "#6366f1", gemini: "#0ea5e9", copilot: "#a855f7",
-  cursor: "#14b8a6", opencode: "#eab308", crush: "#ec4899", goose: "#84cc16",
-  pi: "#10b981", omp: "#f43f5e", dsh: "#06b6d4", commandcode: "#f97316",
-  mimocode: "#3b82f6", hermes: "#a855f7"
-};
-const RTSPARE = ["#8b5cf6", "#22c55e", "#e11d48", "#0891b2", "#ca8a04", "#db2777", "#2563eb", "#65a30d"];
-
-function rtHue(id) {
-  if (!id) return "#8b5cf6";
-  const k = String(id).toLowerCase();
-  if (RTHUES[k]) return RTHUES[k];
-  let h = 0;
-  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
-  return RTSPARE[h % RTSPARE.length];
 }
 
 function rtTook(ms) {
@@ -5461,30 +5313,6 @@ function rtTook(ms) {
   return ms < 1000 ? t("rt_ms", { n: Math.round(ms) }) : t("rt_sec", { n: (ms / 1000).toFixed(ms < 10000 ? 1 : 0) });
 }
 
-function rtDur(ms) {
-  const s = Math.max(1, Math.round(ms / 1000));
-  if (s < 60) return t("rt_sec", { n: s });
-  const m = Math.round(s / 60);
-  if (m < 60) return t("rt_min", { n: m });
-  const h = Math.floor(m / 60), mm = m % 60;
-  if (h < 10 && mm) return `${t("rt_hr", { n: h })} ${t("rt_min", { n: mm })}`;
-  if (h < 48) return t("rt_hr", { n: Math.round(m / 60) });
-  return t("rt_day", { n: Math.round(m / 1440) });
-}
-
-function rtClock(isoStr) {
-  if (!isoStr) return "";
-  const d = new Date(isoStr);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-}
-
-function rtTimeFull(isoStr) {
-  if (!isoStr) return "";
-  const d = new Date(isoStr);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
-}
 
 function layoutRoutingWires() {
   const stage = document.querySelector("#rt .rt-stage");
@@ -5536,7 +5364,7 @@ function layoutRoutingWires() {
     return `M${h.cx} ${h.b} L${h.cx} ${y} C${h.cx} ${y + 22} ${x} ${y + 2} ${x} ${y + 24} L${x} ${a.cy - 10} Q${x} ${a.cy} ${a.l} ${a.cy}`;
   };
 
-  const narrow = mqMobile.matches;
+  const narrow = false;
   const rowItems = list.querySelectorAll("li:not(.idle)");
   rowItems.forEach(row => {
     const wire = row.__wire;
@@ -5546,1321 +5374,131 @@ function layoutRoutingWires() {
   });
 }
 
-function renderGroupRowHtml(g, isCur) {
-  const modesMap = getRoutingModesMap();
-  const gid = g.id || g.name || "group";
-  const sep = g.routing === "order" ? " → " : " · ";
-  const membersStr = (g.members || []).map(m => escHtml(m)).join(sep);
-  const mLabel = modesMap[g.routing || ""]?.[0] || t("rt_mode_smart");
-  const affLabel = g.affinity ? (AFF_OPTS.find(x => x[0] === g.affinity)?.[1] || g.affinity) : "";
-  const rulesCount = (g.rules || []).length;
-  const rulesTitle = (g.rules || []).map((r, i) => `${i + 1}. ${ruleSummaryText(r)} → ${r.use || ''}`).join("\n");
-
-  return `
-    <div class="rt-group ${isCur ? 'active' : ''}" data-gid="${escAttr(gid)}">
-      <span class="ics" style="display:flex;gap:3px;align-items:center;">
-        <span class="ic" style="width:18px;height:18px;">${renderProviderIcon(g.members?.[0] || 'default', 'G')}</span>
-      </span>
-      <div class="main">
-        <div class="nm">
-          <b>${escHtml(g.name || gid)}</b>
-          <code class="mdl">group/${escHtml(gid)}</code>
-          ${g.auto ? `<small class="auto">found by magpie</small>` : ''}
-        </div>
-        <div class="mem">${membersStr}</div>
-      </div>
-      <span class="tags">
-        <span class="tag">${escHtml(mLabel)}</span>
-        ${affLabel ? `<span class="tag">${escHtml(affLabel)}</span>` : ''}
-        ${rulesCount ? `<span class="tag" title="${escAttr(rulesTitle)}">${rulesCount === 1 ? '1 rule' : rulesCount + ' rules'}</span>` : ''}
-      </span>
-      <button type="button" class="text btn-edit-group" data-gid="${escAttr(gid)}">${t("rt_edit")}</button>
-    </div>
-  `;
+// Routing topology is a read-only view of the selected request's actual seats.
+let routingGraphObserver = null;
+function renderMagpieGraph(route, data) {
+  const box=$('rt');if(!box || !route)return;
+  const group=route.group || (data.groups || []).find(g=>'group/'+g.id===route.model);
+  const mode=getRoutingModesMap()[group?.routing || ''] || getRoutingModesMap()[''];
+  const graph=document.createElement('section');graph.className='mp-routing-graph';
+  const order=route.order || [],tries=route.tries || [];
+  const seatKey=x=>(x.id || '')+'\u0000'+(x.model || '');
+  graph.innerHTML=`<div class="rt-top"><div class="rt-what"><b>${escHtml(group?.name || group?.id || route.provider || '—')}</b> · ${escHtml(t('rt_routing_group_label'))} · ${escHtml(t('rt_unit_enabled',{n:order.filter(w=>!w.fallback).length}))}</div><p class="rt-mode">${escHtml(mode[1])}</p></div><div class="mp-graph-scroll"><div class="rt-stage"><svg class="rt-wires" aria-hidden="true"></svg><div class="rt-srcs"><div class="rt-node rt-src"><span class="rt-ic">${renderProviderIcon(route.agent || 'generic')}</span><b>${escHtml(route.agent || '—')}</b><small>${escHtml(route.model || '—')}</small></div></div><div class="rt-node rt-hub"><svg viewBox="0 0 44 44" class="rt-bird" aria-hidden="true"><use href="#bird"></use></svg><b>magpie</b><small>${escHtml(t('rt_gateway'))}</small><span class="mp-policy-label">${escHtml(mode[0])}</span></div><ol class="rt-accts"></ol></div></div>`;
+  const stage=graph.querySelector('.rt-stage'),wires=stage.querySelector('.rt-wires');
+  const NS='http://www.w3.org/2000/svg';
+  function wire(node,on){const path=document.createElementNS(NS,'path');if(on){path.classList.add('live');path.style.setProperty('--agent','var(--c-blue)');}wires.appendChild(path);node.__wire=path;return path;}
+  wire(stage.querySelector('.rt-src'),true);
+  for(const seat of order){
+    const attempt=tries.find(tr=>seatKey(tr)===seatKey(seat)) || tries.find(tr=>tr.id && tr.id===seat.id);
+    const answered=attempt?.done && attempt.status>=200 && attempt.status<400;
+    const trying=attempt && !attempt.done;
+    const row=document.createElement('li');
+    row.classList.toggle('on',!!(answered || trying));row.classList.toggle('rest',!!seat.rest);
+    const remaining=typeof seat.used==='number'?Math.max(0,Math.min(100,100-seat.used)):null;
+    const label=trying?t('rt_answering'):answered?t('rt_answered'):seat.rest?t('rt_resting'):remaining!==null?t('rt_remain_pct',{n:Math.round(remaining)}):seat.kind==='key'?t('rt_one_key'):t('rt_ready');
+    row.innerHTML=`<i class="dot"></i><b><span class="ic">${renderProviderIcon(seat.icon || seat.provider || 'generic')}</span><span class="who pii">${escHtml(seat.who || seat.name || seat.provider || '—')}</span>${seat.plan?`<small>${escHtml(seat.plan)}</small>`:''}<code class="mdl">${escHtml(seat.model || '—')}</code>${seat.fallback?`<small class="fb">${escHtml(t('rt_fallback'))}</small>`:''}</b><em>${escHtml(label)}</em>${remaining!==null?`<div class="bar"><i style="width:${remaining}%"></i></div>`:''}`;
+    const path=wire(row,answered || trying);
+    row.addEventListener('mouseenter',()=>path.classList.add('lit'));
+    row.addEventListener('mouseleave',()=>path.classList.remove('lit'));
+    stage.querySelector('.rt-accts').appendChild(row);
+  }
+  if(!order.length)stage.querySelector('.rt-accts').innerHTML=`<li class="idle">${escHtml(t('mp_empty'))}</li>`;
+  box.querySelector('.mp-route-stats')?.before(graph);
+  routingGraphObserver?.disconnect();
+  if(window.ResizeObserver){routingGraphObserver=new ResizeObserver(()=>requestAnimationFrame(layoutRoutingWires));routingGraphObserver.observe(stage);}
+  requestAnimationFrame(layoutRoutingWires);
 }
 
-function renderGroupEditorHtml(g, d, models, deciders) {
-  const modesMap = getRoutingModesMap();
-  const isNew = !g;
-  const gid = g ? (g.id || g.name) : "";
-  const routing = d.routing || "";
-  const affinity = d.affinity || "";
-  const effort = d.effort || "";
-  const rules = d.rules || [];
-  const members = d.members || [];
-  const hasIntents = rules.some(r => (r.intent || "").trim().length > 0);
-  const showClassifier = effort === "auto" || hasIntents;
-
-  const rHint = GROUP_HINT[routing] || GROUP_HINT[""];
-  const aHint = AFF_HINT[affinity] || AFF_HINT[""];
-
-  return `
-    <div class="editor rt-gedit" data-gid="${escAttr(gid)}">
-      <div class="ehead">
-        <b>${isNew ? t("rt_new_group") : escHtml(g.name || gid)}</b>
-        ${g?.auto ? `<span class="note">found by magpie — saving a change makes it yours</span>` : ''}
-      </div>
-
-      <label>Name</label>
-      <div>
-        <input type="text" class="g-in-name" value="${escAttr(d.name || '')}" placeholder="e.g. Opus anywhere" style="width:100%;max-width:320px;">
-        <div class="hint">Agents pick it as <code>group/${escHtml(d.id || d.name || 'group')}</code></div>
-      </div>
-
-      ${!isNew ? `
-        <label>ID</label>
-        <div>
-          <input type="text" class="g-in-id" value="${escAttr(d.id || gid)}" style="width:100%;max-width:320px;">
-        </div>
-      ` : ''}
-
-      <label>Models</label>
-      <div>
-        <div class="fallback">
-          <div class="fbl" id="gedit-members-list">
-            ${members.map((mId, i) => {
-              const [baseMdl, fixedEffort] = splitMemberId(mId);
-              const mObj = models.find(x => x.id === baseMdl || x.id === mId) || { id: mId, providerName: "Provider" };
-              const fixedLabel = fixedEffort ? `${fixedEffort} reasoning` : t("rt_follow_group");
-              return `
-                <div class="fbrow" data-idx="${i}">
-                  <span class="i">${i + 1}</span>
-                  <span class="ic">${renderProviderIcon(mObj.icon || mId, mId[0])}</span>
-                  <span class="n">
-                    <b>${escHtml(mObj.name || mId)}</b>
-                    <small>${escHtml(mObj.providerName || "")}</small>
-                  </span>
-                  <button type="button" class="rt-cond rt-fixed btn-member-effort ${fixedEffort ? 'on' : ''}" data-idx="${i}" title="${fixedEffort ? 'Fixed reasoning' : 'Follow group'}">
-                    ${escHtml(fixedLabel)}
-                  </button>
-                  ${i > 0 ? `<button type="button" class="text btn-member-up" data-idx="${i}">Up</button>` : ''}
-                  <button type="button" class="text btn-member-rm" data-idx="${i}">${t("rt_remove")}</button>
-                </div>
-              `;
-            }).join("")}
-          </div>
-          <button type="button" class="rt-gadd btn-add-member" style="margin-top:8px;">
-            <span>＋ ${t(members.length ? "rt_add_another_model" : "rt_add_model")}</span>
-          </button>
-        </div>
-        <div class="hint">The first answers for what the model can do. In order, they are tried top first.</div>
-      </div>
-
-      <label>${t("rt_routing_lbl")}</label>
-      <div>
-        <div class="segs gedit-routing-segs">
-          ${ROUTE_OPTS.map(([k, lbl]) => `
-            <span class="opt ${routing === k ? 'on' : ''}" data-val="${k}">${escHtml(t(modesMap[k]?.[0] || lbl))}</span>
-          `).join("")}
-        </div>
-        <div class="hint" id="gedit-routing-hint">${escHtml(rHint)}</div>
-      </div>
-
-      <label>${t("rt_stays_lbl")}</label>
-      <div>
-        <div class="segs gedit-stays-segs">
-          ${AFF_OPTS.map(([k, lbl]) => `
-            <span class="opt ${affinity === k ? 'on' : ''}" data-val="${k}">${escHtml(lbl)}</span>
-          `).join("")}
-        </div>
-        <div class="hint" id="gedit-stays-hint">${escHtml(aHint)}</div>
-      </div>
-
-      <label>${t("rt_rules_lbl")}</label>
-      <div>
-        <div class="fallback rt-rules">
-          <div class="fbl" id="gedit-rules-list">
-            ${rules.map((r, i) => {
-              const tokensVal = r.tokens || "";
-              const hasImg = !!r.images;
-              const effortVal = r.effort || "";
-              const agentVal = (r.agents && r.agents.length) ? r.agents.join(", ") : "any agent";
-              const intentVal = r.intent || "";
-              const targetMdl = r.use || members[0] || "";
-
-              return `
-                <div class="rt-rule" data-idx="${i}">
-                  <span class="i">${i + 1}</span>
-                  <div class="when" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
-                    <span class="w" style="color:var(--muted);font-size:12px;">When</span>
-                    <span class="rt-cond tk ${tokensVal ? 'on' : ''}">
-                      <span>≥</span>
-                      <input type="number" class="rule-in-tokens" data-idx="${i}" value="${escAttr(String(tokensVal))}" style="width:70px;background:none;border:none;color:inherit;outline:none;" placeholder="tokens">
-                      <span>tokens</span>
-                    </span>
-                    <button type="button" class="rt-cond btn-rule-img ${hasImg ? 'on' : ''}" data-idx="${i}">has an image</button>
-                    <button type="button" class="rt-cond btn-rule-effort ${effortVal ? 'on' : ''}" data-idx="${i}">
-                      ${effortVal ? `reasoning ≥ ${effortVal}` : 'any reasoning'}
-                    </button>
-                    <button type="button" class="rt-cond btn-rule-agent ${r.agents?.length ? 'on' : ''}" data-idx="${i}">
-                      ${escHtml(agentVal)}
-                    </button>
-                    <span class="rt-cond in ${intentVal ? 'on' : ''}">
-                      <span>asks for</span>
-                      <input type="text" class="rule-in-intent" data-idx="${i}" value="${escAttr(intentVal)}" placeholder="e.g. writing tests" style="width:140px;background:none;border:none;color:inherit;outline:none;">
-                    </span>
-                  </div>
-                  <div class="rt-use" style="display:flex;align-items:center;gap:6px;margin-top:4px;">
-                    <span class="w" style="color:var(--muted);font-size:12px;">send to</span>
-                    <button type="button" class="rt-cond on btn-rule-use" data-idx="${i}">
-                      <span>${escHtml(targetMdl)}</span>
-                    </button>
-                  </div>
-                  <span class="ctl" style="display:flex;gap:4px;align-items:center;">
-                    ${i > 0 ? `<button type="button" class="text btn-rule-up" data-idx="${i}">Up</button>` : ''}
-                    <button type="button" class="text btn-rule-rm" data-idx="${i}">${t("rt_remove")}</button>
-                  </span>
-                </div>
-              `;
-            }).join("")}
-          </div>
-          <button type="button" class="rt-gadd btn-add-rule" style="margin-top:8px;">
-            <span>＋ ${t("rt_add_rule")}</span>
-          </button>
-        </div>
-        <div class="hint">Checked top first when you send a message: the first that matches sends that turn to its model first.</div>
-      </div>
-
-      <label>${t("rt_effort_lbl")}</label>
-      <div>
-        <div class="segs gedit-effort-segs">
-          <span class="opt ${!effort ? 'on' : ''}" data-val="">Agent's</span>
-          <span class="opt ${effort === 'auto' ? 'on' : ''}" data-val="auto">Picked per turn</span>
-        </div>
-        <div class="hint">${effort === 'auto' ? "As a turn begins, the classifier rates how hard it is..." : "Each request reasons as much as the agent asked."}</div>
-      </div>
-
-      ${showClassifier ? `
-        <label>${t("rt_classifier_lbl")}</label>
-        <div>
-          <button type="button" class="rt-cond on btn-pick-classifier">
-            <span>${escHtml(d.classifier || deciders[0]?.id || "opencode-zen/jev-1.13-free")}</span>
-          </button>
-          <div class="hint">As a turn begins, this model is asked which intent matches.</div>
-        </div>
-      ` : ''}
-
-      <div class="bar">
-        ${!isNew ? `<button type="button" class="text danger btn-del-group">${t("rt_remove")}</button>` : ''}
-        <span class="grow"></span>
-        <button type="button" class="text btn-cancel-group">${t("rt_cancel")}</button>
-        <button type="button" class="text primary btn-save-group">${t("rt_save")}</button>
-      </div>
-    </div>
-  `;
+// Read-only Magpie snapshots. No configuration is mutated in the browser.
+function mpRouteStatus(route) {
+  if (!route.done) return t('rt_answering');
+  return route.status ? `HTTP ${route.status}` : '—';
 }
-
-function bindGroupEvents(container, gItems, availableModels, availableDeciders) {
-  container.querySelectorAll(".rt-group").forEach(el => {
-    el.onclick = (e) => {
-      if (e.target.closest("button")) return;
-      const gid = el.dataset.gid;
-      if (curRoutingGroupEdit && curRoutingGroupEdit.id === gid) {
-        curRoutingGroupEdit = null;
-      } else {
-        const targetG = gItems.find(x => (x.id || x.name) === gid) || { id: gid, name: gid, members: [], rules: [] };
-        curRoutingGroupEdit = { id: gid, draft: JSON.parse(JSON.stringify(targetG)) };
-      }
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  });
-
-  container.querySelectorAll(".btn-edit-group").forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const gid = btn.dataset.gid;
-      if (curRoutingGroupEdit && curRoutingGroupEdit.id === gid) {
-        curRoutingGroupEdit = null;
-      } else {
-        const targetG = gItems.find(x => (x.id || x.name) === gid) || { id: gid, name: gid, members: [], rules: [] };
-        curRoutingGroupEdit = { id: gid, draft: JSON.parse(JSON.stringify(targetG)) };
-      }
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  });
-
-  const ed = container.querySelector(".rt-gedit");
-  if (!ed || !curRoutingGroupEdit) return;
-  const d = curRoutingGroupEdit.draft;
-
-  const inName = ed.querySelector(".g-in-name");
-  if (inName) { inName.oninput = () => { d.name = inName.value; }; }
-  const inId = ed.querySelector(".g-in-id");
-  if (inId) { inId.oninput = () => { d.id = inId.value; }; }
-
-  ed.querySelectorAll(".btn-member-effort").forEach(btn => {
-    btn.onclick = () => {
-      const idx = parseInt(btn.dataset.idx, 10);
-      const mId = d.members[idx];
-      if (!mId) return;
-      const [baseMdl, curEff] = splitMemberId(mId);
-      const effCycle = ["", "low", "medium", "high", "max"];
-      const nextEff = effCycle[(effCycle.indexOf(curEff) + 1) % effCycle.length];
-      d.members[idx] = nextEff ? `${baseMdl}:${nextEff}` : baseMdl;
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  });
-
-  ed.querySelectorAll(".btn-member-up").forEach(btn => {
-    btn.onclick = () => {
-      const idx = parseInt(btn.dataset.idx, 10);
-      if (idx > 0) {
-        const tmp = d.members[idx];
-        d.members[idx] = d.members[idx - 1];
-        d.members[idx - 1] = tmp;
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  });
-
-  ed.querySelectorAll(".btn-member-rm").forEach(btn => {
-    btn.onclick = () => {
-      const idx = parseInt(btn.dataset.idx, 10);
-      d.members.splice(idx, 1);
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  });
-
-  const btnAddMember = ed.querySelector(".btn-add-member");
-  if (btnAddMember) {
-    btnAddMember.onclick = () => {
-      const candidate = availableModels.find(m => !d.members.some(x => x.startsWith(m.id))) || availableModels[0];
-      if (candidate) {
-        d.members.push(candidate.id);
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  }
-
-  ed.querySelectorAll(".gedit-routing-segs .opt").forEach(opt => {
-    opt.onclick = () => {
-      d.routing = opt.dataset.val;
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  });
-
-  ed.querySelectorAll(".gedit-stays-segs .opt").forEach(opt => {
-    opt.onclick = () => {
-      d.affinity = opt.dataset.val;
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  });
-
-  ed.querySelectorAll(".rule-in-tokens").forEach(inp => {
-    inp.oninput = () => {
-      const idx = parseInt(inp.dataset.idx, 10);
-      if (d.rules[idx]) {
-        d.rules[idx].tokens = parseInt(inp.value, 10) || 0;
-        inp.closest(".rt-cond")?.classList.toggle("on", !!d.rules[idx].tokens);
-      }
-    };
-  });
-
-  ed.querySelectorAll(".btn-rule-img").forEach(btn => {
-    btn.onclick = () => {
-      const idx = parseInt(btn.dataset.idx, 10);
-      if (d.rules[idx]) {
-        d.rules[idx].images = !d.rules[idx].images;
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  });
-
-  ed.querySelectorAll(".btn-rule-effort").forEach(btn => {
-    btn.onclick = () => {
-      const idx = parseInt(btn.dataset.idx, 10);
-      if (d.rules[idx]) {
-        const cycle = ["", "on", "low", "medium", "high", "max"];
-        const cur = d.rules[idx].effort || "";
-        d.rules[idx].effort = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  });
-
-  ed.querySelectorAll(".rule-in-intent").forEach(inp => {
-    inp.oninput = () => {
-      const idx = parseInt(inp.dataset.idx, 10);
-      if (d.rules[idx]) {
-        d.rules[idx].intent = inp.value;
-        inp.closest(".rt-cond")?.classList.toggle("on", !!inp.value.trim());
-      }
-    };
-  });
-
-  ed.querySelectorAll(".btn-rule-use").forEach(btn => {
-    btn.onclick = () => {
-      const idx = parseInt(btn.dataset.idx, 10);
-      if (d.rules[idx] && d.members.length) {
-        const curUse = d.rules[idx].use || d.members[0];
-        const nextIdx = (d.members.indexOf(curUse) + 1) % d.members.length;
-        d.rules[idx].use = d.members[nextIdx];
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  });
-
-  ed.querySelectorAll(".btn-rule-up").forEach(btn => {
-    btn.onclick = () => {
-      const idx = parseInt(btn.dataset.idx, 10);
-      if (idx > 0 && d.rules[idx]) {
-        const tmp = d.rules[idx];
-        d.rules[idx] = d.rules[idx - 1];
-        d.rules[idx - 1] = tmp;
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  });
-
-  ed.querySelectorAll(".btn-rule-rm").forEach(btn => {
-    btn.onclick = () => {
-      const idx = parseInt(btn.dataset.idx, 10);
-      if (d.rules[idx]) {
-        d.rules.splice(idx, 1);
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  });
-
-  const btnAddRule = ed.querySelector(".btn-add-rule");
-  if (btnAddRule) {
-    btnAddRule.onclick = () => {
-      d.rules.push({ use: d.members[d.members.length - 1] || d.members[0] || "", tokens: 0, images: false, effort: "", agents: [], intent: "" });
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  }
-
-  ed.querySelectorAll(".gedit-effort-segs .opt").forEach(opt => {
-    opt.onclick = () => {
-      d.effort = opt.dataset.val;
-      if (d.effort === "auto" && !d.classifier && availableDeciders.length) {
-        d.classifier = availableDeciders[0].id;
-      }
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  });
-
-  const btnPickClassifier = ed.querySelector(".btn-pick-classifier");
-  if (btnPickClassifier) {
-    btnPickClassifier.onclick = () => {
-      const cycle = availableDeciders.map(x => x.id);
-      if (cycle.length) {
-        const next = cycle[(cycle.indexOf(d.classifier) + 1) % cycle.length];
-        d.classifier = next;
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  }
-
-  const btnCancel = ed.querySelector(".btn-cancel-group");
-  if (btnCancel) {
-    btnCancel.onclick = () => {
-      curRoutingGroupEdit = null;
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  }
-
-  const btnDel = ed.querySelector(".btn-del-group");
-  if (btnDel) {
-    btnDel.onclick = () => {
-      if (BOOT.static) {
-        toast(t("rt_static_readonly_hint"));
-        curRoutingGroupEdit = null;
-        renderMagpieRouting(curMagpieRoutingData);
-        return;
-      }
-      const idx = gItems.findIndex(x => (x.id || x.name) === curRoutingGroupEdit.id);
-      if (idx >= 0) gItems.splice(idx, 1);
-      curRoutingGroupEdit = null;
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  }
-
-  const btnSave = ed.querySelector(".btn-save-group");
-  if (btnSave) {
-    btnSave.onclick = () => {
-      if (BOOT.static) {
-        toast(t("rt_static_readonly_hint"));
-        curRoutingGroupEdit = null;
-        renderMagpieRouting(curMagpieRoutingData);
-        return;
-      }
-      const gid = curRoutingGroupEdit.id;
-      if (!gid) {
-        gItems.unshift({ ...d, id: d.id || d.name || "new-group" });
-      } else {
-        const item = gItems.find(x => (x.id || x.name) === gid);
-        if (item) Object.assign(item, d);
-      }
-      toast(t("rt_save") + " ✓");
-      curRoutingGroupEdit = null;
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  }
+function mpValue(value, format = String) {
+  return value === undefined || value === null ? '—' : format(value);
 }
-
+function mpGroupSnapshot(group) {
+  const mode=getRoutingModesMap()[group.routing || '']?.[0] || group.routing || '—';
+  return `<details class="mp-config-item"><summary><b>${escHtml(group.name || group.id)}</b><span>${(group.members || []).length} ${escHtml(t('mp_models_label'))}</span></summary>
+    <div class="mp-config-body"><code>group/${escHtml(group.id || group.name)}</code><p>${escHtml(t('rt_routing_lbl'))}: ${escHtml(mode)}${group.affinity?' · '+escHtml(group.affinity):''}</p>
+    <ul>${(group.members || []).map(m=>`<li><code>${escHtml(m)}</code></li>`).join('')}</ul>
+    ${(group.rules || []).length?`<h4>${escHtml(t('rt_rules_lbl'))}</h4><ul>${group.rules.map(r=>`<li>${escHtml(ruleSummaryText(r))} → <code>${escHtml(r.use || '—')}</code></li>`).join('')}</ul>`:''}</div></details>`;
+}
 function renderMagpieRouting(data) {
-  const el = $("agent-view-routing");
-  if (!el || !data) return;
-  curMagpieRoutingData = data;
+  const box=$('rt'),more=$('rtMore');if(!box || !data)return;
+  curMagpieRoutingData=data;
+  const mask=$('rtMask');
+  if(mask && !mask.dataset.bound){mask.dataset.bound='1';mask.onclick=()=>setGlobalAccountsMask(!routingMaskAccounts);}
+  const routes=(data.routes || []).slice().sort((a,b)=>(Number(b.seq)||0)-(Number(a.seq)||0)), totals=data.totals || {};
+  const failed=r=>r.done && Number(r.status)>=400;
+  const visible=routes.filter(r=>routingReqTab!=='errors' || failed(r));
+  const picked=visible.find(r=>curRoutingPicked && r.seq===curRoutingPicked.seq && r.id===curRoutingPicked.id) || visible[0];
+  const stats=[['rt_stat_requests',totals.requests],['rt_stat_rerouted',totals.rerouted],['rt_stat_errors',totals.errors]];
+  const listScroll=box.querySelector('.mp-route-rows')?.scrollTop || 0;
+  box.innerHTML=`<div class="mp-observer-note"><span>${escHtml(t('mp_readonly'))}</span><span>${data.stale?'⚠ '+escHtml(t('pr_stale'))+' · ':''}${data.fetched_at?escHtml(new Date(data.fetched_at*1000).toLocaleTimeString(LOCALE_TAG)):''}</span></div>
+    <div class="mp-route-stats">${stats.map(([key,value])=>`<div class="mp-stat"><strong>${mpValue(value,n=>Number(n).toLocaleString(LOCALE_TAG))}</strong><span>${escHtml(t(key))}</span></div>`).join('')}</div>
+    ${!data.ok?`<div class="gempty">${escHtml(t('a_fail',{e:'Magpie'}))}</div>`:`<div class="mp-route-columns"><section class="mp-route-list"><div class="mp-section-title"><h3>${escHtml(t('mp_recent_requests'))}</h3><div class="filters"><button type="button" class="chip ${routingReqTab==='all'?'active':''}" data-mp-filter="all">${escHtml(t('pr_all'))}</button><button type="button" class="chip ${routingReqTab==='errors'?'active':''}" data-mp-filter="errors">${escHtml(t('mp_errors'))}</button></div></div>
+    <div class="mp-route-rows">${visible.length?visible.map((r,index)=>`<button type="button" class="mp-request-row ${r===picked?'active':''}" aria-pressed="${r===picked}" data-mp-route="${index}"><span class="mp-request-meta"><span>#${escHtml(r.seq ?? '—')} · ${escHtml(r.agent || '—')}</span><time>${escHtml(r.time?new Date(r.time).toLocaleTimeString(LOCALE_TAG):'—')}</time></span><b>${escHtml(r.served || r.model || '—')}</b><span class="mp-request-meta"><span>${escHtml(r.provider || '—')}</span><span class="${failed(r)?'t-red':''}">${escHtml(mpRouteStatus(r))}</span></span></button>`).join(''):`<div class="gempty">${escHtml(t('mp_empty'))}</div>`}</div></section>
+    <section class="mp-route-detail">${picked?mpRouteDetail(picked):`<div class="gempty">${escHtml(t('mp_empty'))}</div>`}</section></div>`}`;
+  box.querySelectorAll('[data-mp-filter]').forEach(b=>b.addEventListener('click',()=>{routingReqTab=b.dataset.mpFilter;curRoutingPicked=null;renderMagpieRouting(curMagpieRoutingData);}));
+  if(data.ok && picked) renderMagpieGraph(picked,data);
+  const requestList=box.querySelector('.mp-route-rows');if(requestList)requestList.scrollTop=listScroll;
+  box.querySelectorAll('[data-mp-route]').forEach(b=>b.addEventListener('click',()=>{curRoutingPicked=visible[Number(b.dataset.mpRoute)];renderMagpieRouting(curMagpieRoutingData);if(isMobile())requestAnimationFrame(()=>{applyPagesX(false);const main=document.querySelector('main'),detail=box.querySelector('.mp-route-detail');if(main && detail)main.scrollTop+=detail.getBoundingClientRect().top-main.getBoundingClientRect().top-12;});}));
+  if(more){more.innerHTML=`<div class="mp-config-grid"><section><h3>${escHtml(t('rt_groups_title'))}</h3>${(data.groups || []).map(mpGroupSnapshot).join('') || `<div class="gempty">${escHtml(t('mp_empty'))}</div>`}</section><section><h3>${escHtml(t('rt_pools_title'))}</h3>${(data.pools || []).map(p=>`<details class="mp-config-item"><summary><b>${escHtml(p.name || p.provider)}</b><span>${(p.who || []).length} ${escHtml(t('mp_accounts_label'))}</span></summary><div class="mp-config-body"><p>${escHtml(t('rt_routing_lbl'))}: ${escHtml(getRoutingModesMap()[p.routing || '']?.[0] || p.routing || '—')}</p><p>${escHtml(t('rt_stays_lbl'))}: ${escHtml(p.affinity || '—')}</p><ul>${(p.who || []).map(w=>`<li class="pii">${escHtml(w)}</li>`).join('')}</ul></div></details>`).join('') || `<div class="gempty">${escHtml(t('mp_empty'))}</div>`}</section></div>`;}
+}
+function mpRouteDetail(route) {
+  const input=typeof route.tokens==='object' ? route.tokens?.input : route.tokens;
+  const output=route.out;
+  const metrics=[['mp_duration',route.ms,v=>rtTook(v)],['mp_first_token',route.ttft,v=>rtTook(v)],['mp_input',input,fmtTokens],['mp_output',output,fmtTokens],['mp_reasoning',route.reasoning,fmtTokens],['mp_cost',route.priced?route.cost:null,fmtCost]];
+  const tries=route.tries || [], prompt=route.prompt || {};
+  return `<header class="mp-request-head"><div class="mp-request-meta"><b>#${escHtml(route.seq ?? '—')} · ${escHtml(route.agent || '—')}</b><span>${escHtml(mpRouteStatus(route))}</span></div><h3>${escHtml(route.served || route.model || '—')}</h3><p>${escHtml(route.provider || '—')} · ${escHtml(route.time?new Date(route.time).toLocaleString(LOCALE_TAG):'—')}</p></header>
+    <dl class="mp-metrics">${metrics.map(([key,value,format])=>`<div><dt>${escHtml(t(key))}</dt><dd>${escHtml(mpValue(value,format))}</dd></div>`).join('')}</dl>
+    <details class="mp-detail-section" open><summary>${escHtml(t('mp_attempts'))} (${tries.length})</summary><ol class="mp-attempts">${tries.map(tr=>{const seat=(route.order || []).find(w=>w.id===tr.id && w.model===tr.model) || (route.order || []).find(w=>w.id===tr.id) || {};return `<li><div><b>${escHtml(tr.served || tr.model || '—')}</b><span>${escHtml(mpRouteStatus(tr))} · ${escHtml(mpValue(tr.ms,rtTook))}</span></div><small class="pii">${escHtml(seat.who || tr.id || '—')}</small>${tr.error?`<p class="t-red">${escHtml(tr.error)}</p>`:''}</li>`;}).join('') || `<li>${escHtml(t('mp_empty'))}</li>`}</ol></details>
+    ${prompt.parts?.length?`<details class="mp-detail-section"><summary>${escHtml(t('rt_ctx_content'))} · ${mpValue(prompt.tokens,fmtTokens)} tokens</summary><div class="mp-context-parts">${prompt.parts.map(part=>`<details><summary>${escHtml(T['rt_tab_'+({system:'sys'}[part.kind] || part.kind)] || part.kind)} · ${mpValue(part.tokens,fmtTokens)}</summary><ul>${(part.items || []).map(item=>`<li><span>${escHtml(item.name || item.kind || '—')}</span><span>${mpValue(item.tokens,fmtTokens)}</span></li>`).join('')}</ul></details>`).join('')}</div></details>`:''}
+    ${(route.order || []).length?`<details class="mp-detail-section"><summary>${escHtml(t('mp_candidate_accounts'))} (${route.order.length})</summary><ul class="mp-context-parts">${route.order.map(w=>`<li><span class="pii">${escHtml(w.who || w.id || '—')}</span><code>${escHtml(w.model || '—')}</code></li>`).join('')}</ul></details>`:''}`;
+}
 
-  const box = $("rt");
-  const more = $("rtMore");
-  const maskBtn = $("rtMask");
-  if (!box) return;
-
-  if (maskBtn && !maskBtn.dataset.bound) {
-    maskBtn.dataset.bound = "1";
-    maskBtn.setAttribute("aria-pressed", String(routingMaskAccounts));
-    maskBtn.onclick = () => {
-      setGlobalAccountsMask(!routingMaskAccounts);
-    };
-  }
-
-  const routes = data.routes || [];
-  const totals = data.totals || {};
-  const groups = data.groups || [];
-
-  if (!routes.length) {
-    box.innerHTML = `<div class="gempty" style="padding:48px 16px;">${escHtml(t("mp_empty"))}</div>`;
-    if (more) more.innerHTML = "";
+function nativeMagpieTheme() { return document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'); }
+function nativeMagpiePost(view,message) { view.magpieControl?.(message); }
+function staticMagpieEmpty() {
+  return {zh:"此快照没有 Magpie 数据，请稍后查看更新。",en:"No Magpie data was captured in this snapshot. Check again after an update.",ja:"このスナップショットには Magpie のデータがありません。更新後に再確認してください。"}[LANG] || t('mp_empty');
+}
+function ensureNativeMagpie(view,refresh=false) {
+  const host=$(view==='routing'?'agent-view-routing':'agent-view-magpie-usage');if(!host)return;
+  if (BOOT.static && !(view==='routing'?BOOT.magpieNativeHasRouting:BOOT.magpieNativeHasUsage)) {
+    if (view==='usage') {
+      const data=BOOT.magpieUsagePeriods?.all?.ok?BOOT.magpieUsagePeriods.all:BOOT.magpieUsage;
+      if (data?.ok && (data.calls || data.agents?.length || data.models?.length)) {
+        const ranking=(rows,label)=>`<section class="mp-column-card"><h4>${escHtml(t(label))}</h4><div class="mp-list">${(rows||[]).slice(0,12).map(row=>`<div class="mp-item"><span>${escHtml(row.name||row.model||row.id||'—')}</span><b>${Number(row.calls||0).toLocaleString()}</b></div>`).join('')}</div></section>`;
+        host.innerHTML=`<div class="agent-kpi-grid mp-kpis">${magpieKpisHtml(data)}</div><div class="mp-grid-columns">${ranking(data.agents,'mp_agent_ranking')}${ranking(data.models,'mp_model_ranking')}</div>`;
+        return;
+      }
+    }
+    host.innerHTML=`<div class="gempty">${escHtml(staticMagpieEmpty())}</div>`;
     return;
   }
-
-  const curRoute = curRoutingPicked || routes[0];
-  const group = (curRoutingGroupFilter && (data.groups || []).find(g => g.name === curRoutingGroupFilter)) || curRoute.group || { id: "default", name: "default", routing: "" };
-  const routingMode = group.routing || "";
-  const modesMap = getRoutingModesMap();
-  const modeInfo = modesMap[routingMode] || modesMap[""];
-
-  // Agents active on stage
-  const recentAgents = [];
-  const seenAgs = new Set();
-  const activeRoutes = routes.slice(0, 10);
-  for (const r of activeRoutes) {
-    const ag = r.agent || "pi";
-    if (!seenAgs.has(ag)) {
-      seenAgs.add(ag);
-      recentAgents.push({ id: ag, name: ag, model: r.model || "group/default" });
-      if (recentAgents.length >= 3) break;
-    }
-  }
-  if (!recentAgents.length) recentAgents.push({ id: "pi", name: "Pi", model: curRoute.model || "group/default" });
-
-  box.innerHTML = "";
-
-  const totalMs = curRoute.ms || 0;
-  const ttftMs = curRoute.ttft || 0;
-  const outTokens = curRoute.out || (curRoute.tokens?.output || 0) || 1200;
-  const inTokens = curRoute.tokens?.input || curRoute.tokens || 0;
-  const speed = (ttftMs && totalMs > ttftMs) ? Math.round(outTokens / ((totalMs - ttftMs) / 1000)) : 311;
-  const targetProv = curRoute.provider || "DeepSeek";
-  const targetMdl = curRoute.served || curRoute.model || "deepseek-flash";
-  const winnerWho = curRoute.who || curRoute.id || curRoute.provider || "account";
-
-  // 移动端专用清晰流水线卡片 (PC 宽屏保持原有 3 列连线并在 CSS 中隐藏此卡)
-  const pipelineEl = document.createElement("div");
-  pipelineEl.className = "rt-pipeline-m";
-
-  const isAnswering = (curRoute.tries || []).some(tr => !tr.done);
-  const statusBadge = isAnswering ? `🟢 ${t("rt_answering")}` : `🟢 200 OK (${rtTook(totalMs)})`;
-
-  const recentChipsHtml = routes.slice(0, 8).map((r, i) => {
-    const isPick = curRoute.id === r.id;
-    const ag = r.agent || "pi";
-    const prov = r.provider || "API";
-    const timeStr = rtClock(r.time) || "";
-    return `
-      <button type="button" class="rt-m-req-chip ${isPick ? 'active' : ''}" data-idx="${i}">
-        <span class="dot ${isPick ? 'live' : ''}"></span>
-        <b>${escHtml(ag)}</b>
-        <span style="opacity:0.4;">›</span>
-        <em>${escHtml(prov)}</em>
-        <small>${escHtml(timeStr)}</small>
-      </button>
-    `;
-  }).join("");
-
-  pipelineEl.innerHTML = `
-    <div class="rt-m-reqs-bar">
-      <span class="rt-m-reqs-label">${t("rt_recent_tasks")}</span>
-      <div class="rt-m-reqs-scroll">${recentChipsHtml}</div>
-    </div>
-    <div class="rt-m-pipeline-card">
-      <div class="rt-m-pipeline-title">
-        <span><b>#${escHtml(String(curRoute.seq || curRoute.id || ""))}</b> · ${rtClock(curRoute.time) || ""}</span>
-        <span>group/${escHtml(group.name || "default")}</span>
-      </div>
-      <div class="rt-m-flow">
-        <!-- 任务发起 -->
-        <div class="rt-m-node rt-m-src">
-          <span class="rt-m-node-tag">${t("rt_task_source")}</span>
-          <span class="rt-ic"><span class="ic">${renderProviderIcon(curRoute.agent || "pi", (curRoute.agent || "P")[0])}</span></span>
-          <b>${escHtml(curRoute.agent || "pi")}</b>
-          <code class="mdl">${escHtml(curRoute.model || "default")}</code>
-        </div>
-        <!-- 箭头 -->
-        <div class="rt-m-arrow">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-        </div>
-        <!-- 路由决策 -->
-        <div class="rt-m-node rt-m-hub">
-          <span class="rt-m-node-tag">${t("rt_gateway")}</span>
-          <svg viewBox="0 0 44 44" class="rt-bird" aria-hidden="true"><use href="#bird"></use></svg>
-          <b>Magpie</b>
-          <small>${escHtml(modeInfo[0])}</small>
-        </div>
-        <!-- 箭头 -->
-        <div class="rt-m-arrow">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-        </div>
-        <!-- 命中节点 (主角) -->
-        <div class="rt-m-node rt-m-winner">
-          <span class="rt-m-node-tag winner-tag">${t("rt_assigned_node")}</span>
-          <span class="rt-ic"><span class="ic">${renderProviderIcon(targetProv.toLowerCase(), targetProv[0])}</span></span>
-          <b>${escHtml(targetProv)}</b>
-          <code class="mdl highlight">${escHtml(targetMdl)}</code>
-        </div>
-      </div>
-      <!-- 命中节点执行详情 -->
-      <div class="rt-m-winner-summary">
-        <div class="rt-m-winner-row1">
-          <b>
-            <span class="ic">${renderProviderIcon(targetProv.toLowerCase(), targetProv[0])}</span>
-            <span class="pii">${escHtml(winnerWho)}</span>
-            <code class="mdl">${escHtml(targetMdl)}</code>
-          </b>
-          <span class="rt-m-winner-status">${statusBadge}</span>
-        </div>
-        <div class="rt-m-winner-row2">
-          <span>${t("rt_completed_in", { ms: rtTook(totalMs) })}</span>
-          <span>TTFT <b>${rtTook(ttftMs)}</b></span>
-          <span>${t("rt_speed_tok_s", { n: speed })}</span>
-          <span>Token <b>${fmtTokens(inTokens)}</b> in / <b>${fmtTokens(outTokens)}</b> out</span>
-        </div>
-      </div>
-    </div>
-  `;
-
-  pipelineEl.querySelectorAll(".rt-m-req-chip").forEach(btn => {
-    btn.onclick = () => {
-      const idx = Number(btn.dataset.idx);
-      if (routes[idx]) {
-        curRoutingPicked = routes[idx];
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  });
-  box.appendChild(pipelineEl);
-
-  // Top info (PC 端显示)
-  const topEl = document.createElement("div");
-  topEl.className = "rt-top";
-  const orderList = curRoute.order || [];
-  // 座位键与原版 magpie routing.js 一致(id+model), 精确匹配不到时回退 id:
-  // 旧写法用 tr.who === w.who 兜底, 而 tries 根本没有 who 字段, 于是
-  // undefined === undefined 把所有无 who 的座位都判成命中(实测 13/55 行全绿)
-  const seatKey = (x) => (x.id || "") + "\u0000" + (x.model || "");
-  const tryState = { trying: new Set(), answered: new Set() };
-  for (const tr of (curRoute.tries || [])) {
-    const hit = orderList.find(x => seatKey(x) === seatKey(tr)) || orderList.find(x => x.id && x.id === tr.id);
-    const k = hit ? seatKey(hit) : seatKey(tr);
-    if (!tr.done) tryState.trying.add(k);                            // 正在问它: 亮
-    else if ((tr.status || 0) < 400) tryState.answered.add(k);       // 它答了: 亮
-  }                                                                  // 报错转交/休息的座位不亮
-  const enabledCount = orderList.filter(x => !x.fallback).length || orderList.length || 30;
-  topEl.innerHTML = `
-    <div class="rt-what" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
-      <b>${escHtml(group.name || curRoute.provider || "default")}</b> · ${t("rt_routing_group_label")} · ${t("rt_unit_enabled", { n: enabledCount })} · ${t("rt_unit_agents", { n: recentAgents.length })}
-      ${curRoutingPicked ? `
-        <span style="display:inline-flex;align-items:center;gap:6px;margin-left:auto;">
-          <span style="font-size:11.5px;color:var(--amber);background:rgba(255,159,10,0.1);padding:1px 7px;border-radius:4px;border:1px solid rgba(255,159,10,0.3);">
-            #${escHtml(String(curRoute.seq || curRoute.id || ""))} · ${escHtml(rtClock(curRoute.time) || "")}
-          </span>
-          <button type="button" class="btn-rt-live" id="btn-rt-live-top">▶ ${t("rt_tab_live")}</button>
-        </span>
-      ` : ""}
-    </div>
-    <p class="rt-mode">${escHtml(modeInfo[1])}</p>
-  `;
-  box.appendChild(topEl);
-  const btnLiveTop = topEl.querySelector("#btn-rt-live-top");
-  if (btnLiveTop) {
-    btnLiveTop.onclick = () => {
-      curRoutingPicked = null;
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  }
-
-  // Stage
-  const stageEl = document.createElement("div");
-  stageEl.className = "rt-stage";
-  const NS = "http://www.w3.org/2000/svg";
-  const wiresSvg = document.createElementNS(NS, "svg");
-  wiresSvg.setAttribute("class", "rt-wires");
-  wiresSvg.setAttribute("aria-hidden", "true");
-
-  // Sources (agents)
-  const srcsEl = document.createElement("div");
-  srcsEl.className = "rt-srcs" + (recentAgents.length > 1 ? " many" : "");
-
-  recentAgents.forEach(a => {
-    const node = document.createElement("div");
-    node.className = "rt-node rt-src";
-    const hue = rtHue(a.id);
-    node.style.setProperty("--agent", hue);
-    node.title = `${a.name} · ${t("rt_tools_title")}`;
-    node.onclick = () => showRoutingToolsModal(curRoute);
-    node.innerHTML = `
-      <span class="rt-ic"><span class="ic">${renderProviderIcon(a.id, a.id[0])}</span></span>
-      <b>${escHtml(a.name)}</b>
-      <small>${escHtml(a.model)}</small>
-    `;
-    const wirePath = document.createElementNS(NS, "path");
-    wirePath.style.setProperty("--agent", hue);
-    if (curRoute.agent === a.id) {
-      wirePath.classList.add("live");
-    }
-    wiresSvg.appendChild(wirePath);
-    node.__wire = wirePath;
-    srcsEl.appendChild(node);
-  });
-
-  // Hub (magpie)
-  const hubEl = document.createElement("div");
-  hubEl.className = "rt-node rt-hub";
-  hubEl.innerHTML = `
-    <svg viewBox="0 0 44 44" class="rt-bird" aria-hidden="true"><use href="#bird"></use></svg>
-    <b>magpie</b>
-    <small>127.0.0.1:3426</small>
-    <i class="rt-go" title="${escAttr(t("rt_policy_title"))}">${escHtml(modeInfo[0])}</i>
-  `;
-  const hubGo = hubEl.querySelector("i.rt-go");
-  if (hubGo) {
-    hubGo.onclick = () => showRoutingPolicyModal(group.routing || "");
-  }
-
-  // Accounts & candidate seats list
-  const acctsEl = document.createElement("ol");
-  acctsEl.className = "rt-accts";
-
-  orderList.forEach(w => {
-    const rowLi = document.createElement("li");
-    const rkey = seatKey(w);
-    const isTrying = tryState.trying.has(rkey);
-    const isAnswered = tryState.answered.has(rkey);
-    const isWinner = isTrying || isAnswered;
-    const isResting = !!w.rest;
-
-    if (isWinner) rowLi.classList.add("on");
-    if (isResting) rowLi.classList.add("rest");
-
-    let stText = "";
-    if (isTrying) stText = t("rt_answering");
-    else if (isAnswered) stText = t("rt_answered");
-    else if (isResting) stText = t("rt_resting");
-    else if (w.known && w.used !== undefined) {
-      const remain = Math.max(0, 100 - Math.round(w.used));
-      stText = `${t("rt_remain_pct", { n: remain })} · ${t("rt_renews_days", { n: 15 })}`;
-    } else if (w.credits) {
-      stText = `${Number(w.credits).toLocaleString()} · ${t("rt_remain_pct", { n: 40 })}`;
-    } else if (w.kind === "key") {
-      stText = t("rt_one_key");
-    } else {
-      stText = t("rt_ready");
-    }
-
-    const whoStr = w.who || w.id || w.name || "account";
-    const usedPct = w.used !== undefined ? Math.min(100, Math.round(w.used)) : 0;
-    const barRemainPct = 100 - usedPct;
-
-    rowLi.innerHTML = `
-      <i class="dot"></i>
-      <b>
-        <span class="ic">${renderProviderIcon(w.icon || w.provider || "generic", (w.name || "M")[0])}</span>
-        <span class="who"><span class="pii">${escHtml(whoStr)}</span></span>
-        <span style="font-size:11px;color:var(--muted);margin-left:4px;">${escHtml(w.plan || "")}</span>
-        <code class="mdl">${escHtml(w.model || "")}</code>
-        ${w.fallback ? `<small class="fb">${t("rt_fallback")}</small>` : ""}
-      </b>
-      <em>${escHtml(stText)}</em>
-      <div class="bar"><i style="width:${barRemainPct}%;"></i></div>
-    `;
-
-    const rowWire = document.createElementNS(NS, "path");
-    if (isWinner) {
-      rowWire.classList.add("live");
-      rowWire.style.setProperty("--agent", rtHue(curRoute.agent));
-    }
-    rowLi.onclick = () => {
-      curRoutingAccountFilter = (curRoutingAccountFilter === whoStr ? null : whoStr);
-      renderMagpieRouting(curMagpieRoutingData);
-      const reqsList = $("rt-reqs-list");
-      if (reqsList) reqsList.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    };
-    if (curRoutingAccountFilter === whoStr) {
-      rowLi.classList.add("filtered");
-    }
-    // 悬停点亮该行的连线(默认全灰, 指到哪条哪条变绿)
-    rowLi.addEventListener("mouseenter", () => {
-      rowWire.style.setProperty("--agent", rtHue(curRoute.agent));
-      rowWire.classList.add("lit");
-    });
-    rowLi.addEventListener("mouseleave", () => {
-      rowWire.classList.remove("lit");
-    });
-
-    wiresSvg.appendChild(rowWire);
-    rowLi.__wire = rowWire;
-    acctsEl.appendChild(rowLi);
-  });
-
-  const skySvg = document.createElementNS(NS, "svg");
-  skySvg.setAttribute("class", "rt-sky");
-  skySvg.setAttribute("aria-hidden", "true");
-
-  stageEl.appendChild(wiresSvg);
-  stageEl.appendChild(srcsEl);
-  stageEl.appendChild(hubEl);
-  stageEl.appendChild(acctsEl);
-  stageEl.appendChild(skySvg);
-  box.appendChild(stageEl);
-
-  // Footer: Summary sentence & stats counters
-  const footEl = document.createElement("div");
-  footEl.className = "rt-foot";
-
-  footEl.innerHTML = `
-    <p class="rt-cap in">
-      <b>${escHtml(targetProv)}</b> (${escHtml(targetMdl)}) ${t("rt_completed_in", { ms: rtTook(totalMs) })} · ${fmtTokens(curRoute.tokens?.input || curRoute.tokens || 0)} token · ${t("rt_first_resp", { ms: rtTook(ttftMs) })} · ${t("rt_speed_tok_s", { n: speed })} · ${t("rt_cache_hit_100")}
-    </p>
-    <div class="rt-stats">
-      <span><b>${Number(totals.requests || routes.length || 0).toLocaleString()}</b><span>${t("rt_stat_requests")}</span></span>
-      <span><b style="color:${totals.rerouted ? 'var(--amber)' : 'inherit'};">${Number(totals.rerouted || 0).toLocaleString()}</b><span>${t("rt_stat_rerouted")}</span></span>
-      <span class="rt-errs"><b style="color:${totals.errors ? 'var(--red)' : 'inherit'};">${Number(totals.errors || 0).toLocaleString()}</b><span>${t("rt_stat_errors")}</span></span>
-    </div>
-  `;
-  box.appendChild(footEl);
-
-  const errStat = footEl.querySelector(".rt-errs");
-  if (errStat) {
-    errStat.style.cursor = "pointer";
-    errStat.title = t("rt_show_latest_err");
-    errStat.onclick = () => {
-      const errRoute = routes.find(r => (r.status || 0) >= 400 || (r.tries || []).some(tr => (tr.status || 0) >= 400));
-      if (errRoute) {
-        curRoutingPicked = errRoute;
-        renderMagpieRouting(curMagpieRoutingData);
-      }
-    };
-  }
-
-  // Log: Decision breakdown & timing
-  const logEl = document.createElement("div");
-  logEl.className = "rt-log";
-
-  const timingGw = Math.round(Math.min(400, Math.max(50, ttftMs * 0.08))) || 374;
-  const timingNet = Math.round(Math.min(300, Math.max(30, ttftMs * 0.15))) || 212;
-  const timingProv = Math.max(100, totalMs - timingGw - timingNet);
-
-  logEl.innerHTML = `
-    <div class="rt-log-head">
-      <span>${curRoutingPicked ? (t("rt_log_title") + " (" + (rtClock(curRoute.time) || "") + ")") : t("rt_log_title")}</span>
-      <span class="grow"></span>
-      ${curRoutingPicked ? `
-        <button type="button" class="text" id="btn-back-to-live" style="color:var(--accent);font-size:12px;font-weight:600;margin-right:12px;cursor:pointer;">
-          ▶ ${t("rt_back_to_live")}
-        </button>
-      ` : ""}
-      <span style="display:flex;gap:12px;font-size:11px;font-weight:400;color:var(--muted);">
-        <span style="cursor:pointer;" onclick="document.querySelector('[data-atab=usage]')?.click()">${t("mp_view_detail")}</span>
-        <span style="cursor:pointer;" onclick="refreshMagpieRouting(true)">↻</span>
-      </span>
-    </div>
-    <ol class="rt-steps">
-      <li class="why"><b>${escHtml(curRoute.agent || "omp")}</b> → <b>${escHtml(group.name || "default")}</b>: ${escHtml(orderList.slice(0, 4).map(x => x.name || x.provider).join(", "))}…</li>
-      <li class="why"><b>${escHtml(targetProv)}</b>: ${escHtml(curRoute.agent || "omp")} (#${curRoute.flow || 49}) · prompt cache warm</li>
-      <li class="aside">API key: ready</li>
-      <li class="ok">${escHtml(targetProv)} (${escHtml(targetMdl)}) ${t("rt_completed_in", { ms: rtTook(totalMs) })} · ${fmtTokens(curRoute.tokens?.input || curRoute.tokens || 0)} token · ${t("rt_first_resp", { ms: rtTook(ttftMs) })} · ${t("rt_speed_tok_s", { n: speed })} · ${t("rt_cache_hit_100")}.</li>
-    </ol>
-    <div class="rt-timing-wrap" style="margin-top:14px;padding:12px 14px;background:var(--card-2);border:1px solid var(--line);border-radius:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;color:var(--fg-2);">
-        <span>${t("rt_timing_title")}</span>
-        <span style="display:flex;gap:12px;font-size:11px;color:var(--muted);">
-          <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#64d2ff;margin-right:4px;"></i>magpie ${t("rt_ms", { n: timingGw })}</span>
-          <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#ff9f0a;margin-right:4px;"></i>net ${t("rt_ms", { n: timingNet })}</span>
-          <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#30d158;margin-right:4px;"></i>vendor ${t("rt_sec", { n: (timingProv/1000).toFixed(1) })}</span>
-        </span>
-      </div>
-      <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:rgba(255,255,255,.05);margin-bottom:10px;">
-        <div style="width:${(timingGw/Math.max(1,totalMs)*100).toFixed(1)}%;background:#64d2ff;"></div>
-        <div style="width:${(timingNet/Math.max(1,totalMs)*100).toFixed(1)}%;background:#ff9f0a;"></div>
-        <div style="width:${(timingProv/Math.max(1,totalMs)*100).toFixed(1)}%;background:#30d158;"></div>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11px;color:var(--muted);">
-        <span>magpie ${t("rt_ms", { n: timingGw })}</span>
-        <span>DNS 0.6 ms</span>
-        <span>TCP 5.5 ms</span>
-        <span>TLS 8.6 ms</span>
-        <span>send ${t("rt_ms", { n: timingNet })}</span>
-        <span>TTFT ${rtTook(ttftMs)}</span>
-        <span>stream ${rtTook(Math.max(0, totalMs - ttftMs))}</span>
-      </div>
-    </div>
-  `;
-  box.appendChild(logEl);
-
-  const btnBackLive = logEl.querySelector("#btn-back-to-live");
-  if (btnBackLive) {
-    btnBackLive.onclick = () => {
-      curRoutingPicked = null;
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  }
-
-  // Context window waffle card
-  const prompt = curRoute.prompt || {};
-  const promptTokens = prompt.tokens || curRoute.tokens?.input || 48700;
-  const windowTokens = prompt.window || 200000;
-  const parts = prompt.parts || [
-    { kind: "system", tokens: 15200, items: [{ name: t("rt_ctx_agent_prompt"), tokens: 15200 }] },
-    { kind: "tools", tokens: 1300, items: [{ name: "bash", tokens: 1300 }] },
-    { kind: "files", tokens: 14400, items: [{ name: "06-practical-examples-guide.md", tokens: 2800 }, { name: "AGENTS.md", tokens: 2400 }, { name: "README.md", tokens: 1300 }] },
-    { kind: "results", tokens: 3000, items: [{ name: "bash result", tokens: 2800 }] },
-    { kind: "chat", tokens: 14800, items: [{ name: t("rt_ctx_turn_1"), tokens: 14800 }] }
-  ];
-
-  const partMap = {};
-  parts.forEach(p => { partMap[p.kind] = p.tokens || 0; });
-  const sysTok = partMap.system || 0;
-  const toolTok = partMap.tools || 0;
-  const fileTok = partMap.files || 0;
-  const resTok = partMap.results || 0;
-  const chatTok = partMap.chat || 0;
-
-  // Build 400 cells
-  const TOTAL_CELLS = 400;
-  const cells = [];
-  const scale = Math.max(windowTokens, promptTokens, 1);
-  const sysCells = Math.round((sysTok / scale) * TOTAL_CELLS);
-  const toolCells = Math.round((toolTok / scale) * TOTAL_CELLS);
-  const fileCells = Math.round((fileTok / scale) * TOTAL_CELLS);
-  const resCells = Math.round((resTok / scale) * TOTAL_CELLS);
-  const chatCells = Math.round((chatTok / scale) * TOTAL_CELLS);
-
-  for (let i = 0; i < sysCells; i++) cells.push("system");
-  for (let i = 0; i < toolCells; i++) cells.push("tools");
-  for (let i = 0; i < fileCells; i++) cells.push("files");
-  for (let i = 0; i < resCells; i++) cells.push("results");
-  for (let i = 0; i < chatCells; i++) cells.push("chat");
-  while (cells.length < TOTAL_CELLS) cells.push("free");
-
-  const waffleHtml = cells.map((k, idx) => `<i class="c k-${k}" data-idx="${idx}"></i>`).join("");
-
-  const allItems = [];
-  parts.forEach(p => {
-    (p.items || []).forEach(it => {
-      allItems.push({ ...it, kind: p.kind });
-    });
-  });
-  allItems.sort((a, b) => (b.tokens || 0) - (a.tokens || 0));
-
-  const ctxCard = document.createElement("div");
-  ctxCard.className = "ctx-card";
-  ctxCard.style.marginTop = "18px";
-  const filteredItems = (ctxActiveTab === "all") ? allItems : allItems.filter(it => it.kind === ctxActiveTab);
-  const displayItems = ctxShowAll ? filteredItems : filteredItems.slice(0, 10);
-
-  ctxCard.innerHTML = `
-    <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">
-      <span class="pii">${escHtml(curRoute.who || curRoute.id || "account")}</span> (${escHtml(targetMdl)}) high effort
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <span style="font-size:13px;font-weight:600;color:var(--fg);">${t("rt_context_title")}</span>
-      <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(48,209,88,.15);color:#30d158;font-weight:600;">group/${escHtml(group.name || "default")} · ${t("rt_tab_live")}</span>
-    </div>
-    <div style="display:flex;gap:32px;margin-bottom:12px;font-size:12px;color:var(--muted);">
-      <div>${t("rt_ctx_used")} <b style="font-size:18px;color:var(--fg);display:block;">${(promptTokens/1000).toFixed(1)}K <span style="font-size:11px;font-weight:400;color:var(--muted);">token</span></b><small style="color:var(--muted);">${t("rt_ctx_unknown")}</small></div>
-      <div>${t("rt_ctx_cache")} <b style="font-size:18px;color:var(--fg);display:block;">— <span style="font-size:11px;font-weight:400;color:var(--muted);">hit</span></b><small style="color:var(--muted);">${t("rt_ctx_after_resp")}</small></div>
-    </div>
-    <div class="ctx-waffle" style="background:var(--card-2);padding:8px;border-radius:8px;border:1px solid var(--line);">
-      ${waffleHtml}
-    </div>
-    <div style="display:flex;flex-wrap:wrap;gap:12px 18px;margin-top:12px;font-size:11px;color:var(--fg-2);">
-      <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--k-system);margin-right:4px;"></i>${t("rt_tab_sys")} ${(sysTok/1000).toFixed(1)}K</span>
-      <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--k-tools);margin-right:4px;"></i>${t("rt_tab_tools")} ${(toolTok/1000).toFixed(1)}K</span>
-      <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--k-files);margin-right:4px;"></i>${t("rt_tab_files")} ${(fileTok/1000).toFixed(1)}K</span>
-      <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--k-results);margin-right:4px;"></i>${t("rt_tab_results")} ${(resTok/1000).toFixed(1)}K</span>
-      <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--k-chat);margin-right:4px;"></i>${t("rt_tab_chat")} ${(chatTok/1000).toFixed(1)}K</span>
-    </div>
-    <div class="ctx-contents" style="margin-top:14px;border-top:1px solid var(--line);padding-top:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-        <span style="font-size:12px;font-weight:600;color:var(--fg);">${t("rt_ctx_content")}</span>
-        <button type="button" class="btn-rt-live" id="btn-show-tools-modal" style="font-size:11px;padding:2px 8px;">🛠 ${t("rt_tools_title")}</button>
-        <div class="ctx-tabs" style="display:flex;gap:4px;font-size:11px;margin-left:auto;">
-          <span data-tab="all" class="${ctxActiveTab === 'all' ? 'active' : ''}" style="padding:2px 8px;border-radius:5px;${ctxActiveTab === 'all' ? 'background:var(--card-2);color:var(--fg);font-weight:600;' : 'color:var(--muted);'}cursor:pointer;">${t("rt_tab_all")}</span>
-          <span data-tab="system" class="${ctxActiveTab === 'system' ? 'active' : ''}" style="padding:2px 8px;border-radius:5px;${ctxActiveTab === 'system' ? 'background:var(--card-2);color:var(--fg);font-weight:600;' : 'color:var(--muted);'}cursor:pointer;">${t("rt_tab_sys")}</span>
-          <span data-tab="tools" class="${ctxActiveTab === 'tools' ? 'active' : ''}" style="padding:2px 8px;border-radius:5px;${ctxActiveTab === 'tools' ? 'background:var(--card-2);color:var(--fg);font-weight:600;' : 'color:var(--muted);'}cursor:pointer;">${t("rt_tab_tools")}</span>
-          <span data-tab="files" class="${ctxActiveTab === 'files' ? 'active' : ''}" style="padding:2px 8px;border-radius:5px;${ctxActiveTab === 'files' ? 'background:var(--card-2);color:var(--fg);font-weight:600;' : 'color:var(--muted);'}cursor:pointer;">${t("rt_tab_files")}</span>
-          <span data-tab="results" class="${ctxActiveTab === 'results' ? 'active' : ''}" style="padding:2px 8px;border-radius:5px;${ctxActiveTab === 'results' ? 'background:var(--card-2);color:var(--fg);font-weight:600;' : 'color:var(--muted);'}cursor:pointer;">${t("rt_tab_results")}</span>
-          <span data-tab="chat" class="${ctxActiveTab === 'chat' ? 'active' : ''}" style="padding:2px 8px;border-radius:5px;${ctxActiveTab === 'chat' ? 'background:var(--card-2);color:var(--fg);font-weight:600;' : 'color:var(--muted);'}cursor:pointer;">${t("rt_tab_chat")}</span>
-        </div>
-      </div>
-      <div class="ctx-rows" style="display:grid;gap:6px;max-height:220px;overflow-y:auto;">
-        ${displayItems.map(it => `
-          <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0;">
-            <i class="dot k-${it.kind}"></i>
-            <b style="font-weight:500;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%;">${escHtml(it.name || "item")}</b>
-            ${it.tag ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:var(--card-2);border:1px solid var(--line);color:var(--muted);">${escHtml(it.tag)}</span>` : ""}
-            <span style="margin-left:auto;font-family:var(--font-mono,monospace);font-size:11px;color:var(--fg-2);">${(it.tokens || 0) >= 1000 ? ((it.tokens)/1000).toFixed(1) + 'K' : it.tokens}</span>
-          </div>
-        `).join("")}
-      </div>
-      ${filteredItems.length > 10 ? `
-        <div class="ctx-toggle-all" style="margin-top:8px;font-size:11px;color:var(--muted);text-align:left;cursor:pointer;">
-          ${ctxShowAll ? t("rt_show_fewer") : t("rt_show_all", { n: filteredItems.length })}
-        </div>
-      ` : ""}
-      <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);">
-        <span>${escHtml(curRoute.agent || "Pi")} &gt; magpie-${escHtml(curRoute.id || "")} &gt; #${curRoute.conv || "1792153438952"}</span>
-        <span>${t("rt_session_summary", { turns: 1, reqs: routes.length })}</span>
-      </div>
-    </div>
-  `;
-  box.appendChild(ctxCard);
-
-  const btnShowTools = ctxCard.querySelector("#btn-show-tools-modal");
-  if (btnShowTools) {
-    btnShowTools.onclick = () => showRoutingToolsModal(curRoute);
-  }
-
-  ctxCard.querySelectorAll(".ctx-tabs span").forEach(sp => {
-    sp.onclick = () => {
-      ctxActiveTab = sp.dataset.tab || "all";
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  });
-  const btnToggleAll = ctxCard.querySelector(".ctx-toggle-all");
-  if (btnToggleAll) {
-    btnToggleAll.onclick = () => {
-      ctxShowAll = !ctxShowAll;
-      renderMagpieRouting(curMagpieRoutingData);
-    };
-  }
-
-  // 2. Under the stage (#rtMore)
-  if (more) {
-    const visibleRoutes = curRoutingAccountFilter ? routes.filter(r => (r.who || r.id || r.provider) === curRoutingAccountFilter) : routes;
-
-    more.innerHTML = `
-      <div class="rt-cols">
-        <div class="rt-col">
-          <div class="row-head">
-            <span class="label">${t("rt_stat_requests")}</span>
-            <span class="note">${t("rt_reqs_note", { n: visibleRoutes.length })}</span>
-            <span class="grow"></span>
-            <div style="display:flex;gap:4px;align-items:center;">
-              <span class="rt-tab-btn ${!curRoutingPicked ? 'on' : ''}" id="rt-tab-live">${t("rt_tab_live")}</span>
-              <span class="rt-tab-btn">${t("rt_tab_today")} ${Number(totals.requests || routes.length).toLocaleString()}</span>
-              <span class="rt-tab-btn">${t("rt_tab_by_req")}</span>
-            </div>
-          </div>
-          ${curRoutingAccountFilter ? `
-            <div class="rt-filter-bar">
-              <span>${t("rt_filter_account", { who: `<span class="pii">${escHtml(curRoutingAccountFilter)}</span>` })}</span>
-              <button type="button" class="btn-rt-clear-filter" id="btn-rt-clear-acct">${t("rt_clear_filter")}</button>
-            </div>
-          ` : ""}
-          <div class="list rt-reqs" id="rt-reqs-list"></div>
-        </div>
-        <div class="rt-col">
-          <div class="row-head">
-            <span class="label">${t("rt_acts_title")}</span>
-            <span class="note">${t("rt_acts_note")}</span>
-          </div>
-          <div class="list rt-acts" id="rt-acts-list"></div>
-        </div>
-      </div>
-      <div class="rt-gsec" style="margin-top:20px;">
-        <div class="row-head">
-          <span class="label">${t("rt_groups_title")}</span>
-          <span class="note">${t("rt_groups_note")}</span>
-          <span class="grow"></span>
-          <button type="button" class="text" id="btn-new-routing-group">＋ ${t("rt_new_group")}</button>
-        </div>
-        <div class="list rt-groups" id="rt-groups-list"></div>
-
-        <div class="row-head" style="margin-top:16px;">
-          <span class="label">${t("rt_pools_title")}</span>
-          <span class="note">${t("rt_pools_note")}</span>
-        </div>
-        <div class="list rt-pools" id="rt-pools-list"></div>
-      </div>
-    `;
-
-    const tabLive = $("rt-tab-live");
-    if (tabLive) {
-      tabLive.onclick = () => {
-        curRoutingPicked = null;
-        renderMagpieRouting(curMagpieRoutingData);
-      };
-    }
-    const btnClearAcct = $("btn-rt-clear-acct");
-    if (btnClearAcct) {
-      btnClearAcct.onclick = () => {
-        curRoutingAccountFilter = null;
-        renderMagpieRouting(curMagpieRoutingData);
-      };
-    }
-
-    const btnNewG = $("btn-new-routing-group");
-    if (btnNewG) {
-      btnNewG.onclick = () => {
-        if (curRoutingGroupEdit && curRoutingGroupEdit.id === "") {
-          curRoutingGroupEdit = null;
-        } else {
-          curRoutingGroupEdit = {
-            id: "",
-            draft: {
-              name: "",
-              id: "",
-              members: ["codex/gpt-6-luna", "deepseek/deepseek-flash"],
-              routing: "",
-              affinity: "",
-              effort: "",
-              rules: [{ use: "codex/gpt-6-luna", tokens: 0, images: false, effort: "", agents: [], intent: "" }],
-              classifier: ""
-            }
-          };
-        }
-        renderMagpieRouting(curMagpieRoutingData);
-      };
-    }
-
-    // Populate requests list
-    const reqsListEl = $("rt-reqs-list");
-    if (reqsListEl) {
-      reqsListEl.innerHTML = visibleRoutes.map((r, i) => {
-        const isPick = curRoute.id === r.id;
-        const ag = r.agent || "pi";
-        const timeStr = rtClock(r.time) || "23:53:14";
-        const totalTok = (r.tokens?.input || r.tokens || 0);
-        const costStr = r.cost ? `≈$${r.cost.toFixed(3)}` : "≈$0.002";
-        const isErr = r.status >= 400;
-        const provName = r.provider || "DeepSeek";
-        const mdlName = r.served || r.model || "deepseek-flash";
-
-        return `
-          <div class="rt-req ${isPick ? 'on' : ''}" data-idx="${i}" aria-pressed="${String(isPick)}">
-            <span class="at">${timeStr}</span>
-            <span class="asked">
-              <i class="ag" style="background:${rtHue(ag)};"></i>
-              <span class="ic">${renderProviderIcon(ag, ag[0])}</span>
-              <span class="m">group/${escHtml(r.group?.name || "default")}</span>
-            </span>
-            <span class="to ${isErr ? 'bad' : ''}">
-              <i></i>
-              <span>${escHtml(provName)} · ${escHtml(mdlName)}</span>
-            </span>
-            <span class="meta">${rtTook(r.ms)} · ${fmtTokens(totalTok)} tk · ${costStr}</span>
-          </div>
-        `;
-      }).join("");
-
-      reqsListEl.querySelectorAll(".rt-req").forEach(row => {
-        row.onclick = () => {
-          const idx = parseInt(row.dataset.idx, 10);
-          if (!isNaN(idx) && visibleRoutes[idx]) {
-            curRoutingPicked = visibleRoutes[idx];
-            renderMagpieRouting(curMagpieRoutingData);
-          }
-        };
-      });
-    }
-
-    // Populate accounts summary
-    const actsListEl = $("rt-acts-list");
-    if (actsListEl) {
-      const groupedSeats = [];
-      const pMap = new Map();
-      orderList.forEach(w => {
-        const prov = w.name || w.provider || "other";
-        const model = w.model || "";
-        const key = prov + "::" + model;
-        if (!pMap.has(key)) {
-          const g = { prov, model, icon: w.icon || prov, items: [] };
-          pMap.set(key, g);
-          groupedSeats.push(g);
-        }
-        pMap.get(key).items.push(w);
-      });
-
-      actsListEl.innerHTML = groupedSeats.map(g => {
-        return `
-          <div class="rt-prov">
-            <span class="ic">${renderProviderIcon(g.icon, g.prov[0])}</span>
-            <b>${escHtml(g.prov)}</b>
-            <span style="font-size:11px;color:var(--muted);">${t("rt_unit_accounts", { n: g.items.length })}</span>
-          </div>
-          ${g.items.map(it => `
-            <div class="rt-act">
-              <div class="nm">
-                <b><span class="pii">${escHtml(it.who || it.id || "account")}</span></b>
-                <span>${escHtml(it.plan || "")}</span>
-              </div>
-              <div class="tally">
-                <span>${t("rt_remain_pct", { n: Math.round(Math.min(100, Math.max(0, 100 - (it.used || 0)))) })} · ${it.renews ? t("rt_renews_days", { n: 15 }) : t("rt_ready")}</span>
-                <span>${escHtml(it.model || "")}</span>
-              </div>
-              <div class="bar"><i style="width:${Math.round(Math.min(100, Math.max(0, 100 - (it.used || 0))))}%;"></i></div>
-            </div>
-          `).join("")}
-        `;
-      }).join("");
-    }
-
-    // Populate routing groups & inline editor
-    const groupsListEl = $("rt-groups-list");
-    if (groupsListEl) {
-      const gItems = (data.groups && data.groups.length) ? data.groups : [
-        { id: "default", name: "default", routing: "smart", affinity: "session", members: ["kiro/auto", "workbuddy-ai/deepseek-v4.1-flash", "codex/gpt-6-luna", "deepseek/deepseek-flash"], rules: [{ use: "codex/gpt-6-luna", tokens: 20000, intent: "coding and planning" }] },
-        { id: "high", name: "high", routing: "order", affinity: "", members: ["codex/gpt-6-luna", "deepseek/deepseek-flash"], rules: [{ use: "codex/gpt-6-luna", effort: "high" }] },
-        { id: "free", name: "free", routing: "smart", affinity: "", members: ["our-free-model/free", "opencode-zen/free"], rules: [] }
-      ];
-
-      const availableModels = (data.models && data.models.length) ? data.models : [
-        { id: "codex/gpt-6-luna", name: "gpt-6-luna", providerName: "Codex", icon: "bolt" },
-        { id: "deepseek/deepseek-flash", name: "deepseek-flash", providerName: "DeepSeek", icon: "spark" },
-        { id: "kiro/auto", name: "auto", providerName: "Kiro", icon: "spark" },
-        { id: "openrouter/anthropic/claude-sonnet-5.5", name: "claude-sonnet-5.5", providerName: "OpenRouter", icon: "network" },
-        { id: "workbuddy-ai/deepseek-v4.1-flash", name: "deepseek-v4.1-flash", providerName: "WorkBuddy AI", icon: "cpu" },
-        { id: "our-free-model/free", name: "free", providerName: "Our Free Model", icon: "box" }
-      ];
-
-      const availableDeciders = (data.deciders && data.deciders.length) ? data.deciders : [
-        { id: "opencode-zen/jev-1.13-free", name: "jev-1.13-free", providerName: "OpenCode Zen" }
-      ];
-
-      const rowsHtml = [];
-      if (curRoutingGroupEdit && curRoutingGroupEdit.id === "") {
-        rowsHtml.push(renderGroupEditorHtml(null, curRoutingGroupEdit.draft, availableModels, availableDeciders));
-      }
-
-      for (const g of gItems) {
-        const gid = g.id || g.name;
-        if (curRoutingGroupEdit && curRoutingGroupEdit.id === gid) {
-          rowsHtml.push(renderGroupEditorHtml(g, curRoutingGroupEdit.draft, availableModels, availableDeciders));
-        } else {
-          rowsHtml.push(renderGroupRowHtml(g, (curRoutingGroupFilter === gid) || (!curRoutingGroupFilter && gid === (group.name || "default"))));
-        }
-      }
-
-      groupsListEl.innerHTML = rowsHtml.join("");
-      bindGroupEvents(groupsListEl, gItems, availableModels, availableDeciders);
-    }
-
-    // Populate Accounts and Keys Pools
-    const poolsContainer = $("rt-pools-list");
-    if (poolsContainer) {
-      const pools = (data.pools && data.pools.length) ? data.pools : [
-        // 回退演示数据：绝不写真实邮箱，账户名一律用不透明标签。
-        { provider: "workbuddy-ai", name: "WorkBuddy AI", icon: "cpu", kind: "account", who: ["wba-acct-1", "wba-acct-2", "wba-acct-3", "wba-acct-4", "wba-acct-5", "wba-acct-6"], routing: "usage", affinity: "" },
-        { provider: "kiro", name: "Kiro", icon: "spark", kind: "account", who: ["kiro-acct-1", "kiro-acct-2", "kiro-acct-3", "kiro-acct-4"], routing: "", affinity: "" },
-        { provider: "workbuddy", name: "WorkBuddy", icon: "cpu", kind: "account", who: ["wb-account-1", "wb-account-2"], routing: "", affinity: "" },
-        { provider: "qoder", name: "Qoder", icon: "bolt", kind: "account", who: ["qoder-acct-1", "qoder-acct-2", "qoder-acct-3"], routing: "", affinity: "" }
-      ];
-
-      poolsContainer.innerHTML = pools.map(p => {
-        const whoList = p.who || [];
-        const countStr = p.kind === "account" ? `${whoList.length} accounts` : `${whoList.length} keys`;
-        const pRouting = p.routing || "";
-        const pAffinity = p.affinity || "";
-
-        return `
-          <div class="rt-pool" data-prov="${escAttr(p.provider)}">
-            <div class="nm">
-              <span class="ic">${renderProviderIcon(p.icon || p.provider, p.name[0])}</span>
-              <b>${escHtml(p.name)}</b>
-              <span>${countStr}</span>
-            </div>
-            <div class="ctl">
-              <span class="lab">
-                <small>${t("rt_routing_lbl")}</small>
-                <div class="segs pool-routing-segs" data-prov="${escAttr(p.provider)}">
-                  ${ROUTE_OPTS.map(([k, lbl]) => `
-                    <span class="opt ${pRouting === k ? 'on' : ''}" data-val="${k}">${escHtml(t(modesMap[k]?.[0] || lbl))}</span>
-                  `).join("")}
-                </div>
-              </span>
-              <span class="lab">
-                <small>${t("rt_stays_lbl")}</small>
-                <div class="segs pool-affinity-segs" data-prov="${escAttr(p.provider)}">
-                  ${AFF_OPTS.map(([k, lbl]) => `
-                    <span class="opt ${pAffinity === k ? 'on' : ''}" data-val="${k}">${escHtml(lbl)}</span>
-                  `).join("")}
-                </div>
-              </span>
-            </div>
-          </div>
-        `;
-      }).join("");
-
-      poolsContainer.querySelectorAll(".pool-routing-segs .opt").forEach(opt => {
-        opt.onclick = () => {
-          const prov = opt.closest(".segs").dataset.prov;
-          const val = opt.dataset.val;
-          const p = pools.find(x => x.provider === prov);
-          if (p) {
-            p.routing = val;
-            renderMagpieRouting(curMagpieRoutingData);
-          }
-        };
-      });
-
-      poolsContainer.querySelectorAll(".pool-affinity-segs .opt").forEach(opt => {
-        opt.onclick = () => {
-          const prov = opt.closest(".segs").dataset.prov;
-          const val = opt.dataset.val;
-          const p = pools.find(x => x.provider === prov);
-          if (p) {
-            p.affinity = val;
-            renderMagpieRouting(curMagpieRoutingData);
-          }
-        };
-      });
-    }
-  }
-
-  requestAnimationFrame(() => {
-    layoutRoutingWires();
-  });
-
-  if (!routingResizeObs && window.ResizeObserver) {
-    routingResizeObs = new ResizeObserver(() => {
-      layoutRoutingWires();
-    });
-    routingResizeObs.observe(box);
-  }
+  let component=nativeMagpieViews[view];
+  if(!component){
+    component=document.createElement('section');component.className='magpie-native-view';component.id='magpie-native-'+view;
+    component.setAttribute('aria-label',t(view==='routing'?'agent_sub_routing':'agent_sub_magpie_usage'));
+    component.textContent=t('a_loading');
+    nativeMagpieViews[view]=component;host.replaceChildren(component);
+    component.magpieReady=window.mountSvcMagpie(component,{view,lang:LANG,theme:nativeMagpieTheme()}).then(()=>{nativeMagpiePost(component,{type:'svc-magpie-active',active:!!component.getClientRects().length});}).catch(error=>{component.textContent=t('a_fail',{e:error.message});console.error(error);});
+    new IntersectionObserver(entries=>{for(const entry of entries)nativeMagpiePost(component,{type:'svc-magpie-active',active:entry.isIntersecting});}).observe(component);
+  }else if(refresh && component.magpieReload)component.magpieReady=component.magpieReload();
+  return component.magpieReady;
 }
-
-async function refreshMagpieRouting(force = false) {
-  const container = $("agent-view-routing");
-  if (!container || container.hidden) return;
-  const box = $("rt");
-  if (box && (!box.children.length || force)) {
-    box.innerHTML = `<div class="gempty" style="padding:48px 16px;"><span class="spin" style="display:inline-block;margin-right:8px;">◌</span>${escHtml(t("a_loading"))}</div>`;
-  }
-  const d = await loadMagpieRouting(force);
-  renderMagpieRouting(d);
-}
+window.addEventListener('pagehide',()=>Object.values(nativeMagpieViews).forEach(view=>view.magpieDispose?.()));
+new MutationObserver(()=>Object.values(nativeMagpieViews).forEach(view=>nativeMagpiePost(view,{type:'svc-magpie-theme',theme:nativeMagpieTheme()}))).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+async function refreshMagpieRouting(force=false) { ensureNativeMagpie('routing',force); }
 
 async function loadMagpieProviders(force = false) {
   if (BOOT.static && BOOT.magpieProviders) return BOOT.magpieProviders;
-  if (!force && magpieProvidersCache) {
+  if (!force && magpieProvidersCache && Date.now()/1000 - magpieProvidersCache.fetched_at < 30) {
     return magpieProvidersCache;
   }
   try {
-    const r = await tlGet("/api/magpie/providers");
+    const r = await tlGet(`/api/magpie/providers${force ? "?refresh=1" : ""}`);
     if (r) {
       magpieProvidersCache = r;
       return r;
@@ -6924,12 +5562,6 @@ function providerFileUrl(iconName) {
   return "/static/icons/" + name + (ext ? "." + ext : ".svg");
 }
 
-function quotaProvIcon(iconName, glyphName) {
-  if (!iconName || ICONS[iconName] || !iconFileExists(iconName)) return icon(iconName || glyphName, 15);
-  const glyph = icon(glyphName, 15).replace(/"/g, "&quot;");
-  return `<span class="qpi"><img src="${escAttr(providerFileUrl(iconName))}" alt="" onerror="this.onerror=null;this.parentElement.innerHTML='${glyph}';"></span>`;
-}
-
 const PROV_GENERIC_SPAN = `<span class="mp-icon-generic"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M8 2.2 13.2 5.1v5.8L8 13.8 2.8 10.9V5.1Z"></path><path d="M8 8v5.8"></path><path d="M2.8 5.1 8 8l5.2-2.9"></path></svg></span>`;
 
 function renderProviderIcon(iconName, fallbackChar = "") {
@@ -6975,7 +5607,7 @@ function renderMagpieProviders(data) {
     const plan = acc.plan || "";
     const activeModels = (pv.active_models_count !== undefined)
       ? pv.active_models_count
-      : (pv.models ? pv.models.filter(m => m.on).length || pv.models.length : 0);
+      : (pv.models ? pv.models.filter(m => m.on).length : 0);
     const modelsText = t("mp_models_count", { n: activeModels });
 
     let subText = "";
@@ -7048,7 +5680,7 @@ async function refreshMagpieProviders(force = false) {
   const container = $("agent-view-providers");
   if (!container || container.hidden) return;
   const listEl = $("mp-providers-list");
-  if (magpieProvidersCache && !force) {
+  if (magpieProvidersCache && !force && Date.now()/1000 - magpieProvidersCache.fetched_at < 30) {
     renderMagpieProviders(magpieProvidersCache);
     return;
   }
@@ -7059,9 +5691,49 @@ async function refreshMagpieProviders(force = false) {
   renderMagpieProviders(d);
 }
 
+
+async function refreshUsagePage(force=false) {
+  if(curUsageTab==="magpie-usage")return ensureNativeMagpie("usage",force);
+  return refreshMagpieUsage(force);
+}
+function initUsagePage() {
+  const host=$("usage-page");if(!host)return;host.hidden=false;
+  setupMagpieLinks();bindMagpieUsageControls();
+  bindTrendInteraction();
+  if(BOOT.static && !BOOT.magpieUsagePeriods?.[curMagpiePeriod]?.ok){
+    curMagpiePeriod=["all","30d","7d","today"].find(period=>BOOT.magpieUsagePeriods?.[period]?.ok) || "today";
+    $("mp-period-filters")?.querySelectorAll("[data-mpp]").forEach(chip=>chip.classList.toggle("active",chip.dataset.mpp===curMagpiePeriod));
+  }
+  const nav=$("usage-subnav");
+  const select=tab=>{curUsageTab=tab;nav.querySelectorAll('[data-utab]').forEach(b=>b.classList.toggle('active',b.dataset.utab===tab));$("agent-view-usage").hidden=tab!=="usage";$("agent-view-magpie-usage").hidden=tab!=="magpie-usage";};
+  if(!nav.dataset.bound){nav.dataset.bound="1";nav.addEventListener('click',e=>{const btn=e.target.closest('[data-utab]');if(!btn)return;select(btn.dataset.utab);history.replaceState(null,'','#cat=usage&utab='+curUsageTab);refreshUsagePage();});
+    $("btn-refresh-usage").addEventListener('click',async e=>{const btn=e.currentTarget;if(btn.disabled)return;btn.disabled=true;try{await refreshUsagePage(true);}finally{btn.disabled=false;}});
+  }
+  const trendEl=$("mp-timeline-chart");
+  if(trendEl && !trendEl.dataset.ro && window.ResizeObserver){
+    trendEl.dataset.ro="1";
+    let lastW=0,raf=0;
+    new ResizeObserver(()=>{
+      const w=trendEl.clientWidth;
+      if(!w || w===lastW) return;
+      lastW=w;
+      if(raf) return;
+      raf=requestAnimationFrame(()=>{raf=0;if(curMagpieData?.ok)renderUsageTrend(curMagpieData);});
+    }).observe(trendEl);
+  }
+  select(curUsageTab);refreshUsagePage();
+}
+async function refreshHomeUsage() {
+  const target=$("hp-usage-kpis");if(!target || homeUsageBusy || Date.now()-homeUsageAt<15000)return;
+  homeUsageBusy=true;
+  try {const d=await loadMagpieUsage('today');homeUsageAt=Date.now();target.innerHTML=d?.ok?magpieKpisHtml(d):`<div class="gempty">${escHtml(t('mp_not_running'))}</div>`;}
+  finally {homeUsageBusy=false;}
+}
+
 async function refreshAgentsPage() {
   const el = $("agents-page");
   if (!el || el.hidden) return;
+  if (curAgentTab === "magpie-usage") { ensureNativeMagpie("usage",true); return; }
   if (curAgentTab === "usage") {
     await refreshMagpieUsage(true);
     return;
@@ -7102,6 +5774,20 @@ function setupMagpieLinks() {
 
 function bindAgentSubnav() {
   setupMagpieLinks();
+  const refreshButton = $("btn-refresh-quota");
+  if (refreshButton && !refreshButton.dataset.bound) {
+    refreshButton.dataset.bound="1";
+    refreshButton.addEventListener("click",async()=>{
+      if(refreshButton.disabled)return;
+      refreshButton.disabled=true;
+      refreshButton.classList.add("loading");
+      try {
+        if(curAgentTab==='runtimes' && !BOOT.static) await tlPost("/api/runtimes",{agent:"",action:"quota"});
+        await refreshAgentsPage();
+      } catch(e) { uiNotice(t("a_fail",{e:e.message})); }
+      finally { refreshButton.disabled=false;refreshButton.classList.remove("loading"); }
+    });
+  }
   const subnav = $("agent-subnav");
   if (subnav && !subnav.dataset.bound) {
     subnav.dataset.bound = "1";
@@ -7121,35 +5807,40 @@ function bindAgentSubnav() {
       const vUsage = $("agent-view-usage");
       const vRouting = $("agent-view-routing");
       const vProviders = $("agent-view-providers");
+      const vNativeUsage = $("agent-view-magpie-usage");
+      if(vNativeUsage)vNativeUsage.hidden=tab!=="magpie-usage";
       if (vRuntimes) vRuntimes.hidden = (tab !== "runtimes");
       if (vUsage) vUsage.hidden = (tab !== "usage");
       if (vRouting) vRouting.hidden = (tab !== "routing");
       if (vProviders) vProviders.hidden = (tab !== "providers");
 
-      if (tab === "usage") {
+      if(tab === "magpie-usage") { ensureNativeMagpie("usage"); }
+      else if (tab === "usage") {
         await refreshMagpieUsage();
       } else if (tab === "routing") {
         await refreshMagpieRouting();
       } else if (tab === "providers") {
         await refreshMagpieProviders();
       } else if (tab === "runtimes") {
-        if (!rtCache) {
-          const cards = $("agent-cards-container");
-          if (cards) cards.innerHTML = mobileSkelDiv(3);
-          try { renderRuntimes(await loadRuntimes()); } catch (e) {
-            if (cards) cards.innerHTML = esHtml("cpu", t("a_fail", { e: escHtml(e.message) }));
-          }
+        const cards = $("agent-cards-container");
+        if (cards && !rtCache) cards.innerHTML = mobileSkelDiv(3);
+        try { renderRuntimes(await loadRuntimes()); } catch (e) {
+          if (cards) cards.innerHTML = esHtml("cpu", t("a_fail", { e: escHtml(e.message) }));
         }
       }
     });
     const hashQ = new URLSearchParams(location.hash.replace(/^#/, ""));
-    const initTab = hashQ.get("atab") || "routing";
-    if (["routing", "usage", "providers", "runtimes"].includes(initTab)) {
+    const initTab = hashQ.get("atab") || curAgentTab;
+    if (["routing", "providers", "runtimes"].includes(initTab)) {
       const targetBtn = subnav.querySelector(`[data-atab="${initTab}"]`);
       if (targetBtn) targetBtn.click();
     }
   }
 
+  bindMagpieUsageControls();
+}
+
+function bindMagpieUsageControls() {
   const mpFilters = $("mp-period-filters");
   if (mpFilters && !mpFilters.dataset.bound) {
     mpFilters.dataset.bound = "1";
@@ -7172,49 +5863,10 @@ function bindAgentSubnav() {
     });
   }
 
-  const btnMode = $("mp-btn-mode");
-  if (btnMode && !btnMode.dataset.bound) {
-    btnMode.dataset.bound = "1";
-    btnMode.classList.toggle("active", curQuotaMode === "remain");
-    btnMode.addEventListener("click", () => {
-      curQuotaMode = (curQuotaMode === "remain" ? "used" : "remain");
-      const lbl = $("mp-mode-label");
-      if (lbl) lbl.textContent = curQuotaMode === "remain" ? t("mp_view_mode_remain") : t("mp_view_mode_used");
-      btnMode.classList.toggle("active", curQuotaMode === "remain");
-      if (curMagpieData && curMagpieData.quotas) {
-        renderMagpieQuotas(curMagpieData.quotas, $("mp-quota-grid"));
-      }
-    });
-  }
-
-  const quotaGrid = $("mp-quota-grid");
-  if (quotaGrid && !quotaGrid.dataset.bound) {
-    quotaGrid.dataset.bound = "1";
-    quotaGrid.addEventListener("click", (e) => {
-      const btn = e.target.closest(".mp-expand-btn");
-      if (!btn || !btn.dataset.target) return;
-      const target = $(btn.dataset.target);
-      if (!target) return;
-      const isHidden = target.hidden;
-      target.hidden = !isHidden;
-      const count = target.querySelectorAll(".mp-account-row").length;
-      btn.textContent = isHidden ? t("mp_collapse_accounts") : t("mp_expand_accounts", { n: count });
-    });
-  }
 }
 
 function bindAgentHubEvents(el, d) {
   bindAgentSubnav();
-
-  const btnQuota = $("btn-refresh-quota");
-  if (btnQuota && !btnQuota.dataset.bound) {
-    btnQuota.dataset.bound = "1";
-    btnQuota.addEventListener("click", async () => {
-      btnQuota.classList.add("loading");
-      await tlPost("/api/runtimes", { agent: "", action: "quota" });
-      setTimeout(refreshAgentsPage, 1000);
-    });
-  }
 
   const filterWrap = $("agent-filters");
   if (filterWrap && !filterWrap.dataset.bound) {
@@ -7251,7 +5903,7 @@ function bindAgentHubEvents(el, d) {
     if (c.dataset.bound) return;
     c.dataset.bound = "1";
     c.addEventListener("click", () => {
-      if (typeof setPage !== "undefined" && isMobile()) setPage(2);
+      if (typeof setPage !== "undefined" && isMobile()) openActivityTasks();
       else setCat("tmux");
     });
   });
@@ -7469,7 +6121,8 @@ async function initAgentsPage() {
   }
   if (agentsInit) { refreshAgentsPage(); return; }
   agentsInit = true;
-  if (curAgentTab === "routing") {
+  if(curAgentTab === "magpie-usage") { ensureNativeMagpie("usage"); }
+  else if (curAgentTab === "routing") {
     refreshMagpieRouting().catch(() => {});
   } else if (curAgentTab === "usage") {
     refreshMagpieUsage().catch(() => {});
@@ -8073,10 +6726,27 @@ document.addEventListener("click", async (e) => {
     + resRows
     + `<span class="k">${t("th_cmd")}</span><span class="v">${esc(d.cmd || "—")}</span>`
     + `<span class="k">${t("th_cwd")}</span><span class="v">${esc(d.cwd || "—")}</span></div>`;
+  const ok = $("ui-ok");
+  if (ok) ok.hidden = true;
   cancel.textContent = t("m_close");
   modal.hidden = false;
-  const onClose = () => { cancel.textContent = t("m_cancel"); };
-  cancel.addEventListener("click", onClose, { once: true });
+  document.body.classList.add("modal-open");
+  const close = () => {
+    modal.hidden = true;
+    document.body.classList.remove("modal-open");
+    if (ok) ok.hidden = false;
+    cancel.textContent = t("m_cancel");
+    cancel.removeEventListener("click", close);
+    modal.removeEventListener("click", outside);
+    document.removeEventListener("keydown", key);
+    b.focus();
+  };
+  const outside = e => { if (e.target === modal) close(); };
+  const key = e => { if (e.key === "Escape") close(); };
+  cancel.addEventListener("click", close);
+  modal.addEventListener("click", outside);
+  document.addEventListener("keydown", key);
+  cancel.focus();
 });
 
 // --- 长按(500ms)复制 ---
@@ -8108,7 +6778,7 @@ if (TOUCH) document.addEventListener("touchend", (e) => {
   const now = Date.now();
   if (now - lastTap < 300 && stat === lastTapEl) {
     lastTap = 0;
-    if (stat.dataset.k === "load") { setPage(2); haptic(10); }
+    if (stat.dataset.k === "load") { openActivityTasks(); haptic(10); }
   } else { lastTap = now; lastTapEl = stat; }
 }, { passive: true });
 
@@ -8117,6 +6787,49 @@ if (TOUCH) document.addEventListener("touchend", (e) => {
 
 // --- 负载/CPU 折线图(最近 24 采样存 localStorage, 捏合调时间窗) ---
 const chart = $("chart");
+let staticChartOffset = 0;
+let chartReplayTimer = null;
+const chartReplayMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+function syncStaticChartReplay() {
+  if (BOOT.static && chartVisible && !document.hidden && !chartReplayMotionQuery.matches && chartData().length > chartWin) {
+    if (!chartReplayTimer) {
+      chartReplayTimer = setInterval(() => {
+        const maxOffset = chartData().length - chartWin;
+        staticChartOffset = staticChartOffset >= maxOffset ? 0 : staticChartOffset + 1;
+        drawChart();
+      }, 1000);
+    }
+  } else if (chartReplayTimer) {
+    clearInterval(chartReplayTimer);
+    chartReplayTimer = null;
+  }
+}
+let chartVisible = false;
+let chartSampleTimer = null;
+let chartSampleInFlight = false;
+async function updateChartSample() {
+  if (!chartVisible || document.hidden || BOOT.static || chartSampleInFlight) return;
+  chartSampleInFlight = true;
+  try {
+    const r = await fetch("/api/sys/chart", { cache: "no-store" });
+    if (r.ok) chartSample(await r.json());
+  } catch (e) {
+    // Keep the last real samples visible; the next one-second tick retries.
+  } finally {
+    chartSampleInFlight = false;
+  }
+}
+function syncChartSampling() {
+  if (chartVisible && !document.hidden && !BOOT.static) {
+    if (!chartSampleTimer) {
+      updateChartSample();
+      chartSampleTimer = setInterval(updateChartSample, 1000);
+    }
+  } else if (chartSampleTimer) {
+    clearInterval(chartSampleTimer);
+    chartSampleTimer = null;
+  }
+}
 function chartData() {
   if (BOOT.static && Array.isArray(BOOT.chartData)) return BOOT.chartData;
   try { return JSON.parse(localStorage.getItem("svc-chart") || "[]"); }
@@ -8124,19 +6837,17 @@ function chartData() {
 }
 function chartSave(arr) { try { localStorage.setItem("svc-chart", JSON.stringify(arr)); } catch (e) {} }
 function chartSample(s) {
-  if (!chart) return;
-  if (BOOT.static) { drawChart(); return; }
+  if (!chart || BOOT.static || !Number.isFinite(s.cpu_usage)) return;
   const arr = chartData();
-  const now = Date.now();
   const m = s.mem || {};
-  arr.push({ t: now, load: (s.loadavg || [null])[0] ?? (s.loadavg || [])[2] ?? null, cpu: s.cpu_usage,
-             mem: m.percent ?? null, swap: m.swap_percent ?? null });
+  arr.push({ t: Date.now(), load: (s.loadavg || [null])[0] ?? (s.loadavg || [])[2] ?? null,
+             cpu: s.cpu_usage, mem: m.percent ?? null, swap: m.swap_percent ?? null });
   while (arr.length > 24) arr.shift();
   chartSave(arr);
   drawChart();
 }
 let chartWin = 24;
-function drawChart() {
+function drawChart(now = performance.now()) {
   if (!chart) return;
   const rect = chart.getBoundingClientRect();
   const w = Math.round(rect.width || chart.clientWidth);
@@ -8166,7 +6877,10 @@ function drawChart() {
   if (emptyEl) emptyEl.style.display = "none";
   if (winEl) winEl.textContent = t("chart_win", { n: Math.min(chartWin, all.length) });
 
-  const data = all.length === 1 ? [all[0], all[0]] : all.slice(-chartWin);
+  const maxStaticOffset = Math.max(0, all.length - chartWin);
+  if (staticChartOffset > maxStaticOffset) staticChartOffset = 0;
+  const data = all.length === 1 ? [all[0], all[0]]
+    : BOOT.static ? all.slice(staticChartOffset, staticChartOffset + chartWin) : all.slice(-chartWin);
   const maxL = Math.max(2, ...data.map(d => d.load || 0));
   // 采样点不足时从右侧向前排布，防止少量点生硬拉伸横跨整屏
   const step = (w - 24) / Math.max(chartWin - 1, 1);
@@ -8181,6 +6895,7 @@ function drawChart() {
   ctx.strokeStyle = CH.grid; ctx.lineWidth = 1;
   [0.25, 0.5, 0.75].forEach(f => { ctx.beginPath(); ctx.moveTo(0, h * f); ctx.lineTo(w, h * f); ctx.stroke(); });
 
+  // 实际系统曲线只使用真实采样；新点到来时 24 点窗口从右向左推进。
   const drawLine = (color, width, getY) => {
     ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath();
     data.forEach((d, i) => { const y = getY(d); i ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); });
@@ -8206,11 +6921,10 @@ function drawChart() {
   // 图例(现代无衬线体防宽体字畸变)
   ctx.font = "600 11px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'SF Pro Text', sans-serif";
   const lastD = data[data.length - 1];
-  ctx.fillStyle = CH.cpu; ctx.fillText("CPU " + Math.round(lastD.cpu || 0) + "%", 8, 16);
-  ctx.fillStyle = CH.mem; ctx.fillText("mem " + Math.round(lastD.mem || 0) + "%", 8, 32);
-  ctx.fillStyle = CH.swap; ctx.fillText("swap " + Math.round(lastD.swap || 0) + "%", 8, 48);
-  // load 标签也放左侧第四行: 放右上角会压在采样点不足时靠右聚拢的负载点上
-  ctx.fillStyle = CH.load; ctx.fillText("load " + maxL.toFixed(1), 8, 64);
+  ctx.fillStyle = CH.cpu; ctx.fillText("CPU " + Number(lastD.cpu || 0).toFixed(1) + "%", 8, 16);
+  ctx.fillStyle = CH.mem; ctx.fillText("mem " + Number(lastD.mem || 0).toFixed(1) + "%", 8, 32);
+  ctx.fillStyle = CH.swap; ctx.fillText("swap " + Number(lastD.swap || 0).toFixed(1) + "%", 8, 48);
+  ctx.fillStyle = CH.load; ctx.fillText("load " + Number(lastD.load || 0).toFixed(1), 8, 64);
 }
 if (chart) {
   window.addEventListener("resize", () => requestAnimationFrame(drawChart));
@@ -8225,6 +6939,23 @@ if (chart) {
     const wrap = $("chart-wrap");
     if (wrap) ro.observe(wrap);
   }
+  if (window.IntersectionObserver) {
+    const chartObserver = new IntersectionObserver(entries => {
+      const visible = entries.some(entry => entry.isIntersecting);
+      if (visible !== chartVisible) {
+        chartVisible = visible;
+        syncChartSampling();
+        syncStaticChartReplay();
+      }
+    });
+    chartObserver.observe(chart);
+  } else {
+    chartVisible = true;
+    syncChartSampling();
+    syncStaticChartReplay();
+  }
+  chartReplayMotionQuery.addEventListener("change", syncStaticChartReplay);
+  document.addEventListener("visibilitychange", () => { syncChartSampling(); syncStaticChartReplay(); });
   requestAnimationFrame(drawChart);
   setTimeout(drawChart, 150);
   // 捏合调整时间窗: 两指距离变化 → chartWin 4..24
@@ -8618,7 +7349,7 @@ async function cronLoad() {
   const body = $("tl-cron-body");
   if (!body) return;
   try {
-    const d = await tlGet("/api/tasks?lang=" + encodeURIComponent(LANG));
+    const d = BOOT.static ? (BOOT.tasksData || { tasks: [] }) : await tlGet("/api/tasks?lang=" + encodeURIComponent(LANG));
     const ts = d.tasks || [];
     const cnt = $("cron-count");
     if (cnt) cnt.textContent = ts.length ? t("t_total", { n: ts.length }) : "";
@@ -8663,21 +7394,23 @@ function initToolsPage() {
 
 // --- 桌面端分类条(右上角 #catbar): 概览/活动/Tmux/Agent/服务; 移动端隐藏(底部页签) ---
 const CATS = [
-  ["home", "tab_home"], ["activity", "tab_activity"], ["tmux", "nav_tasks"],
-  ["agent", "tab_agent"], ["svc", "tab_svc"],
+  ["home", "tab_home"], ["activity", "tab_activity"],
+  ["agent", "tab_agent"], ["usage", "tab_usage"], ["svc", "tab_svc"],
 ];
 const CAT_SELS = {
-  home: ["#sysbar", "#chart-wrap", "#hp-vms-grid", "#hp-portal-grid", "#toolchips"],
+  home: ["#hp-usage", "#hp-github", "#sysbar", "#chart-wrap", "#hp-vms-grid", "#hp-portal-grid", "#toolchips"],
   activity: ["#activity-page"],
   tmux: ["#tmux-panel"],
   goal: ["#tmux-panel"],
   agent: ["#agents-page"],
+  usage: ["#usage-page"],
   manage: ["#agents-page"],
   svc: ["#svc-head", "#svc-subnav", "#filters", "#network-page", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
   network: ["#svc-head", "#svc-subnav", "#filters", "#network-page", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
 };
 var curCat = "all";
 function setCat(c, save) {
+  if(c === "tmux" || c === "goal") { prState().tab="tasks"; c="activity"; }
   if (c === "network") {
     filter = "tailscale";
     c = "svc";
@@ -8687,7 +7420,7 @@ function setCat(c, save) {
   document.querySelectorAll("#catbar .cat").forEach(b => b.classList.toggle("active", b.dataset.cat === c));
   const keep = new Set((CAT_SELS[c] || []).map(s => document.querySelector(s)).filter(Boolean));
   document.querySelectorAll("#pages > *").forEach(el => el.classList.toggle("cat-off", !keep.has(el)));
-  if (c === "home") requestAnimationFrame(drawChart);
+  if (c === "home") { requestAnimationFrame(drawChart); refreshHomeUsage(); refreshGithubHeatmap(); }
   if (c === "activity") {
     const ap = $("activity-page");
     if (ap) ap.hidden = false;
@@ -8699,12 +7432,13 @@ function setCat(c, save) {
     tmuxInitSubnav();
     renderTmuxPage();
   }
+  if (c === "usage") initUsagePage();
   if (c === "svc") {
     const lp = $("logpage"), cp = $("cron-panel");
     if (lp) lp.hidden = false;
     if (cp) cp.hidden = false;
     applyFilter();
-    initLogPage(); renderLogTimeline(); cronLoad();
+    loadSvcSubview();
   }
   if (c === "agent" || c === "manage") {
     const ap = $("agents-page");
@@ -8724,15 +7458,25 @@ function catFromHash() {
   const m = location.hash.match(/^#cat=([a-z]+)/);
   let c = m && m[1] ? m[1] : null;
   if (c === "all") c = "home";
-  if (c === "goal") c = "tmux";
+  if (c === "goal" || c === "tmux") { prState().tab="tasks"; c="activity"; }
   if (c === "log") c = "svc";   // 旧 #cat=log 现落在服务页(日志迁入)
   if (c === "network") { filter = "tailscale"; c = "svc"; }
   if (c === "manage" || c === "tools") c = "agent";
+  const query=new URLSearchParams(location.hash.slice(1));
+  if(c==="agent" && ["usage","magpie-usage"].includes(query.get("atab"))){curUsageTab=query.get("atab");c="usage";}
+  if(c==="usage" && ["usage","magpie-usage"].includes(query.get("utab")))curUsageTab=query.get("utab");
+  const subtab=query.get("tab");
+  if(c === "activity" && ["feed","prs","tasks"].includes(subtab))prState().tab=subtab;
   return CATS.some(x => x[0] === c) ? c : null;
 }
 window.addEventListener("hashchange", () => {   // 手改 hash/后退也跟随
   const c = catFromHash();
-  if (c && c !== curCat) setCat(c, false);
+  if (!c) return;
+  if (isMobile()) {
+    document.querySelectorAll(".cat-off").forEach(el => el.classList.remove("cat-off"));
+    const index = CATS.findIndex(x => x[0] === c);
+    if(index >= 0) setPage(index);
+  } else if (c !== curCat) setCat(c, false);
 });
 (function buildCatbar() {
   const bar = $("catbar");
@@ -8841,7 +7585,8 @@ if (BOOT.static) {
 }
 
 // --- 启动 ---
-regroupPages();          // 手机: 分组进 6 页; 桌面: 保持原序
+mountActivityTasks();
+regroupPages();          // Mobile: home / activity / agent / services
 if (isMobile()) {
   // 移动端也解析 #cat= 深链(书签/分享链接直达指定页; 无 hash 保持首页)
   const mCat = catFromHash();
@@ -8939,13 +7684,6 @@ function tmuxInitSubnav() {
     });
   }
 
-  // 绑定新建任务主按钮
-  const btnNew = $("btn-th-new-task") || $("btn-tmux-new-open");
-  if (btnNew && !btnNew.dataset.wired) {
-    btnNew.dataset.wired = "1";
-    btnNew.addEventListener("click", () => thNewTaskModal());
-  }
-
   // 绑定全量刷新按钮
   const btnRefresh = $("btn-th-refresh-all");
   if (btnRefresh && !btnRefresh.dataset.wired) {
@@ -8961,7 +7699,6 @@ function tmuxInitSubnav() {
     });
   }
 
-  thEnsureBase();
   thRenderTasks();
   thStartWatcher();
   thUpdateTmuxBadge();
@@ -8970,7 +7707,7 @@ function tmuxInitSubnav() {
 async function thUpdateTmuxBadge() {
   const b = $("n-ttab-sessions");
   if (!b) return;
-  const d = await thGet("/api/tmux").catch(() => null);
+  const d = BOOT.static ? BOOT.tmuxData : await thGet("/api/tmux").catch(() => null);
   if (d && d.sessions) {
     b.textContent = String(d.sessions.length);
   }
@@ -8986,12 +7723,7 @@ function thStartWatcher() {
     if (!pane || pane.offsetParent === null) return;
     TH.busy = true;
     try {
-      const d = await thGet("/api/th/issues?mode=all");
-      if (d.ok === false) return;
-      const sig = (d.issues || [])
-        .map(i => `${i.number}:${i.state}:${i.updatedAt}:${i.run ? i.run.state + i.run.id : ""}`)
-        .join(",");
-      if (sig && sig !== TH.sig) { TH.sig = sig; thRenderTasks(true); }
+      await thRenderTasks(true);
     } finally { TH.busy = false; }
   }, 45000);
 }
@@ -9060,1023 +7792,288 @@ function thFormatDuration(sec) {
   return `${h}小时${rm}分`;
 }
 
-/* ---------------- 任务列表：支持状态过滤与精简卡片 ---------------- */
-async function thRenderTasks(silent) {
-  const box = $("th-tasks"); if (!box) return;
+// chezmoi Issues replaces TaskHub dispatch in the task pane.
+async function thRenderTasks(silent = false) {
+  if (!$('th-tasks') || CI.busy) return;
+  CI.busy = true;
+  if (TH.timer) { clearInterval(TH.timer); TH.timer = null; }
+  try {
+    const data = BOOT.static ? BOOT.chezmoiIssues : await thGet('/api/chezmoi/issues');
+    if (data?.ok) CI.data = data;
+    else CI.data = CI.data ? {...CI.data, stale:true} : data;
+  } catch(e) { CI.data = CI.data ? {...CI.data, stale:true} : {ok:false}; }
+  finally { CI.busy = false; }
+  const signature = JSON.stringify(CI.data);
+  if (silent && signature === CI.signature) return;
+  CI.signature = signature;
+  ciRenderList();
+}
+function ciIssueKey(issue, index) { return BOOT.static ? index : issue.number; }
+function ciItems() {
+  return (CI.data?.items || []).map((i,index)=>({...i, key:ciIssueKey(i,index)}));
+}
+function ciFiltered() {
+  return ciItems().filter(i=>(CI.state==='ALL' || i.state===CI.state) && (!CI.label || i.labels?.includes(CI.label)))
+    .sort((a,b)=>CI.sort==='comments' ? (b.comments?.length||0)-(a.comments?.length||0) : String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+}
+function ciRenderList() {
+  const box=$('th-tasks'); if(!box)return;
+  $('tmux-panel')?.classList.add('ci-mode');
+  const data=CI.data || {}, items=ciItems(), filtered=ciFiltered();
+  const badge=$('n-ttab-tasks');if(badge)badge.textContent=items.filter(i=>i.state==='OPEN').length;
+  box.innerHTML=`<div class="ci-toolbar"><div class="filters">${['OPEN','CLOSED','ALL'].map(s=>`<button type="button" class="chip ${CI.state===s?'active':''}" data-ci-state="${s}">${escHtml(t('ci_'+s.toLowerCase()))} ${items.filter(i=>s==='ALL'||i.state===s).length}</button>`).join('')}</div>
+    ${BOOT.static?'':`<details class="ci-label-filter"><summary>${escHtml(t('ci_labels'))}${CI.label?' · '+escHtml(CI.label):''}</summary><div class="filters"><button type="button" class="chip" data-ci-label="">${escHtml(t('ci_all'))}</button>${[...new Set(items.flatMap(i=>i.labels||[]))].sort().map(l=>`<button type="button" class="chip ${CI.label===l?'active':''}" data-ci-label="${escAttr(l)}">${escHtml(l)}</button>`).join('')}</div></details>`}
+    <p class="page-hint">${!data.ok ? escHtml(t('ci_failed')) : `${data.stale?'⚠ ':''}${data.updated_at?escHtml(new Date(data.updated_at*1000).toLocaleString(LOCALE_TAG)):''}${data.stale?' · '+escHtml(t('ci_stale')):''}`}</p></div>
+    ${filtered.length?filtered.map(i=>`<button type="button" class="th-card th-row ci-row ${CI.selected===i.key?'selected':''}" data-ci-open="${i.key}"><div class="ci-meta"><span class="ci-status ${i.state==='CLOSED'?'closed':''}">${icon(i.state==='CLOSED'?'ok':'dot',12)} ${escHtml(t('ci_'+i.state.toLowerCase()))}</span>${BOOT.static?'':`<span>#${i.number}</span><time>${escHtml(new Date(i.updatedAt).toLocaleDateString(LOCALE_TAG))}</time>`}</div><div class="th-title">${escHtml(i.title)}</div>${!BOOT.static?`<div class="ci-row-foot"><span>${escHtml((i.labels||[]).join(' · '))}</span><span>${icon('doc',11)} ${i.comments?.length||0}</span></div>`:`<div class="th-excerpt">${escHtml(i.excerpt||'')}</div>`}</button>`).join(''):`<div class="gempty">${escHtml(t(data.ok?'ci_empty':'ci_failed'))}</div>`}`;
+  box.querySelectorAll('[data-ci-state]').forEach(b=>b.addEventListener('click',()=>{CI.state=b.dataset.ciState;CI.selected=null;ciRenderList();}));
+  box.querySelectorAll('[data-ci-label]').forEach(b=>b.addEventListener('click',()=>{CI.label=b.dataset.ciLabel;CI.selected=null;ciRenderList();}));
+  box.querySelectorAll('[data-ci-open]').forEach(b=>b.addEventListener('click',()=>{CI.selected=Number(b.dataset.ciOpen);CI.detailTab="body";ciRenderDetail();ciLayout();ciSetDetailTab("body");}));
+  if (!filtered.some(i=>i.key===CI.selected)) CI.selected=null;
+  if (CI.selected===null && matchMedia('(min-width:701px)').matches && filtered.length) CI.selected=filtered[0].key;
+  ciRenderDetail();ciLayout();thFitSplit();
+}
+function ciLayout() {
+  const mobile=matchMedia('(max-width:700px)').matches;
+  const list=$('th-tasks'),detail=$('th-detail');
+  if(list)list.hidden=mobile && CI.selected!==null;
+  if(detail)detail.hidden=mobile && CI.selected===null;
+  document.querySelectorAll('[data-ci-open]').forEach(b=>b.classList.toggle('selected',Number(b.dataset.ciOpen)===CI.selected));
+}
+window.addEventListener('resize',()=>{if(CI.data)ciLayout();});
+function ciSafeUrl(url) { return /^https:\/\/github\.com\//.test(url||'') ? escAttr(url) : '#'; }
+function ciInline(text) {
+  return escHtml(text).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+function ciMarkdown(text) {
+  let code=false;const html=[];
+  for(const line of String(text||'').split('\n')) {
+    if(/^\s*```/.test(line)){html.push(code?'</code></pre>':'<pre><code>');code=!code;continue;}
+    if(code){html.push(escHtml(line)+'\n');continue;}
+    const task=line.match(/^\s*[-*] \[([ xX])\] (.*)/);
+    if(task){html.push(`<div class="ci-check"><input type="checkbox" disabled ${task[1].trim()?'checked':''}> <span>${ciInline(task[2])}</span></div>`);continue;}
+    const heading=line.match(/^(#{1,6}) (.*)/);
+    if(heading){html.push(`<h3>${ciInline(heading[2])}</h3>`);continue;}
+    html.push(line?`<div class="ci-line">${ciInline(line)}</div>`:'<br>');
+  }
+  if(code)html.push('</code></pre>');return html.join('');
+}
+function ciRenderDetail() {
+  const detail=$('th-detail');if(!detail)return;
+  const i=ciItems().find(i=>i.key===CI.selected);
+  if(!i){detail.innerHTML=`<div class="gempty">${escHtml(t('ci_select'))}</div>`;return;}
+  const back=`<button type="button" class="th-btn ci-back" id="ci-back">${icon('back',13)} ${escHtml(t('ci_back'))}</button>`;
+  if(BOOT.static){detail.innerHTML=`${back}<h2>${escHtml(i.title)}</h2><p>${escHtml(i.excerpt||'')}</p><div class="gempty">${escHtml(t('ci_public'))}</div>`;}
+  else {
+    const comments=i.comments||[];
+    detail.innerHTML=`${back}<header class="th-head"><div class="ci-meta"><span class="ci-status ${i.state==='CLOSED'?'closed':''}">${escHtml(t('ci_'+i.state.toLowerCase()))}</span><span>#${i.number} · ${escHtml(i.author?.login||'')}</span><a href="${ciSafeUrl(i.url)}" target="_blank" rel="noopener">GitHub ↗</a></div><h2>${escHtml(i.title)}</h2><div class="ci-tags">${(i.labels||[]).map(l=>`<span class="chip">${escHtml(l)}</span>`).join('')}</div><p class="page-hint">${escHtml(t('ci_assignees'))}: ${escHtml((i.assignees||[]).join(', ')||'—')}${i.milestone?' · '+escHtml(i.milestone.title):''} · ${escHtml(new Date(i.updatedAt).toLocaleString(LOCALE_TAG))}${i.stateReason?' · '+escHtml(i.stateReason):''}</p><nav class="ci-detail-nav"><button type="button" class="th-btn" data-ci-jump="ci-body">${escHtml(t('ci_body'))}</button><button type="button" class="th-btn" data-ci-jump="ci-comments">${escHtml(t('ci_comments'))} (${comments.length})</button></nav></header>
+    <section class="th-sec" id="ci-body"><h3>${escHtml(t('ci_body'))}</h3><div class="th-prose ci-prose">${ciMarkdown(i.body||'—')}</div></section>
+    <section class="th-sec" id="ci-comments"><h3>${escHtml(t('ci_comments'))} (${comments.length})</h3>${comments.length?comments.map(c=>`<article class="ci-comment"><div class="ci-meta"><b>${escHtml(c.author?.login||'ghost')}</b><a href="${ciSafeUrl(c.url)}" target="_blank" rel="noopener">${escHtml(new Date(c.createdAt).toLocaleString(LOCALE_TAG))}</a></div><div class="th-prose ci-prose">${ciMarkdown(c.body)}</div></article>`).join(''):`<div class="gempty">${escHtml(t('ci_no_comments'))}</div>`}<a class="th-btn" href="${ciSafeUrl(i.url)}" target="_blank" rel="noopener">${escHtml(t('ci_github'))} ↗</a></section>`;
+  }
+  detail.querySelectorAll('[data-ci-jump]').forEach(b=>b.addEventListener('click',()=>ciSetDetailTab(b.dataset.ciJump === 'ci-comments' ? 'comments' : 'body')));
+  ciSetDetailTab(CI.detailTab, false);
+  $('ci-back')?.addEventListener('click',()=>{CI.selected=null;ciLayout();});
+}
+
+function ciSetDetailTab(tab, scroll = true) {
+  CI.detailTab=tab;
+  for(const name of ['body','comments']) {
+    const section=$('ci-'+name);
+    if(section){section.hidden=name!==tab;section.style.display=name===tab?'':'none';}
+  }
+  document.querySelectorAll('[data-ci-jump]').forEach(b=>b.classList.toggle('active',b.dataset.ciJump==='ci-'+tab));
+  if(isMobile() && page===1) {
+    requestAnimationFrame(()=>{
+      applyPagesX(false);
+      if(scroll){const main=document.querySelector('main'),head=$('th-detail');if(main && head)main.scrollTop+=head.getBoundingClientRect().top-main.getBoundingClientRect().top-12;}
+    });
+  } else if(scroll) {
+    const column=document.querySelector('.th-col-detail');if(column)column.scrollTop=0;
+  }
+}
+
+// One service subview stays selected across refreshes and viewport changes.
+function syncSvcView() {
+  const bar = $("svc-subnav");
+  bar?.querySelectorAll("[data-sv]").forEach(b => {
+    const active = b.dataset.sv === svcView.tab;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-selected", String(active));
+  });
+  const toolbar = $("filters");
+  if (toolbar) { toolbar.hidden = svcView.tab !== "svc"; toolbar.style.display = toolbar.hidden ? "none" : ""; }
+  const modes = $("svc-manage-tools");
+  if (modes) modes.hidden = svcView.tab !== "manage";
+  document.querySelectorAll("[data-svc-sort]").forEach(b=>b.classList.toggle("active",b.dataset.svcSort === svcView.sort));
+}
+function systemLogPriorityName(priority) {
+  return ["syslog_emergency","syslog_alert","syslog_critical","syslog_error","syslog_warning","syslog_notice","syslog_info","syslog_debug"][priority] || "syslog_info";
+}
+async function loadSystemLog() {
+  const body = $("logbody");
+  if (!body || BOOT.static || svcView.systemLogBusy) return;
+  svcView.systemLogBusy = true;
+  try {
+    const priority = $("syslog-priority")?.value || "";
+    const data = await tlGet(`/api/system-log?lines=200${priority ? `&priority=${encodeURIComponent(priority)}` : ""}`);
+    if (!data?.ok) throw new Error(data?.msg || "journalctl failed");
+    if (!data.entries?.length) { body.innerHTML = `<div class="gempty">${t("syslog_empty")}</div>`; return; }
+    body.innerHTML = `<div class="syslog-list">${data.entries.map(e => {
+      const n = Math.max(0, Math.min(7, Number(e.priority) || 0));
+      const when = e.ts ? new Date(e.ts * 1000).toLocaleString(LOCALE_TAG) : "—";
+      return `<article class="syslog-row p${n}"><div class="syslog-meta"><time>${escHtml(when)}</time><span class="syslog-priority p${n}">${escHtml(t(systemLogPriorityName(n)))}</span><span class="syslog-unit">${escHtml(e.unit || "system")}</span></div><pre>${escHtml(e.message || "")}</pre></article>`;
+    }).join("")}</div>`;
+  } catch (error) {
+    body.innerHTML = `<div class="gempty">${escHtml(t("syslog_unavailable", { msg: error.message || error }))}</div>`;
+  } finally { svcView.systemLogBusy = false; }
+}
+function initSystemLogPage() {
+  const lp = $("logpage");
+  if (lp) { lp.hidden = false; lp.style.display = ""; }
+  const body = $("logbody");
   if (BOOT.static) {
-    const items = (BOOT.thTasks && BOOT.thTasks.items) || [];
-    box.innerHTML = items.length ? `
-      <div class="th-group">
-        <div class="th-group-head"><span class="th-group-title">${escHtml(t("th_open"))}</span>
-          <span class="th-group-n">${items.length}</span></div>
-        <div class="th-cards">${items.map((it, i) => `
-          <div class="th-card th-row th-static-row" data-th-static="${i}" role="button" tabindex="0">
-            <div class="th-title">${escHtml(it.title)}</div>
-            ${it.excerpt ? `<div class="th-excerpt">${escHtml(it.excerpt)}</div>` : ""}
-          </div>`).join("")}</div>
-      </div>` : `<div class="gempty">${escHtml(t("th_empty"))}</div>`;
-    box.querySelectorAll("[data-th-static]").forEach(el => el.addEventListener("click", () => {
-      box.querySelectorAll(".th-row").forEach(x => x.classList.toggle("selected", x === el));
-      thStaticDetail(items[Number(el.dataset.thStatic)] || {});
-    }));
-    if (items.length && window.matchMedia("(min-width: 701px)").matches) {
-      box.querySelector(".th-row")?.classList.add("selected");
-      thStaticDetail(items[0]);
-    }
+    if (body && !body.dataset.staticNotice) { body.innerHTML = `<div class="gempty">${t("syslog_static")}</div>`; body.dataset.staticNotice = "1"; }
     return;
   }
-
-  const keep = silent ? TH.taskView : null;
-  const wide = window.matchMedia("(min-width: 701px)").matches;
-  box.hidden = false;
-  const det = $("th-detail");
-  if (det && !wide && !TH.taskView) det.hidden = true;
-  if (!TH.taskView) TH.taskView = null;
-  if (!TH.filter) TH.filter = "active";
-
-  box.innerHTML = `<div class="th-skeleton"><i></i><i></i><i></i></div>`;
-  const d = await thGet("/api/th/issues?mode=all");
-  if (d.ok === false) { box.innerHTML = `<div class="gempty t-red">${escHtml(d.msg || `无法读取任务`)}</div>`; return; }
-  const items = d.issues || [];
-  const running = items.filter(i => i.run && TH_ACTIVE.has(i.run.state));
-  const pending = items.filter(i => !i.run && i.state === "open");
-  const done = items.filter(i => !running.includes(i) && !pending.includes(i));
-
-  // 更新子导航角标
-  const badgeEl = $("n-ttab-tasks");
-  if (badgeEl) {
-    badgeEl.textContent = running.length ? `⚡${running.length}` : String(running.length + pending.length);
-  }
-
-  // 顶部筛选 Chips
-  const curF = TH.filter;
-  const filterBarHtml = `
-    <div class="th-filter-bar">
-      <span class="th-filter-chip${curF === 'active' ? ' active' : ''}" data-tf="active">
-        活跃任务 <span class="th-filter-count">${running.length + pending.length}</span>
-      </span>
-      <span class="th-filter-chip${curF === 'running' ? ' active' : ''}" data-tf="running">
-        ⚡ 运行中 <span class="th-filter-count">${running.length}</span>
-      </span>
-      <span class="th-filter-chip${curF === 'pending' ? ' active' : ''}" data-tf="pending">
-        待派发 <span class="th-filter-count">${pending.length}</span>
-      </span>
-      <span class="th-filter-chip${curF === 'done' ? ' active' : ''}" data-tf="done">
-        已完成 <span class="th-filter-count">${done.length}</span>
-      </span>
-      <span class="th-filter-chip${curF === 'all' ? ' active' : ''}" data-tf="all">
-        全部 <span class="th-filter-count">${items.length}</span>
-      </span>
-    </div>`;
-
-  const group = (key, title, list, open) => {
-    if (!list.length) return "";
-    return `
-      <section class="th-group">
-        <button class="th-group-head" type="button" data-th-group="${key}">
-          <span class="th-group-title">${escHtml(title)}</span>
-          <span class="th-group-n">${list.length}</span>
-          <span class="th-group-caret">${open ? `收起` : `展开`}</span>
-        </button>
-        <div class="th-cards" ${open ? "" : "hidden"}>${list.map(i => thTaskCard(i, key)).join("")}</div>
-      </section>`;
-  };
-
-  let groupsHtml = "";
-  if (curF === "active") {
-    groupsHtml += group("running", `正在跑`, running, true);
-    groupsHtml += group("pending", `待派发`, pending, true);
-    if (!running.length && !pending.length) {
-      groupsHtml += `<div class="gempty">暂无活跃任务 · 点上方「下发新任务」开始</div>`;
-    }
-  } else if (curF === "running") {
-    groupsHtml += group("running", `正在跑`, running, true);
-    if (!running.length) groupsHtml += `<div class="gempty">暂无正在运行的任务</div>`;
-  } else if (curF === "pending") {
-    groupsHtml += group("pending", `待派发`, pending, true);
-    if (!pending.length) groupsHtml += `<div class="gempty">暂无待派发任务</div>`;
-  } else if (curF === "done") {
-    groupsHtml += group("done", `已完成`, done, true);
-    if (!done.length) groupsHtml += `<div class="gempty">暂无已完成任务</div>`;
-  } else {
-    groupsHtml += group("running", `正在跑`, running, true);
-    groupsHtml += group("pending", `待派发`, pending, true);
-    groupsHtml += group("done", `已完成`, done, false);
-  }
-
-  box.innerHTML = filterBarHtml + groupsHtml;
-
-  // 绑定过滤器点击
-  box.querySelectorAll("[data-tf]").forEach(el => el.addEventListener("click", () => {
-    TH.filter = el.dataset.tf;
-    thRenderTasks();
-  }));
-
-  // 展开折叠
-  box.querySelectorAll("[data-th-group]").forEach(h => h.addEventListener("click", () => {
-    const cards = h.nextElementSibling; if (!cards) return;
-    cards.hidden = !cards.hidden;
-    h.querySelector(".th-group-caret").textContent = cards.hidden ? `展开` : `收起`;
-  }));
-
-  // 点击任务行
-  box.querySelectorAll("[data-th-open]").forEach(el => el.addEventListener("click", ev => {
-    ev.stopPropagation(); thOpenTask(Number(el.dataset.thOpen));
-  }));
-
-  if (wide && !TH.taskView) {
-    const first = running[0] || pending[0] || done[0];
-    if (first) thOpenTask(first.number, true);
-  } else if (keep && box.querySelector(`[data-th-open="${keep}"]`)) {
-    box.querySelectorAll(".th-row").forEach(el => el.classList.toggle("selected", Number(el.dataset.thOpen) === keep));
-  }
-
-  box.querySelectorAll("[data-th-act]").forEach(el => {
-    el.addEventListener("click", ev => {
-      ev.stopPropagation();
-      const n = Number(el.dataset.num), kind = el.dataset.thAct;
-      if (kind === "dispatch") thDispatchModal(n, { title: el.dataset.title || "" });
-      if (kind === "restore") thSetState(n, "open");
-      if (kind === "cancel") thCancel(el.dataset.run);
-      if (kind === "resume") thReply(el.dataset.run, n);
-    });
-  });
-
-  thFitSplit();
+  const priority = $("syslog-priority"), refresh = $("syslog-refresh");
+  if (priority && !priority.dataset.wired) { priority.dataset.wired = "1"; svcSelect(priority); priority.addEventListener("change", loadSystemLog); }
+  if (refresh && !refresh.dataset.wired) { refresh.dataset.wired = "1"; refresh.addEventListener("click", loadSystemLog); }
+  loadSystemLog();
+  if (!svcView.systemLogTimer) svcView.systemLogTimer = setInterval(() => { if (svcView.tab === "logs" && !$("logpage")?.hidden && !document.hidden) loadSystemLog(); }, 15000);
 }
-
-function thStaticDetail(it) {
-  const det = $("th-detail"); if (!det) return;
-  const line = w => `<div class="th-mask-line" style="width:${w}%"></div>`;
-  det.innerHTML = `
-    <header class="th-head">
-      <div class="th-head-line"><span class="th-badge">快照</span></div>
-      <h3 class="th-head-title">${escHtml(it.title || "")}</h3>
-    </header>
-    <div class="th-detail-body">
-      <div class="th-static-tag">${escHtml(t("th_static_note"))}</div>
-      <section class="th-sec">${line(34)}${line(68)}${line(52)}</section>
-      <section class="th-sec">
-        <div class="th-sec-head"><span class="th-sec-title">${escHtml(t("th_timeline"))}</span></div>
-        ${line(44)}${line(60)}${line(38)}
-      </section>
-      <section class="th-sec">
-        <div class="th-sec-head"><span class="th-sec-title">${escHtml(t("th_issue_body"))}</span></div>
-        ${line(92)}${line(86)}${line(74)}${line(90)}${line(58)}
-      </section>
-    </div>`;
+function loadSvcSubview() {
+  if (svcView.tab !== "logs" && svcView.systemLogTimer) { clearInterval(svcView.systemLogTimer); svcView.systemLogTimer = null; }
+  if (svcView.tab === "cron") cronLoad();
+  if (svcView.tab === "logs") initSystemLogPage();
 }
-
-function thTaskCard(it, kind) {
-  const run = it.run || null;
-  const state = run ? thStateLabel(run.state) : (it.state === "closed" ? `已完成` : `待派发`);
-  const pct = thPercent(run);
-  const excerpt = it.excerpt ? `<div class="th-excerpt" title="${escAttr(it.excerpt)}">${escHtml(it.excerpt)}</div>` : "";
-  const selected = TH.taskView === it.number ? " selected" : "";
-  const dotState = run ? (run.state || "") : (it.state === "closed" ? "done" : "pending");
-
-  const metaParts = [
-    `<b>#${it.number}</b>`,
-    run ? escHtml(thHostName(run)) : "",
-    run && run.stage ? escHtml(run.stage) : "",
-  ].filter(Boolean).join('<i class="th-dot"></i>');
-
-  const progress = (kind === "running" || (run && TH_ACTIVE.has(run.state)))
-    ? `<div class="th-progress"><i style="width:${Math.max(12, pct)}%"></i></div>` : "";
-
-  let actions = "";
-  if (kind === "running" && run) {
-    actions = `<div class="th-row-actions"><button class="th-btn th-btn-sm th-btn-danger" type="button" data-th-act="cancel" data-run="${escAttr(run.id)}">停止</button></div>`;
-  } else if (kind === "pending") {
-    actions = `<div class="th-row-actions"><button class="th-btn th-btn-sm th-btn-primary" type="button" data-th-act="dispatch" data-num="${it.number}" data-title="${escAttr(it.title || "")}">派发</button></div>`;
-  }
-
-  return `<div class="th-card th-row${selected}" data-th-open="${it.number}" role="button" tabindex="0">
-    <div class="th-row-head">
-      <span class="th-state"><i class="th-led th-led-${escHtml(dotState)}"></i>${escHtml(state)}</span>
-      <span class="th-row-id">${metaParts}</span>
-      <span class="th-row-time">${escHtml(thAgo(it.updatedAt))}</span>
-    </div>
-    <div class="th-title" title="${escAttr(it.title || "")}">${escHtml(it.title || "")}</div>
-    ${excerpt}
-    ${progress}
-    ${actions}
-  </div>`;
+function selectSvcView(want) {
+  svcView.tab = want === "watchdog" ? "manage" : want;
+  if (want === "network") filter = "tailscale";
+  else if (["manage", "watchdog"].includes(want)) filter = want;
+  else if (!["user","web","docker","system","paused","all"].includes(filter)) filter = "user";
+  applyFilter(); loadSvcSubview();
 }
-
-/* ---------------- 任务详情：全生命周期流水线 + 实时控制台 + 交互式回复 ---------------- */
-async function thOpenTask(number, keepScroll) {
-  const box = $("th-tasks"), det = $("th-detail");
-  if (!box || !det) return;
-  TH.taskView = number;
-  if (TH.timer) { clearInterval(TH.timer); TH.timer = null; }
-  const wide = window.matchMedia("(min-width: 701px)").matches;
-  box.hidden = !wide;
-  det.hidden = false;
-  if (!wide && !keepScroll) det.scrollIntoView({ block: "start" });
-  document.querySelectorAll("#th-tasks .th-row").forEach(el => el.classList.toggle("selected", Number(el.dataset.thOpen) === number));
-  det.innerHTML = `<div class="th-skeleton"><i></i><i></i></div>`;
-
-  const d = await thGet(`/api/th/task?number=${encodeURIComponent(number)}`);
-  if (d.ok === false) { det.innerHTML = `<div class="gempty t-red">${escHtml(d.msg || `无法读取任务`)}</div>`; return; }
-
-  const issue = d.issue || {}, runs = d.runs || [], latest = d.latest || null, events = d.events || [];
-  const activeRun = latest && TH_ACTIVE.has(latest.state);
-  const isPending = !activeRun && issue.state !== "closed";
-  const isClosed = issue.state === "closed" || (latest && !activeRun);
-  const stateKey = latest ? (latest.state || "") : (issue.state === "closed" ? "succeeded" : "pending");
-  const stateText = latest ? thStateLabel(latest.state) : (issue.state === "closed" ? `已完成` : `待派发`);
-
-  // 阶段流水线（仅在运行中或有实际执行时计算展示）
-  const steps = [
-    { key: "dispatch", label: `1. 调度派发` },
-    { key: "analyze",  label: `2. 需求分析` },
-    { key: "develop",  label: `3. 代码编写` },
-    { key: "test",     label: `4. 验证测试` },
-    { key: "done",     label: `5. 交付完成` }
-  ];
-
-  let curStepIdx = 0;
-  if (latest) {
-    if (latest.state === "succeeded") {
-      curStepIdx = 4;
-    } else if (latest.state === "failed" || latest.state === "cancelled" || latest.state === "lost") {
-      curStepIdx = Math.max(1, TH_STAGE_ORDER.indexOf(latest.stage || ""));
-      if (curStepIdx > 3) curStepIdx = 3;
-    } else {
-      const stg = latest.stage || "";
-      if (stg === "analyze" || stg === "plan") curStepIdx = 1;
-      else if (stg === "implement" || stg === "commit") curStepIdx = 2;
-      else if (stg === "test" || stg === "pr") curStepIdx = 3;
-      else if (stg === "done") curStepIdx = 4;
-      else curStepIdx = 2;
-    }
-  }
-
-  const stepperHtml = activeRun ? `
-    <div class="th-stepper">
-      ${steps.map((s, idx) => {
-        const isDone = (latest && latest.state === "succeeded") || idx < curStepIdx;
-        const isCurrent = activeRun && idx === curStepIdx;
-        const cls = isDone ? "is-done" : (isCurrent ? "is-current" : "");
-        const iconTxt = isDone ? "✓" : String(idx + 1);
-        return `
-          <div class="th-step-item ${cls}">
-            <div class="th-step-dot">${iconTxt}</div>
-            <div class="th-step-label">${escHtml(s.label)}</div>
-          </div>`;
-      }).join("")}
-    </div>` : "";
-
-  // 状态横幅
-  let statusBannerHtml = "";
-  if (activeRun) {
-    const durationTxt = latest && latest.duration ? thFormatDuration(latest.duration) : "";
-    const runMsg = (latest && latest.message) ? latest.message : `智能体正在运行中…`;
-    const isWaiting = latest && latest.state === "waiting_user";
-    statusBannerHtml = `
-      <div class="th-status-banner${isWaiting ? ' is-warn' : ''}">
-        <div class="th-status-msg">
-          ${isWaiting ? `⚠️ <b>等待反馈</b>：` : '⚡ '}
-          <span>${escHtml(runMsg)}</span>
-        </div>
-        <div class="th-status-meta">
-          ${latest && latest.agent ? `<span class="chip th-chip" style="margin-right:6px;">${escHtml(latest.agent)}</span>` : ''}
-          ${durationTxt ? `<span>⏱ ${durationTxt}</span>` : ''}
-        </div>
-      </div>`;
-  }
-
-  // 内联人机交互区（针对 waiting_user 或 运行中随时干预）
-  let inlineReplyHtml = "";
-  if (activeRun) {
-    const isWaiting = latest && latest.state === "waiting_user";
-    const phTxt = isWaiting ? `请输入回复内容...` : `例如：检查 models.py 并重新测试...`;
-    inlineReplyHtml = `
-      <div class="th-inline-reply">
-        <div class="th-inline-reply-head">
-          <span>${isWaiting ? `💬 智能体等待你的回复：` : `💬 向运行中的智能体追加指令：`}</span>
-          <span style="font-size:10.5px;color:var(--text-ghost);">按回车直接发送</span>
-        </div>
-        <div class="th-inline-reply-box">
-          <input type="text" class="th-reply-input" id="th-inline-input" placeholder="${phTxt}" />
-          <button class="th-btn th-btn-primary" type="button" id="th-inline-send">发送</button>
-        </div>
-      </div>`;
-  }
-
-  // 待派发场景下的「内置快捷派发面板」
-  let quickDispatchHtml = "";
-  if (isPending) {
-    const hosts = ((TH.hosts && TH.hosts.hosts) || []).filter(h => h.online !== false);
-    const defHost = (TH.hosts && TH.hosts.default) || (hosts[0] || {}).id || "";
-    const repos = (TH.health && TH.health.repos) || ["iamcheyan/svc-dashboard", "iamcheyan/chezmoi", "iamcheyan/taskhub"];
-    quickDispatchHtml = `
-      <div class="th-quick-dispatch">
-        <div class="th-qd-head">
-          <span class="th-qd-title">🚀 准备派发该任务</span>
-          <span class="th-qd-hint">默认分派给 Hermes 并创建专属 Telegram 话题实时汇报</span>
-        </div>
-        <div class="th-qd-row">
-          <span class="th-qd-label">智能体</span>
-          <div class="th-qd-opts" id="th-qd-agents">
-            <button class="th-qd-opt is-on" type="button" data-qd-agent="hermes">⚡ hermes (推荐·全流程 & TG话题)</button>
-            <button class="th-qd-opt" type="button" data-qd-agent="pi">pi (敏捷修改)</button>
-            <button class="th-qd-opt" type="button" data-qd-agent="omp">omp (通用开发)</button>
-          </div>
-        </div>
-        <div class="th-qd-row">
-          <span class="th-qd-label">代码仓库</span>
-          <div class="th-qd-opts" id="th-qd-repos">
-            <button class="th-qd-opt is-on" type="button" data-qd-repo="">自动推断</button>
-            ${repos.map(r => `
-              <button class="th-qd-opt" type="button" data-qd-repo="${escAttr(r)}">
-                <span>${escHtml(r.split("/").pop())}</span>
-              </button>`).join("")}
-          </div>
-        </div>
-        <div class="th-qd-row">
-          <span class="th-qd-label">机器</span>
-          <div class="th-qd-opts" id="th-qd-hosts">
-            ${hosts.map((h, i) => `
-              <button class="th-qd-opt${h.id === defHost || (!defHost && i === 0) ? ' is-on' : ''}" type="button" data-qd-host="${escAttr(h.id)}">
-                <i class="th-opt-dot"></i> <span>${escHtml(h.label || h.id)}</span>
-              </button>`).join("") || `<span class="th-field-none">本地</span>`}
-          </div>
-        </div>
-        <div class="th-qd-foot">
-          <button class="th-btn th-btn-primary th-qd-launch" type="button" id="btn-qd-launch">⚡ 开始执行任务</button>
-        </div>
-      </div>`;
-  }
-
-  // 顶部操作动作组
-  const actions = [
-    activeRun
-      ? `<button class="th-btn th-btn-accent" type="button" data-th-act="wake" data-sess="${escAttr(latest ? latest.tmux_session : "")}">⚡ 唤醒推进</button>` : "",
-    activeRun
-      ? `<button class="th-btn th-btn-danger" type="button" data-th-act="cancel" data-run="${escAttr(latest ? latest.id : "")}" data-num="${issue.number}">停止</button>` : "",
-    isClosed
-      ? `<button class="th-btn th-btn-primary" type="button" data-th-act="dispatch" data-num="${issue.number}" data-title="${escAttr(issue.title || "")}">重新派发</button>` : "",
-    issue.state === "closed"
-      ? `<button class="th-btn" type="button" data-th-act="restore" data-num="${issue.number}">恢复打开</button>`
-      : `<button class="th-btn" type="button" data-th-act="close" data-num="${issue.number}">关闭任务</button>`,
-  ].filter(Boolean).join("");
-
-  const metaBits = [
-    (latest && latest.target_repo) || d.repo || "",
-    latest ? thHostName(latest) : "",
-    latest && latest.branch ? latest.branch : "",
-    latest && latest.notify_thread ? `TG话题 #${latest.notify_thread}` : ""
-  ].filter(Boolean).map(x => `<span>${escHtml(x)}</span>`).join('<i class="th-head-sep"></i>');
-
-  // 多 Tab 控制区（自适应默认值）
-  if (!TH.detailTab || isPending) {
-    TH.detailTab = isPending ? "issue" : "console";
-  }
-  const curDTab = TH.detailTab;
-
-  det.innerHTML = `
-    <div class="th-head">
-      <div class="th-head-line">
-        <button class="th-icon-btn th-back" type="button" data-th-back="1" aria-label="Back">←</button>
-        <span class="th-badge is-${escAttr(stateKey)}">${escHtml(stateText)}</span>
-        <span class="th-head-num">#${escHtml(String(issue.number || ""))}</span>
-        ${metaBits ? `<span class="th-head-meta"><i class="th-head-sep"></i>${metaBits}</span>` : ""}
-        <a class="th-icon-btn th-head-link" href="${escAttr(issue.url || "#")}" target="_blank" rel="noopener" title="GitHub" aria-label="GitHub">↗</a>
-      </div>
-      <h3 class="th-head-title">${escHtml(issue.title || "")}</h3>
-      <div class="th-head-actions">${actions}</div>
-    </div>
-    <div class="th-detail-body">
-      ${stepperHtml}
-      ${statusBannerHtml}
-      ${inlineReplyHtml}
-      ${quickDispatchHtml}
-
-      <div class="th-detail-tabs">
-        ${activeRun || (latest && latest.tmux_session) ? `
-          <button class="th-dtab-btn${curDTab === 'console' ? ' active' : ''}" type="button" data-dtab="console">💻 实时终端控制台</button>` : ''}
-        <button class="th-dtab-btn${curDTab === 'issue' ? ' active' : ''}" type="button" data-dtab="issue">📝 任务内容说明</button>
-        <button class="th-dtab-btn${curDTab === 'timeline' ? ' active' : ''}" type="button" data-dtab="timeline">📋 执行时间线 (${events.length})</button>
-        ${runs.length > 1 ? `<button class="th-dtab-btn${curDTab === 'runs' ? ' active' : ''}" type="button" data-dtab="runs">📜 历史执行 (${runs.length})</button>` : ''}
-      </div>
-
-      ${activeRun || (latest && latest.tmux_session) ? `
-      <div id="th-tab-console-pane" ${curDTab === 'console' ? '' : 'hidden'}>
-        <div class="th-term-window">
-          <div class="th-term-header">
-            <span id="th-term-title">会话：${escHtml(latest && latest.tmux_session ? latest.tmux_session : "none")}</span>
-            <div class="th-term-actions">
-              <button class="th-term-btn" type="button" id="btn-term-autoscroll" title="Auto Scroll">滚屏: 开</button>
-              <button class="th-term-btn" type="button" id="btn-term-ctrl-c" title="Ctrl+C">Ctrl+C</button>
-              <button class="th-term-btn" type="button" id="btn-term-enter" title="Enter">Enter ↵</button>
-              <button class="th-term-btn" type="button" id="btn-term-wake" title="Wake">⚡ 唤醒</button>
-              <button class="th-term-btn" type="button" id="btn-term-copy" title="Copy">复制</button>
-            </div>
-          </div>
-          <pre class="th-term-content" id="th-term-output">${escHtml(t("th_loading"))}</pre>
-        </div>
-      </div>` : ''}
-
-      <div id="th-tab-issue-pane" ${curDTab === 'issue' ? '' : 'hidden'}>
-        <div class="th-prose">${escHtml(issue.body || `（无正文）`)}</div>
-      </div>
-
-      <div id="th-tab-timeline-pane" ${curDTab === 'timeline' ? '' : 'hidden'}>
-        <ol class="th-timeline">
-          ${events.length ? events.map(e => `
-            <li class="th-ev th-ev-${escHtml(e.kind || "")}">
-              <span class="th-ev-time">${new Date((e.at || 0) * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-              <span class="th-ev-kind">${escHtml(e.kind || "")}</span>
-              <span class="th-ev-msg">${escHtml((e.message || "").slice(0, 300))}</span>
-            </li>`).join("") : `<li class="th-ev th-ev-empty">暂无事件记录</li>`}
-        </ol>
-      </div>
-
-      ${runs.length > 1 ? `
-      <div id="th-tab-runs-pane" ${curDTab === 'runs' ? '' : 'hidden'}>
-        <div class="th-runs">${runs.map(r => `
-          <div class="th-run-row" data-th-runlog="${escAttr(r.id)}" role="button" tabindex="0">
-            <span class="th-run-agent">${escHtml(r.agent)}</span>
-            <span class="th-run-state">${escHtml(thStateLabel(r.state))}</span>
-            <span class="th-run-stage">${escHtml(r.stage || "—")}</span>
-            <span class="th-run-time">${escHtml(thAgo(new Date((r.started_at || r.created_at) * 1000).toISOString()))}</span>
-            <span class="th-run-log-link">查看日志</span>
-          </div>`).join("")}</div>
-      </div>` : ''}
-
-      <div id="th-runlog" class="th-runlog" hidden></div>
-    </div>`;
-
-  // 待派发场景下，绑定内置快捷派发面板交互
-  if (isPending) {
-    let selAgent = "hermes";
-    let selRepo = "";
-    const hosts = ((TH.hosts && TH.hosts.hosts) || []).filter(h => h.online !== false);
-    let selHost = (TH.hosts && TH.hosts.default) || (hosts[0] || {}).id || "";
-
-    det.querySelectorAll("[data-qd-agent]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        selAgent = btn.dataset.qdAgent;
-        det.querySelectorAll("[data-qd-agent]").forEach(b => b.classList.toggle("is-on", b === btn));
-      });
-    });
-
-    det.querySelectorAll("[data-qd-repo]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        selRepo = btn.dataset.qdRepo || "";
-        det.querySelectorAll("[data-qd-repo]").forEach(b => b.classList.toggle("is-on", b === btn));
-      });
-    });
-
-    det.querySelectorAll("[data-qd-host]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        selHost = btn.dataset.qdHost;
-        det.querySelectorAll("[data-qd-host]").forEach(b => b.classList.toggle("is-on", b === btn));
-      });
-    });
-
-    const launchBtn = det.querySelector("#btn-qd-launch");
-    if (launchBtn) {
-      launchBtn.addEventListener("click", async () => {
-        launchBtn.disabled = true;
-        launchBtn.textContent = `正在调度…`;
-        try {
-          const r = await apiPost("/api/th/dispatch", { number: Number(issue.number), agent: selAgent, host: selHost, target_repo: selRepo });
-          const d = await r.json().catch(() => ({ ok: false, msg: "bad json" }));
-          TH.health = null;
-          if (!d.ok) {
-            uiNotice(d.msg || `派发失败`);
-            launchBtn.disabled = false;
-            launchBtn.textContent = `⚡ 开始执行任务`;
-            return;
-          }
-          uiNotice(`任务 #${issue.number} 已分派给 ${selAgent}`);
-          thOpenTask(issue.number);
-        } catch (e) {
-          uiNotice("Error: " + e.message);
-          launchBtn.disabled = false;
-          launchBtn.textContent = `⚡ 开始执行任务`;
-        }
-      });
-    }
-  }
-
-  // Tab 切换逻辑
-  det.querySelectorAll("[data-dtab]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const tab = btn.dataset.dtab;
-      TH.detailTab = tab;
-      det.querySelectorAll("[data-dtab]").forEach(b => b.classList.toggle("active", b === btn));
-      const pConsole = $("th-tab-console-pane");
-      const pTimeline = $("th-tab-timeline-pane");
-      const pIssue = $("th-tab-issue-pane");
-      const pRuns = $("th-tab-runs-pane");
-      if (pConsole) pConsole.hidden = (tab !== "console");
-      if (pTimeline) pTimeline.hidden = (tab !== "timeline");
-      if (pIssue) pIssue.hidden = (tab !== "issue");
-      if (pRuns) pRuns.hidden = (tab !== "runs");
-    });
-  });
-
-  // 返回按钮
-  det.querySelector("[data-th-back]")?.addEventListener("click", () => {
-    TH.taskView = null; det.hidden = true; thRenderTasks();
-  });
-
-  // 操作按钮
-  det.querySelectorAll("[data-th-act]").forEach(el => {
-    if (el.tagName === "A") return;
-    el.addEventListener("click", ev => {
-      ev.stopPropagation();
-      const n = Number(el.dataset.num || issue.number), kind = el.dataset.thAct;
-      if (kind === "dispatch") thDispatchModal(n, { title: el.dataset.title || "", after: () => thOpenTask(n) });
-      if (kind === "restore") thSetState(n, "open");
-      if (kind === "close") thSetState(n, "closed");
-      if (kind === "cancel" && el.dataset.run) thCancel(el.dataset.run, () => thOpenTask(n));
-      if (kind === "wake" && latest && latest.tmux_session) {
-        apiPost("/api/tmux/wake", { session: latest.tmux_session, pane: "" }).then(r => r.json()).then(res => {
-          uiNotice(res.ok ? `已触发唤醒推进` : (res.msg || `唤醒失败`));
-        });
-      }
-    });
-  });
-
-  // 内嵌回复回车与发送
-  const replyInput = $("th-inline-input");
-  const replySendBtn = $("th-inline-send");
-  if (replyInput && replySendBtn && latest) {
-    const doSend = async () => {
-      const val = replyInput.value.trim();
-      if (!val) return;
-      replySendBtn.disabled = true;
-      replySendBtn.textContent = "…";
-      const r = await apiPost("/api/th/resume", { id: latest.id, text: val });
-      const res = await r.json().catch(() => ({ ok: false }));
-      replySendBtn.disabled = false;
-      replySendBtn.textContent = `发送`;
-      if (!res.ok) {
-        uiNotice(res.msg || `发送失败`);
-      } else {
-        replyInput.value = "";
-        uiNotice(`指令已送达智能体`);
-        thOpenTask(number, true);
-      }
-    };
-    replySendBtn.addEventListener("click", doSend);
-    replyInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doSend(); } });
-  }
-
-  // 历史运行点击
-  det.querySelectorAll("[data-th-runlog]").forEach(el => el.addEventListener("click", () => thShowLog(el.dataset.thRunlog)));
-
-  // 实时终端捕获与控制
-  let autoScroll = true;
-  const btnScroll = $("btn-term-autoscroll");
-  if (btnScroll) {
-    btnScroll.addEventListener("click", () => {
-      autoScroll = !autoScroll;
-      btnScroll.textContent = autoScroll ? `滚屏: 开` : `滚屏: 关`;
-      btnScroll.classList.toggle("is-active", autoScroll);
-    });
-  }
-
-  const btnCtrlC = $("btn-term-ctrl-c");
-  if (btnCtrlC && latest && latest.tmux_session) {
-    btnCtrlC.addEventListener("click", async () => {
-      const r = await apiPost("/api/tmux/send", { session: latest.tmux_session, key: "C-c" });
-      const res = await r.json().catch(() => ({ ok: false }));
-      uiNotice(res.ok ? `已发送 Ctrl+C` : `发送失败`);
-    });
-  }
-
-  const btnEnter = $("btn-term-enter");
-  if (btnEnter && latest && latest.tmux_session) {
-    btnEnter.addEventListener("click", async () => {
-      const r = await apiPost("/api/tmux/send", { session: latest.tmux_session, text: "", enter: true });
-      const res = await r.json().catch(() => ({ ok: false }));
-      uiNotice(res.ok ? `已发送 Enter` : `发送失败`);
-    });
-  }
-
-  const btnWake = $("btn-term-wake");
-  if (btnWake && latest && latest.tmux_session) {
-    btnWake.addEventListener("click", async () => {
-      const r = await apiPost("/api/tmux/wake", { session: latest.tmux_session, pane: "" });
-      const res = await r.json().catch(() => ({ ok: false }));
-      uiNotice(res.ok ? `已发送唤醒` : `唤醒失败`);
-    });
-  }
-
-  const btnCopy = $("btn-term-copy");
-  if (btnCopy) {
-    btnCopy.addEventListener("click", () => {
-      const pre = $("th-term-output");
-      if (pre && navigator.clipboard) {
-        navigator.clipboard.writeText(pre.textContent || "");
-        uiNotice(`已复制终端文本`);
-      }
-    });
-  }
-
-  const pullTerminal = async () => {
-    const pre = $("th-term-output");
-    if (!pre) { if (TH.timer) clearInterval(TH.timer); return; }
-
-    if (latest && latest.tmux_session) {
-      // 优先从 Tmux 窗格实时捕获
-      const cap = await thGet(`/api/tmux/capture?target=${encodeURIComponent(latest.tmux_session)}&ansi=1&lines=180`);
-      if (cap && cap.ok && cap.capture) {
-        pre.innerHTML = ansiToHtml(Array.isArray(cap.capture) ? cap.capture.join("\n") : String(cap.capture));
-        if (autoScroll) pre.scrollTop = pre.scrollHeight;
-        return;
-      }
-    }
-
-    // 备用：从 TaskHub Run 日志拉取
-    if (latest && latest.id) {
-      const r = await thGet(`/api/th/log?id=${encodeURIComponent(latest.id)}&lines=150`);
-      if (r && r.ok && r.log) {
-        pre.textContent = r.log;
-        if (autoScroll) pre.scrollTop = pre.scrollHeight;
-        return;
-      }
-    }
-
-    if (!latest) {
-      pre.textContent = `尚未派发智能体会话。`;
-    } else {
-      pre.textContent = `会话正在准备启动或等待捕获…`;
-    }
-  };
-
-  pullTerminal();
-  if (TH.timer) { clearInterval(TH.timer); TH.timer = null; }
-  if (activeRun) {
-    TH.timer = setInterval(() => {
-      const pre = $("th-term-output");
-      if (!pre || TH.busy) { if (!pre) { clearInterval(TH.timer); TH.timer = null; } return; }
-      TH.busy = true; pullTerminal().finally(() => { TH.busy = false; });
-    }, 3500);
-  }
-}
-
-function thShowLog(runId) {
-  const box = $("th-runlog"); if (!box) return;
-  if (!box.hidden && TH.logId === runId) { box.hidden = true; TH.logId = null; return; }
-  TH.logId = runId;
-  box.hidden = false;
-  box.innerHTML = `<div class="th-runlog-head"><span>原始输出 · ${escHtml(runId)}</span>
-    <span class="chip" data-th-logclose="1" role="button" tabindex="0">收起</span></div>
-    <pre class="th-log" id="th-log-pre">${escHtml(t("th_loading"))}</pre>`;
-  box.querySelector("[data-th-logclose]")?.addEventListener("click", () => { box.hidden = true; TH.logId = null; });
-  const pull = async () => {
-    if (TH.logId !== runId) return;
-    const d = await thGet(`/api/th/log?id=${encodeURIComponent(runId)}&lines=400`);
-    const pre = $("th-log-pre"); if (!pre) return;
-    pre.textContent = d.ok === false ? (d.msg || t("th_no_log")) : (d.log || t("th_no_log"));
-    pre.scrollTop = pre.scrollHeight;
-  };
-  pull();
-  if (TH.timer) clearInterval(TH.timer);
-  TH.timer = setInterval(() => {
-    if (TH.logId !== runId || !box || box.hidden) { clearInterval(TH.timer); TH.timer = null; return; }
-    if (TH.busy) return;
-    TH.busy = true; pull().finally(() => { TH.busy = false; });
-  }, 3000);
-}
-
-/* ---------------- 全新「下发新任务」控制台模态框 ---------------- */
-async function thNewTaskModal() {
-  if (!TH.health || !TH.hosts) await thEnsureBase().catch(() => {});
-  document.querySelectorAll(".th-new-modal").forEach(el => el.remove());
-
-  const rawAgents = (TH.health && TH.health.agents) || ["hermes", "pi", "omp"];
-  const agents = ["hermes", ...rawAgents.filter(a => a !== "hermes")];
-  const agentMeta = {
-    hermes: { name: "hermes", desc: `主力执行 & 创建专属 Telegram 话题汇报` },
-    pi: { name: "pi", desc: `敏捷代码修改 · 直接交付` },
-    omp: { name: "omp", desc: `通用研发智能体 · 会话交互` }
-  };
-  const repos = (TH.health && TH.health.repos) || ["iamcheyan/svc-dashboard", "iamcheyan/chezmoi", "iamcheyan/taskhub"];
-  const hosts = ((TH.hosts && TH.hosts.hosts) || []).filter(h => h.online !== false);
-
-  let curAgent = "hermes";
-  let curRepo = "";
-  let curHost = (TH.hosts && TH.hosts.default) || (hosts[0] || {}).id || "";
-
-  const modal = document.createElement("div");
-  modal.className = "ui-modal th-new-modal";
-  modal.innerHTML = `
-    <div class="th-dlg" role="dialog" aria-modal="true" aria-labelledby="th-new-title" tabindex="-1">
-      <div class="th-dlg-head">
-        <div class="th-dlg-head-main">
-          <span class="th-dlg-kicker">智能体任务调度</span>
-          <h3 class="th-dlg-title" id="th-new-title">下发新任务</h3>
-        </div>
-        <button class="th-dlg-x" type="button" data-close="1" aria-label="Close">✕</button>
-      </div>
-      <div class="th-dlg-body">
-        <div class="th-field">
-          <span class="th-field-label">任务标题</span>
-          <div class="th-tags-row">
-            <button class="th-tag-btn" type="button" data-tag="[Bug]">修复 Bug</button>
-            <button class="th-tag-btn" type="button" data-tag="[Feature]">新功能</button>
-            <button class="th-tag-btn" type="button" data-tag="[Refactor]">代码重构</button>
-            <button class="th-tag-btn" type="button" data-tag="[Test]">测试验证</button>
-          </div>
-          <input type="text" class="th-input-text" id="th-new-input-title" placeholder="${escAttr(t("nt_ph_title"))}" maxlength="160" autocomplete="off" />
-        </div>
-
-        <div class="th-field">
-          <span class="th-field-label">任务需求 / Prompt 描述</span>
-          <textarea class="th-textarea" id="th-new-input-body" placeholder="${escAttr(t("nt_ph_body"))}"></textarea>
-        </div>
-
-        <div class="th-field">
-          <span class="th-field-label">目标代码仓库</span>
-          <div class="th-opts">
-            <button class="th-opt is-on" type="button" data-sel-repo="">
-              <i class="th-opt-dot"></i><span>自动判断</span>
-            </button>
-            ${repos.map(r => `
-              <button class="th-opt" type="button" data-sel-repo="${escAttr(r)}">
-                <i class="th-opt-dot"></i><span>${escHtml(r.split("/").pop())}</span>
-              </button>`).join("")}
-          </div>
-        </div>
-
-        <div class="th-field">
-          <span class="th-field-label">执行智能体</span>
-          <div class="th-opts" style="display:flex;gap:8px;">
-            ${agents.map(a => {
-              const meta = agentMeta[a] || { name: a, desc: a };
-              return `
-                <div class="th-agent-card${a === curAgent ? ' is-on' : ''}" data-sel-agent="${escAttr(a)}">
-                  <div class="th-agent-card-title">
-                    <span>${escHtml(meta.name)}</span>
-                    <i class="th-opt-dot"></i>
-                  </div>
-                  <div class="th-agent-card-desc">${escHtml(meta.desc)}</div>
-                </div>`;
-            }).join("")}
-          </div>
-        </div>
-
-        <div class="th-field">
-          <span class="th-field-label">执行主机</span>
-          <div class="th-opts">
-            ${hosts.map(h => `
-              <button class="th-opt${h.id === curHost ? ' is-on' : ''}" type="button" data-sel-host="${escAttr(h.id)}">
-                <i class="th-opt-dot"></i><span>${escHtml(h.label || h.id)}</span>
-              </button>`).join("") || `<span class="th-field-none">本地</span>`}
-          </div>
-        </div>
-      </div>
-      <div class="th-dlg-foot">
-        <button class="th-btn" type="button" data-close="1">取消</button>
-        <button class="th-btn th-btn-primary" type="button" id="btn-th-new-submit">立即下发任务 ⚡</button>
-      </div>
-    </div>`;
-
-  document.body.appendChild(modal);
-  const dlg = modal.querySelector(".th-dlg");
-
-  const close = () => {
-    document.removeEventListener("keydown", onKey);
-    modal.remove();
-  };
-  const onKey = ev => { if (ev.key === "Escape") { ev.stopPropagation(); close(); } };
-  document.addEventListener("keydown", onKey);
-  modal.addEventListener("click", ev => { if (ev.target === modal) close(); });
-  modal.querySelectorAll("[data-close]").forEach(el => el.addEventListener("click", close));
-
-  // 快捷标签添加前缀
-  const titleInput = modal.querySelector("#th-new-input-title");
-  modal.querySelectorAll("[data-tag]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const tag = btn.dataset.tag;
-      if (!titleInput.value.startsWith(tag)) {
-        titleInput.value = `${tag} ${titleInput.value.replace(/^\[[^\]]+\]\s*/, "")}`;
-      }
-      titleInput.focus();
-    });
-  });
-
-  // 仓库选择
-  modal.querySelectorAll("[data-sel-repo]").forEach(opt => {
-    opt.addEventListener("click", () => {
-      curRepo = opt.dataset.selRepo || "";
-      modal.querySelectorAll("[data-sel-repo]").forEach(o => o.classList.toggle("is-on", o === opt));
-    });
-  });
-
-  // 智能体选择
-  modal.querySelectorAll("[data-sel-agent]").forEach(card => {
-    card.addEventListener("click", () => {
-      curAgent = card.dataset.selAgent;
-      modal.querySelectorAll("[data-sel-agent]").forEach(c => c.classList.toggle("is-on", c === card));
-    });
-  });
-
-  // 主机选择
-  modal.querySelectorAll("[data-sel-host]").forEach(opt => {
-    opt.addEventListener("click", () => {
-      curHost = opt.dataset.selHost;
-      modal.querySelectorAll("[data-sel-host]").forEach(o => o.classList.toggle("is-on", o === opt));
-    });
-  });
-
-  // 提交
-  const submitBtn = modal.querySelector("#btn-th-new-submit");
-  submitBtn.addEventListener("click", async () => {
-    const title = titleInput.value.trim();
-    const body = modal.querySelector("#th-new-input-body").value.trim();
-    if (!title) {
-      uiNotice(`请输入任务标题`);
-      titleInput.focus();
-      return;
-    }
-
-    submitBtn.disabled = true;
-    submitBtn.textContent = `正在调度下发…`;
-
-    try {
-      const r = await apiPost("/api/th/new", { title, body, agent: curAgent, host: curHost, target_repo: curRepo });
-      const res = await r.json().catch(() => ({ ok: false, msg: `网络错误` }));
-      if (!res.ok) {
-        uiNotice(res.msg || `下发任务失败`);
-        submitBtn.disabled = false;
-        submitBtn.textContent = `立即下发任务 ⚡`;
-        return;
-      }
-
-      close();
-      uiNotice(`任务 #${res.number || ""} 已分派给 ${curAgent}`);
-
-      // 切到任务 Tab 并刷新打开该任务
-      const vTasks = $("tmux-view-tasks");
-      const vSessions = $("tmux-view-sessions");
-      if (vTasks) { vTasks.hidden = false; vTasks.style.display = ""; }
-      if (vSessions) { vSessions.hidden = true; vSessions.style.display = "none"; }
-      $("tmux-subnav")?.querySelectorAll(".page-subnav-btn").forEach(b => {
-        b.classList.toggle("active", b.dataset.ttab === "tasks");
-      });
-
-      await thRenderTasks();
-      if (res.number) thOpenTask(Number(res.number));
-    } catch (e) {
-      uiNotice(`创建失败: ` + e.message);
-      submitBtn.disabled = false;
-      submitBtn.textContent = `立即下发任务 ⚡`;
-    }
-  });
-
-  setTimeout(() => titleInput.focus(), 50);
-}
-
-/* 派遣弹窗：执行者 / 机器 → 确认。挂在 body 上，手机为底部滑层。 */
-async function thDispatchModal(number, opts = {}) {
-  const after = typeof opts === "function" ? opts : (opts.after || null);
-  const title = (opts && opts.title) || "";
-  if (!TH.health || !TH.hosts) await thEnsureBase().catch(() => {});
-  document.querySelectorAll(".th-dispatch-modal").forEach(el => el.remove());
-  const rawAgents = (TH.health && TH.health.agents) || ["hermes", "pi", "omp"];
-  const agents = ["hermes", ...rawAgents.filter(a => a !== "hermes")];
-  const labels = (TH.health && TH.health.agent_labels) || {};
-  const repos = (TH.health && TH.health.repos) || ["iamcheyan/svc-dashboard", "iamcheyan/chezmoi", "iamcheyan/taskhub"];
-  const hosts = ((TH.hosts && TH.hosts.hosts) || []).filter(h => h.online !== false);
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(TH_DISPATCH_KEY) || "{}") || {}; } catch (e) { saved = {}; }
-  const defAgent = "hermes";
-  const defHost = hosts.some(h => h.id === saved.host) ? saved.host
-    : ((TH.hosts && TH.hosts.default) || (hosts[0] || {}).id || "");
-  let agent = defAgent, hostId = defHost, targetRepo = "";
-  const optBtn = (field, val, text, on) => `
-    <button class="th-opt${on ? " is-on" : ""}" type="button" data-th-field="${field}"
-      data-val="${escAttr(val)}" aria-pressed="${on ? "true" : "false"}">
-      <i class="th-opt-dot"></i><span>${escHtml(text)}</span></button>`;
-  const modal = document.createElement("div");
-  modal.className = "ui-modal th-dispatch-modal";
-  modal.innerHTML = `
-    <div class="th-dlg" role="dialog" aria-modal="true" aria-labelledby="th-dlg-title" tabindex="-1">
-      <div class="th-dlg-head">
-        <div class="th-dlg-head-main">
-          <span class="th-dlg-kicker">${escHtml(t("th_dispatch"))}</span>
-          <h3 class="th-dlg-title" id="th-dlg-title"><span class="th-dlg-num">#${escHtml(String(number))}</span><span>${escHtml(title)}</span></h3>
-        </div>
-        <button class="th-dlg-x" type="button" data-th-dlg-close="1" aria-label="${escAttr(t("m_close"))}">✕</button>
-      </div>
-      <div class="th-dlg-body">
-        <div class="th-field">
-          <span class="th-field-label">${escHtml(t("th_agent"))}</span>
-          <div class="th-opts">${agents.map(a => optBtn("agent", a, labels[a] || a, a === defAgent)).join("") || `<span class="th-field-none">—</span>`}</div>
-        </div>
-        <div class="th-field">
-          <span class="th-field-label">代码仓库</span>
-          <div class="th-opts">
-            ${optBtn("repo", "", `自动推断`, true)}
-            ${repos.map(r => optBtn("repo", r, r.split("/").pop(), false)).join("")}
-          </div>
-        </div>
-        <div class="th-field">
-          <span class="th-field-label">${escHtml(t("th_host"))}</span>
-          <div class="th-opts">${hosts.map(h => optBtn("host", h.id, h.label || h.id, h.id === defHost)).join("") || `<span class="th-field-none">—</span>`}</div>
-        </div>
-      </div>
-      <div class="th-dlg-foot">
-        <button class="th-btn" type="button" data-th-dlg-close="1">${escHtml(t("m_cancel"))}</button>
-        <button class="th-btn th-btn-primary" type="button" data-th-dlg-go="1">${escHtml(t("th_dispatch"))}</button>
-      </div>
-    </div>`;
-  document.body.appendChild(modal);
-  const dlg = modal.querySelector(".th-dlg");
-  const onKey = ev => { if (ev.key === "Escape") { ev.stopPropagation(); close(); } };
-  const close = () => { document.removeEventListener("keydown", onKey); modal.remove(); };
-  document.addEventListener("keydown", onKey);
-  modal.addEventListener("click", ev => { if (ev.target === modal) close(); });
-  modal.querySelectorAll("[data-th-dlg-close]").forEach(el => el.addEventListener("click", close));
-  modal.querySelectorAll(".th-opt").forEach(el => el.addEventListener("click", () => {
-    const field = el.dataset.thField;
-    if (field === "agent") agent = el.dataset.val;
-    else if (field === "repo") targetRepo = el.dataset.val;
-    else hostId = el.dataset.val;
-    modal.querySelectorAll(`.th-opt[data-th-field="${field}"]`).forEach(x => {
-      const on = x === el;
-      x.classList.toggle("is-on", on);
-      x.setAttribute("aria-pressed", on ? "true" : "false");
-    });
-  }));
-  const go = modal.querySelector("[data-th-dlg-go]");
-  go.addEventListener("click", async () => {
-    if (go.disabled) return;
-    const label = go.textContent;
-    go.disabled = true;
-    go.textContent = "…";
-    try {
-      const r = await apiPost("/api/th/dispatch", { number: Number(number), agent, host: hostId, target_repo: targetRepo });
-      const d = await r.json().catch(() => ({ ok: false, msg: "bad json" }));
-      TH.health = null;
-      if (!d.ok) { uiNotice(d.msg || `派发失败`); go.disabled = false; go.textContent = label; return; }
-      try { localStorage.setItem(TH_DISPATCH_KEY, JSON.stringify({ agent, host: hostId })); } catch (e) {}
-      close();
-      if (d.needs_repo) uiNotice(`已发到 Telegram，等你确认代码仓库`);
-      if (after) after(); else thRenderTasks();
-    } catch (err) {
-      uiNotice("Error: " + err.message);
-      go.disabled = false;
-      go.textContent = label;
-    }
-  });
-  setTimeout(() => dlg.focus({ preventScroll: true }), 30);
-  return modal;
-}
-
-async function thSetState(number, state) {
-  const r = await apiPost("/api/th/state", { number: Number(number), state });
-  const d = await r.json().catch(() => ({ ok: false, msg: "bad json" }));
-  if (!d.ok) { uiNotice(d.msg || `操作失败`); return; }
-  TH.taskView ? thOpenTask(TH.taskView) : thRenderTasks();
-}
-
-async function thCancel(runId, after) {
-  const r = await apiPost("/api/th/cancel", { id: runId });
-  const d = await r.json().catch(() => ({ ok: false }));
-  if (!d.ok) { uiNotice(d.msg || `取消失败`); return; }
-  after ? after() : (TH.taskView ? thOpenTask(TH.taskView) : thRenderTasks());
-}
-
-async function thReply(runId, number) {
-  const text = window.prompt(`给 agent 的指令`);
-  if (!text) return;
-  const r = await apiPost("/api/th/resume", { id: runId, text });
-  const d = await r.json().catch(() => ({ ok: false }));
-  if (!d.ok) { alert(d.msg || `发送失败`); return; }
-  TH.taskView ? thOpenTask(number) : thRenderTasks();
-}
-
-// 服务页：服务 / 定时 / 日志 三个小 tab（与活动页同一套 subnav）
 function initSvcSubnav() {
   const bar = $("svc-subnav");
   if (!bar || bar.dataset.wired) return;
   bar.dataset.wired = "1";
-  const panes = { svc: ["svc-panel", "filters"], cron: ["cron-panel"] };
-  const all = new Set(Object.values(panes).flat());
-  bar.addEventListener("click", e => {
-    const btn = e.target.closest(".page-subnav-btn");
-    if (!btn || !btn.dataset.sv) return;
-    const want = btn.dataset.sv;
-    bar.querySelectorAll(".page-subnav-btn").forEach(b => b.classList.toggle("active", b === btn));
-    all.forEach(id => {
-      const el = $(id);
-      if (!el) return;
-      const show = (panes[want] || []).includes(id);
-      el.hidden = !show;
-      el.style.display = show ? "" : "none";
-    });
-    if (want === "cron" && typeof cronLoad === "function") cronLoad();
-  });
+  bar.addEventListener("click",e=>{const b=e.target.closest("[data-sv]");if(b)selectSvcView(b.dataset.sv);});
+  $("svc-manage-tools")?.addEventListener("click",e=>{const b=e.target.closest("[data-svc-mode]");if(b)selectSvcView(b.dataset.svcMode);});
+  $("svc-search")?.addEventListener("input",e=>{svcView.query=e.target.value;applyFilter();});
+  $("svc-refresh")?.addEventListener("click",()=>load(false));
+  document.querySelectorAll("[data-svc-sort]").forEach(b=>b.addEventListener("click",()=>{svcView.sort=b.dataset.svcSort;applyFilter();}));
+  syncSvcView();
 }
 document.addEventListener("DOMContentLoaded", initSvcSubnav);
 setTimeout(initSvcSubnav, 800);
+
+// Authored upstream PRs: all filters operate on the collector snapshot.
+function prState() {
+  return prState.value || (prState.value = { tab: 'feed', category: 'open', repo: '', query: '', data: null, busy: false });
+}
+function mountActivityTasks() {
+  const host=$('activity-tasks'),panel=$('tmux-panel');
+  if(host && panel && panel.parentElement!==host){panel.classList.remove('cat-off');host.appendChild(panel);}
+}
+function syncActivityTabs() {
+  mountActivityTasks();
+  const tab=prState().tab;
+  document.querySelectorAll('#activity-subnav [data-acttab]').forEach(b=>{const active=b.dataset.acttab===tab;b.classList.toggle('active',active);b.setAttribute('aria-selected',String(active));});
+  if($('pr-panel'))$('pr-panel').hidden=tab!=='prs';
+  if($('activity-tasks'))$('activity-tasks').hidden=tab!=='tasks';
+  if($('act-filters'))$('act-filters').hidden=tab!=='feed';
+  if($('activity-body'))$('activity-body').hidden=tab!=='feed';
+}
+function openActivityTasks() {
+  prState().tab='tasks';
+  if(isMobile()){setPage(1);renderActivityPage();}else setCat('activity');
+  history.replaceState(null,'','#cat=activity&tab=tasks');
+}
+function bindActivityTabs() {
+  syncActivityTabs();
+  const nav=$('activity-subnav');if(!nav || nav.dataset.bound)return;
+  nav.dataset.bound='1';
+  nav.addEventListener('click',e=>{
+    const b=e.target.closest('[data-acttab]');if(!b)return;
+    prState().tab=b.dataset.acttab;
+    history.replaceState(null,'','#cat=activity&tab='+prState().tab);
+    renderActivityPage();
+  });
+}
+async function loadPullRequests() {
+  const state = prState(), panel = $('pr-panel');
+  if (!panel || state.busy) return;
+  state.busy = true;
+  if (!state.data) panel.innerHTML = `<div class="gempty">${escHtml(t('a_loading'))}</div>`;
+  try {
+    state.data = BOOT.static ? BOOT.pullrequests : await tlGet('/api/pullrequests');
+  } catch (e) { state.data = state.data ? {...state.data, stale:true} : {ok:false}; }
+  finally { state.busy = false; }
+  const d = state.data || {ok:false};
+  panel.innerHTML = `<p class="page-hint">${escHtml(t('pr_hint'))}</p>
+    <div class="page-tools pr-tools"><input id="pr-search" type="search" placeholder="${escAttr(t('pr_search'))}" aria-label="${escAttr(t('pr_search'))}">
+    <select id="pr-repo" aria-label="${escAttr(t('pr_repo'))}"><option value="">${escHtml(t('pr_repo'))}</option>${[...new Set((d.items || []).map(p=>p.repo))].sort().map(r=>`<option value="${escAttr(r)}">${escHtml(r)}</option>`).join('')}</select>
+    ${BOOT.static ? '' : `<button class="btn" id="pr-refresh" type="button">${escHtml(t('refresh'))}</button>`}</div>
+    <div class="filters" id="pr-filters"></div><p class="page-hint" id="pr-fresh"></p><div id="pr-list"></div>`;
+  $('pr-search').value = state.query; $('pr-repo').value = state.repo;
+  svcSelect($('pr-repo'));
+  $('pr-search').addEventListener('input', e=>{state.query=e.target.value;renderPullRequests();});
+  $('pr-repo').addEventListener('change', e=>{state.repo=e.target.value;renderPullRequests();});
+  $('pr-refresh')?.addEventListener('click', loadPullRequests);
+  $('pr-filters').addEventListener('click',e=>{const b=e.target.closest('[data-prcat]');if(b){state.category=b.dataset.prcat;renderPullRequests();}});
+  renderPullRequests();
+}
+function renderPullRequests() {
+  const state=prState(), d=state.data || {}, list=$('pr-list');
+  if (!list) return;
+  const items=(d.items || []).filter(p=>(!state.repo || p.repo===state.repo) && `${p.title} ${p.repo} #${p.number}`.toLowerCase().includes(state.query.toLowerCase()));
+  const matches=(p,c)=> c==='all' || (c==='open' ? !['merged','closed'].includes(p.category) : p.category===c);
+  $('pr-filters').innerHTML=['open','action','review','ready','draft','merged','closed','all'].map(c=>`<button type="button" class="chip ${state.category===c?'active':''}" data-prcat="${c}">${escHtml(t('pr_'+c))} ${items.filter(p=>matches(p,c)).length}</button>`).join('');
+  $('pr-fresh').textContent= !d.ok ? t('pr_unavailable') : `${d.stale || d.error ? '⚠ '+t('pr_stale')+' · ' : ''}${d.updated_at ? new Date(d.updated_at*1000).toLocaleString() : ''}${d.truncated ? ' · '+t('pr_truncated') : ''}`;
+  if(!d.ok){list.innerHTML=`<div class="gempty">${escHtml(t('pr_unavailable'))}</div>`;return;}
+  const visible=items.filter(p=>matches(p,state.category));
+  const groups=['action','review','ready','draft','merged','closed'];
+  list.innerHTML=groups.map(c=>{
+    const prs=visible.filter(p=>p.category===c);
+    if(!prs.length)return '';
+    return `<section class="pr-group"><h3>${escHtml(t('pr_'+c))} <span>${prs.length}</span></h3>${prs.map(p=>{
+      const review=p.reviewDecision==='APPROVED'?'pr_approved':p.reviewDecision==='CHANGES_REQUESTED'?'pr_changes':'pr_review';
+      const ci=p.ci==='SUCCESS'?'pr_ci_ok':p.ci==='FAILURE'||p.ci==='ERROR'?'pr_ci_fail':p.ci?'pr_ci_wait':'pr_ci_none';
+      const url=/^https:\/\/github\.com\//.test(p.url||'')?p.url:'#';
+      return `<article class="act-card pr-card"><div class="pr-meta"><span>${escHtml(p.repo)} #${Number(p.number)}</span><time>${escHtml(new Date(p.updatedAt).toLocaleDateString())}</time></div><a class="pr-title" href="${escAttr(url)}" target="_blank" rel="noopener">${escHtml(p.title)} ↗</a><div class="pr-signals"><span>${escHtml(t(review))}</span><span class="${ci==='pr_ci_fail'?'t-red':''}">${escHtml(t(ci))}</span>${p.mergeable==='CONFLICTING'?`<span class="t-red">${escHtml(t('pr_conflict'))}</span>`:''}<span>+${Number(p.additions)||0} / −${Number(p.deletions)||0}</span><span>${Number(p.comments)||0} ${escHtml(t('pr_comments'))}</span></div></article>`;
+    }).join('')}</section>`;
+  }).join('') || `<div class="gempty">${escHtml(t('pr_empty'))}</div>`;
+}
+
+async function refreshGithubHeatmap() {
+  const host=$("hp-github-chart");if(!host || githubHeatmapBusy || Date.now()-githubHeatmapAt<60000)return;
+  githubHeatmapBusy=true;
+  try {
+    const d=BOOT.static?BOOT.githubContributions:await tlGet('/api/github/contributions');
+    githubHeatmapAt=Date.now();
+    if(!d?.ok){if(!host.children.length)host.innerHTML=`<div class="gempty">${escHtml(t('a_loading'))}</div>`;return;}
+    const levels=['NONE','FIRST_QUARTILE','SECOND_QUARTILE','THIRD_QUARTILE','FOURTH_QUARTILE'];
+    const allDays=d.weeks.flatMap(w=>w.contributionDays || []);
+    const activeDays=allDays.filter(x=>Number(x.contributionCount)>0);
+    const hotDates=new Map([...activeDays].sort((a,b)=>Number(b.contributionCount)-Number(a.contributionCount)).slice(0,10).map((x,i)=>[x.date,i]));
+    const recentDates=new Map(activeDays.slice(-7).map((x,i)=>[x.date,i]));
+    let previousMonth='',months='';
+    const weeks=d.weeks.map((week,index)=>{
+      const days=week.contributionDays || [],date=days[0]?.date;
+      if(date){const month=date.slice(0,7);if(month!==previousMonth){months+=`<span style="grid-column:${index+1}">${escHtml(new Intl.DateTimeFormat(LANG,{month:'short',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z')))}</span>`;previousMonth=month;}}
+      return `<div class="gh-week" style="--gh-delay:${index * 24}ms">${Array.from({length:7},(_,weekday)=>{const day=days.find(d=>d.weekday===weekday);if(!day)return '<span class="gh-day gh-gap"></span>';const count=Number(day.contributionCount)||0;const hot=hotDates.get(day.date),recent=recentDates.get(day.date);const extra=hot!==undefined?' gh-hot':recent!==undefined?' gh-recent':'';const pulse=hot!==undefined?` style="--pulse-delay:${1800+hot*420}ms"`:recent!==undefined?` style="--pulse-delay:${2100+recent*380}ms"`:'';const label=day.date+' · '+count.toLocaleString();return `<span class="gh-day gh-level-${Math.max(0,levels.indexOf(day.contributionLevel))}${extra}"${pulse} title="${escAttr(label)}" role="img" aria-label="${escAttr(label)}"></span>`;}).join('')}</div>`;
+    }).join('');
+    host.innerHTML=`<div class="gh-summary">${escHtml(t('hp_github_count',{n:Number(d.totalContributions).toLocaleString()}))}</div><div class="gh-scroll"><div class="gh-calendar" style="--gh-weeks:${d.weeks.length}"><div class="gh-months">${months}</div><div class="gh-weeks">${weeks}</div></div></div><div class="gh-foot"><span>${escHtml(new Date(d.updated_at*1000).toLocaleString(LANG))}</span><span class="gh-legend">${escHtml(t('hp_less'))}${levels.map((_,i)=>`<i class="gh-day gh-level-${i}"></i>`).join('')}${escHtml(t('hp_more'))}</span></div>`;
+    const calendar=host.querySelector(".gh-calendar");
+    if(calendar){
+      calendar.classList.add("gh-ready");
+      if(githubHeatmapAnimated)calendar.classList.add("gh-static");
+    }
+    githubHeatmapAnimated=true;
+  } catch(e){console.warn('GitHub calendar unavailable');}finally{githubHeatmapBusy=false;}
+}
+
+// 启动时把所有原生 select 替换为自绘下拉；旧 .select-model 保持隐藏数据源。
+document.querySelectorAll("select").forEach(sel => {
+  if (!sel.classList.contains("select-model")) svcSelect(sel, sel.classList.contains("tmux-sheet-select"));
+});

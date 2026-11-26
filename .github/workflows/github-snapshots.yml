@@ -1,0 +1,75 @@
+name: Publish public GitHub snapshots
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build_github_snapshot.py'
+      - 'svcdash/github_snapshots.py'
+      - 'svcdash/githubheatmap.py'
+      - 'svcdash/pullrequests.py'
+      - 'svcdash/chezissues.py'
+      - '.github/workflows/github-snapshots.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: github-snapshots
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build filtered GitHub snapshot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SVC_GITHUB_LOGIN: iamcheyan
+          SVC_GITHUB_CACHE: ${{ runner.temp }}/svc-dashboard/contributions.json
+          SVC_PR_CACHE: ${{ runner.temp }}/svc-dashboard/pullrequests.json
+          SVC_ISSUES_CACHE: ${{ runner.temp }}/svc-dashboard/chezmoi-issues.json
+          SVC_GITHUB_SNAPSHOT_OUTPUT: ${{ runner.temp }}/svc-dashboard/github-snapshots.json
+        run: python3 scripts/build_github_snapshot.py
+
+      - name: Create public data branch if needed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/github-data" >/dev/null 2>&1; then
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref=refs/heads/github-data \
+              -f sha="$(git rev-parse HEAD)" >/dev/null
+          fi
+
+      - name: Checkout public data branch
+        uses: actions/checkout@v4
+        with:
+          ref: github-data
+          path: github-data-branch
+
+      - name: Publish snapshot
+        env:
+          SNAPSHOT: ${{ runner.temp }}/svc-dashboard/github-snapshots.json
+        run: |
+          cp "$SNAPSHOT" github-data-branch/github-snapshots.json
+          git -C github-data-branch config user.name github-actions[bot]
+          git -C github-data-branch config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C github-data-branch add github-snapshots.json
+          if git -C github-data-branch diff --cached --quiet; then
+            echo "Snapshot unchanged"
+            exit 0
+          fi
+          git -C github-data-branch commit -m "Update public GitHub snapshots"
+          git -C github-data-branch push origin HEAD:github-data

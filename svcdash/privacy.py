@@ -46,7 +46,8 @@ PRIVATE_IP_RE = re.compile(r'\b(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\
 TAILSCALE_IP_RE = re.compile(r'\b(100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b')
 
 # 个人家目录路径特征 (如 /home/tetsuya -> ~)
-HOME_DIR_RE = re.compile(r'/home/[a-zA-Z0-9_.-]+')
+HOME_DIR_RE = re.compile(r"(?i)/(?:home|users)/[^/\s`'\"\\]+")
+WINDOWS_HOME_RE = re.compile(r"(?i)[A-Z]:(?:\\)+Users(?:\\)+[^\\\s`'\"<>]+")
 HOME_REL_RE = re.compile(r'~(?:/[^\s/]+)+')
 
 # 静态公网版的第二层隐私边界：凭据/IP 脱敏并不等于对话内容安全。
@@ -110,7 +111,7 @@ def _secret_assignment_is_credential(value, quote="", filename=""):
     return entropy >= 3.0
 
 
-def mask_secret(text: str) -> str:
+def mask_secret(text: str, source_code: bool = False) -> str:
     """对字符串执行全局 API 密钥与凭证脱敏。"""
     if not isinstance(text, str):
         return text
@@ -118,6 +119,8 @@ def mask_secret(text: str) -> str:
     out = text
     # 1. 明确匹配已知 API 密钥
     for name, pat in SECRET_PATTERNS:
+        if source_code and name == "Generic Secret Arg":
+            continue
         if name == "Generic Secret Arg":
             def replace_arg(match):
                 if not _secret_assignment_is_credential(match.group(3), match.group(2)):
@@ -128,6 +131,9 @@ def mask_secret(text: str) -> str:
             out = pat.sub(r'\1' + MASK + r'\3', out)
         elif name == "Secret Assignment":
             def replace_assignment(match):
+                # Executable expressions are code, not credential values.
+                if source_code and not match.group(2):
+                    return match.group(0)
                 if not _secret_assignment_is_credential(match.group(3), match.group(2)):
                     return match.group(0)
                 return match.group(1) + match.group(2) + MASK + match.group(2)
@@ -138,18 +144,24 @@ def mask_secret(text: str) -> str:
     return out
 
 
-def sanitize_text(text: str, mask_ips: bool = True, mask_paths: bool = True) -> str:
+def sanitize_text(text: str, mask_ips: bool = True, mask_paths: bool = True, source_code: bool = False) -> str:
     """深度脱敏单个字符串（包含密钥、IP、私有家目录）。"""
     if not isinstance(text, str):
         return text
 
-    out = mask_secret(text)
+    if source_code:
+        # Quote object property names without changing executable expressions.
+        # Publication scanners otherwise mistake `secret: out.secret` for a key.
+        text = re.sub(r'([,{]\s*)(secret|password|passwd|clientSecret|apiKey|accessToken|authToken)(?=\s*:\s*[A-Za-z_$])',
+                      lambda m: m.group(1) + '"' + m.group(2) + '"', text)
+    out = mask_secret(text, source_code=source_code)
     # 邮箱与电话一律打码（宁可误杀）。公开页不需要展示任何联系方式。
     out = EMAIL_RE.sub(MASK, out)
     out = PHONE_RE.sub(MASK, out)
 
     if mask_paths:
         out = HOME_DIR_RE.sub("~", out)
+        out = WINDOWS_HOME_RE.sub("~", out)
 
     if mask_ips:
         out = PRIVATE_IP_RE.sub("192.168.*.*", out)

@@ -12,11 +12,12 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.request
 from datetime import datetime, timezone
-from svcdash.privacy import red
+from svcdash.privacy import deep_sanitize, red
 
 MAGPIE_PORT = 3426
 MAGPIE_URL = f"http://127.0.0.1:{MAGPIE_PORT}"
@@ -30,6 +31,97 @@ _providers_cache = (0.0, None)
 
 _cached_key = None
 _cached_key_time = 0.0
+
+_PUBLIC_CACHE_DIR = os.environ.get("SVC_DASHBOARD_CACHE_DIR") or f"{HOME}/.cache/svc-dashboard"
+_PUBLIC_CACHE_NAMES = {"usage-today", "usage-7d", "usage-30d", "usage-all", "routing", "providers", "native"}
+
+
+def read_public_cache(name):
+    """Read the last sanitized Magpie payload. Invalid or absent files are ignored."""
+    if name not in _PUBLIC_CACHE_NAMES:
+        return None
+    try:
+        with open(os.path.join(_PUBLIC_CACHE_DIR, f"magpie-{name}.json"), encoding="utf-8") as fp:
+            data = json.load(fp)
+        return data if isinstance(data, dict) and data.get("ok", True) else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def write_public_cache(name, data):
+    """Atomically persist only caller-sanitized display data, readable by the publisher."""
+    if name not in _PUBLIC_CACHE_NAMES or not isinstance(data, dict):
+        return
+    path = os.path.join(_PUBLIC_CACHE_DIR, f"magpie-{name}.json")
+    tmp = None
+    try:
+        os.makedirs(_PUBLIC_CACHE_DIR, mode=0o700, exist_ok=True)
+        owner = os.stat(HOME)
+        if os.geteuid() == 0:
+            os.chown(_PUBLIC_CACHE_DIR, owner.st_uid, owner.st_gid)
+            os.chmod(_PUBLIC_CACHE_DIR, 0o700)
+        fd, tmp = tempfile.mkstemp(prefix=f".magpie-{name}-", dir=_PUBLIC_CACHE_DIR)
+        with os.fdopen(fd, "w", encoding="utf-8") as fp:
+            os.fchmod(fp.fileno(), 0o600)
+            json.dump(data, fp, ensure_ascii=False, separators=(",", ":"))
+            fp.flush()
+            os.fsync(fp.fileno())
+            # The dashboard runs as root; the user-level publisher must also read this cache.
+            if os.geteuid() == 0:
+                os.fchown(fp.fileno(), owner.st_uid, owner.st_gid)
+        os.replace(tmp, path)
+    except OSError:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+def _public_usage_cache(data):
+    metrics = {"period", "since", "calls", "errors", "canceled", "input", "output",
+               "cache_read", "cache_write", "reasoning", "cost", "unpriced", "timed",
+               "ttft_ms", "decode_ms", "decode_out", "decode_n", "bucket", "series",
+               "agents", "models", "accounts", "quotas", "fetched_at", "ok"}
+    ranking = {"id", "provider", "model", "host", "calls", "errors", "canceled",
+               "input", "output", "cache_read", "cache_write", "reasoning", "cost",
+               "unpriced", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n",
+               "name", "sub", "icon"}
+    safe = {k: v for k, v in data.items() if k in metrics}
+    series_fields = {"time", "label", "calls", "errors", "canceled", "retried", "loops",
+                     "input", "output", "cache_read", "cache_write", "cache_unknown",
+                     "cache_unknown_calls", "reasoning", "cost", "credits", "credited",
+                     "unpriced", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n",
+                     "up_bytes", "down_bytes"}
+    safe["series"] = [{k: v for k, v in row.items() if k in series_fields}
+                      for row in data.get("series", []) if isinstance(row, dict)]
+    for field in ("agents", "models", "accounts"):
+        safe[field] = [{k: v for k, v in row.items() if k in ranking}
+                       for row in data.get(field, []) if isinstance(row, dict)]
+    return deep_sanitize(sanitize_magpie_usage_for_public(safe), mask_ips=True, mask_paths=True)
+
+
+def _public_routing_cache(data):
+    safe = {k: data[k] for k in ("ok", "totals", "now", "seq", "days", "pools", "fetched_at") if k in data}
+    safe["groups"] = [{k: v for k, v in group.items() if k in {"id", "name", "ready", "off"}}
+                      for group in data.get("groups", []) if isinstance(group, dict)]
+    safe["models"] = [{k: v for k, v in model.items() if k in {"id", "name", "provider", "icon", "context", "free", "canFast"}}
+                      for model in data.get("models", []) if isinstance(model, dict)]
+    safe["deciders"] = []
+    route_fields = {"seq", "time", "agent", "model", "provider", "done", "status", "ms",
+                    "tokens", "out", "reasoning", "ttft", "served", "cost", "priced"}
+    safe["routes"] = [{k: v for k, v in route.items() if k in route_fields}
+                      for route in data.get("routes", []) if isinstance(route, dict)]
+    return deep_sanitize(sanitize_magpie_routing_for_public(safe), mask_ips=True, mask_paths=True)
+
+
+def _public_providers_cache(data):
+    fields = {"id", "name", "icon", "preset", "off", "unlisted", "ready", "exposed",
+              "routing", "affinity", "active_models_count"}
+    safe = {"ok": True, "providers": [{k: v for k, v in p.items() if k in fields}
+                                       for p in data.get("providers", []) if isinstance(p, dict)],
+            "presets": {}, "fetched_at": data.get("fetched_at")}
+    return deep_sanitize(sanitize_magpie_providers_for_public(safe), mask_ips=True, mask_paths=True)
 
 
 def _discover_magpie_key():
@@ -118,19 +210,19 @@ def get_magpie_usage(period="today", force=False):
                 data["quotas"] = []
             with _cache_lock:
                 _usage_cache[period] = (now, data)
+            write_public_cache("usage-" + period, _public_usage_cache(data))
             return data
     except Exception as e:
         with _cache_lock:
-            if period in _usage_cache:
-                old_ts, old_data = _usage_cache[period]
-                res = dict(old_data)
-                res["stale"] = True
-                if not res.get("quotas"):
-                    try:
-                        res["quotas"] = get_magpie_quotas(force=False)
-                    except Exception:
-                        pass
-                return res
+            previous = _usage_cache.get(period)
+        if previous:
+            res = dict(previous[1])
+            res["stale"] = True
+            return res
+
+        saved = read_public_cache("usage-" + period)
+        if saved:
+            return {**saved, "stale": True}
 
         try:
             fallback_quotas = get_magpie_quotas(force=False)
@@ -171,7 +263,7 @@ def _get_local_agent_quotas() -> list:
     # 1. Antigravity (Gemini & Claude/GPT)
     agy = providers_data.get("agy")
     if agy and agy.get("ok"):
-        user = agy.get("account") or "iamcheyan@gmail.com"
+        user = agy.get("account") or "******"
         windows = []
         for b in agy.get("buckets") or []:
             lbl = b.get("label") or ""
@@ -220,7 +312,7 @@ def _get_local_agent_quotas() -> list:
     # 2. dim (Credits)
     dim = providers_data.get("dim")
     if dim and dim.get("ok"):
-        user = dim.get("account") or (agy.get("account") if agy else "") or "iamcheyan@gmail.com"
+        user = dim.get("account") or (agy.get("account") if agy else "") or "******"
         windows = []
         for b in dim.get("buckets") or []:
             rem_pct = b.get("remaining_pct")
@@ -375,6 +467,10 @@ def sanitize_magpie_usage_for_public(usage_data: dict, lang: str = "zh") -> dict
                 if m.get("sub"):
                     m["sub"] = _public_sub_label(m["sub"], lang)
 
+    # Session / key identities are internal and unused by the public usage UI.
+    for field in ("sessions", "callerKeys", "providerKeys"):
+        clean.pop(field, None)
+
     # 4. Caller Keys 脱敏
     if "callerKeys" in clean and isinstance(clean["callerKeys"], list):
         for k in clean["callerKeys"]:
@@ -467,12 +563,16 @@ def get_magpie_routing(force=False):
         }
         with _cache_lock:
             _routing_cache = (now, res)
+        write_public_cache("routing", _public_routing_cache(res))
         return res
     except Exception as e:
         if cached is not None:
             c = dict(cached)
             c["stale"] = True
             return c
+        saved = read_public_cache("routing")
+        if saved:
+            return {**saved, "stale": True}
         return {
             "ok": False,
             "err": str(e),
@@ -506,7 +606,7 @@ def get_magpie_providers(force=False):
         for p in provs:
             models = p.get("models") or []
             active_cnt = len([m for m in models if isinstance(m, dict) and m.get("on")])
-            p["active_models_count"] = active_cnt if active_cnt > 0 else len(models)
+            p["active_models_count"] = p.get("exposed", active_cnt)
             p.pop("models", None)
             p.pop("catalog", None)
             p.pop("searchModels", None)
@@ -525,12 +625,16 @@ def get_magpie_providers(force=False):
         }
         with _cache_lock:
             _providers_cache = (now, res)
+        write_public_cache("providers", _public_providers_cache(res))
         return res
     except Exception as e:
         if cached is not None:
             c = dict(cached)
             c["stale"] = True
             return c
+        saved = read_public_cache("providers")
+        if saved:
+            return {**saved, "stale": True}
         return {"ok": False, "err": str(e), "providers": [], "presets": {}}
 
 

@@ -32,7 +32,7 @@ LEAK_PATTERNS = [
     ("private-key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
     ("private-ip", re.compile(r"(?<![\d.])(?:192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?![\d.])")),
     ("tailscale-ip", re.compile(r"(?<![\d.])100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}(?![\d.])")),
-    ("home-path", re.compile(r"/home/(?!user\b)[A-Za-z0-9_.-]+")),
+    ("home-path", re.compile(r"(?i)/(?:home|users)/[^/\s`'\"\\]+|[A-Z]:(?:\\)+Users(?:\\)+[^\\\s`'\"<>]+")),
     ("real-email", re.compile(r"\b[A-Za-z0-9._%+-]+@(?!example\.(?:com|org|net)\b)(?![A-Za-z0-9.-]*users\.noreply\.github\.com\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
     ("real-phone", re.compile(r"(?<![\d.])(?:\+\d{1,3}[ -]?)?0\d{2,3}[ -]\d{3,4}[ -]\d{4}(?![\d.])")),
 ]

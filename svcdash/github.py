@@ -127,59 +127,7 @@ def _parse_atom(xml_bytes):
     return items
 
 
-def merge_commits(local_commits, gh_events, total=60):
-    """将本地 Git 提交与 GitHub 远程动态合二为一：
-    - 本地与 GitHub 均有：合并为一条，origin='both'，附带 GitHub 直达链接。
-    - 仅 GitHub 有(其他电脑推送/本地未 pull)：origin='github'，标记远端更新。
-    - 仅本地有(未推送)：origin='local'，标记本地未推。
-    按时间戳倒序输出前 total 条。"""
-    gh_by_key = {}
-    gh_unmatched = []
-
-    for ge in (gh_events or []):
-        r = (ge.get("repo") or ge.get("name") or "").lower()
-        sha = (ge.get("short_sha") or ge.get("gid") or "")[:7].lower()
-        if r and sha and len(sha) >= 4:
-            gh_by_key[(r, sha)] = ge
-        else:
-            gh_unmatched.append(ge)
-
-    merged = []
-    matched_gh_keys = set()
-
-    for lc in (local_commits or []):
-        r = (lc.get("name") or "").lower()
-        sha = (lc.get("gid") or "")[:7].lower()
-        key = (r, sha)
-        ge = gh_by_key.get(key)
-        if not ge and sha:
-            # 宽松匹配：SHA 匹配且仓库名互相包含(如本地 zircon 对齐远程 Zircon-Godot)
-            for (gr, gsha), cand in gh_by_key.items():
-                if gsha == sha and (r in gr or gr in r):
-                    ge = cand
-                    key = (gr, gsha)
-                    break
-        if ge:
-            # 两端均有：合并，标记已同步
-            matched_gh_keys.add(key)
-            item = dict(lc)
-            item["origin"] = "both"
-            item["url"] = ge.get("url") or f"https://github.com/iamcheyan/{lc['name']}/commit/{lc['gid']}"
-            merged.append(item)
-        else:
-            # 仅本地有
-            item = dict(lc)
-            item["origin"] = "local"
-            merged.append(item)
-
-    # 补充仅 GitHub 有的提交(其他电脑推送，本地尚未 pull)
-    for (r, sha), ge in gh_by_key.items():
-        if (r, sha) not in matched_gh_keys:
-            merged.append(ge)
-
-    # 补充其余通用 GitHub 动态
-    merged.extend(gh_unmatched)
-
-    # 按时间倒序
-    merged.sort(key=lambda x: -float(x.get("ts") or 0))
-    return merged[:total]
+def github_events(total=60):
+    """Return only GitHub Atom feed events, ordered newest first."""
+    events = fetch_github_events()
+    return sorted(events or [], key=lambda item: -float(item.get("ts") or 0))
