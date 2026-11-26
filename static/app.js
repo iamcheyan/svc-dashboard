@@ -7808,23 +7808,23 @@ async function thRenderTasks(silent = false) {
   CI.signature = signature;
   ciRenderList();
 }
-function ciIssueKey(issue, index) { return BOOT.static ? index : issue.number; }
+function ciIssueKey(issue, index) { return BOOT.static || CI.data?.publicSnapshot ? index : issue.number; }
 function ciItems() {
   return (CI.data?.items || []).map((i,index)=>({...i, key:ciIssueKey(i,index)}));
 }
 function ciFiltered() {
-  return ciItems().filter(i=>(CI.state==='ALL' || i.state===CI.state) && (!CI.label || i.labels?.includes(CI.label)))
+  return ciItems().filter(i=>(CI.state==='ALL' || i.state===CI.state) && (CI.data?.publicSnapshot || !CI.label || i.labels?.includes(CI.label)))
     .sort((a,b)=>CI.sort==='comments' ? (b.comments?.length||0)-(a.comments?.length||0) : String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
 }
 function ciRenderList() {
   const box=$('th-tasks'); if(!box)return;
   $('tmux-panel')?.classList.add('ci-mode');
-  const data=CI.data || {}, items=ciItems(), filtered=ciFiltered();
+  const data=CI.data || {}, publicOnly=BOOT.static || !!data.publicSnapshot, items=ciItems(), filtered=ciFiltered();
   const badge=$('n-ttab-tasks');if(badge)badge.textContent=items.filter(i=>i.state==='OPEN').length;
   box.innerHTML=`<div class="ci-toolbar"><div class="filters">${['OPEN','CLOSED','ALL'].map(s=>`<button type="button" class="chip ${CI.state===s?'active':''}" data-ci-state="${s}">${escHtml(t('ci_'+s.toLowerCase()))} ${items.filter(i=>s==='ALL'||i.state===s).length}</button>`).join('')}</div>
-    ${BOOT.static?'':`<details class="ci-label-filter"><summary>${escHtml(t('ci_labels'))}${CI.label?' · '+escHtml(CI.label):''}</summary><div class="filters"><button type="button" class="chip" data-ci-label="">${escHtml(t('ci_all'))}</button>${[...new Set(items.flatMap(i=>i.labels||[]))].sort().map(l=>`<button type="button" class="chip ${CI.label===l?'active':''}" data-ci-label="${escAttr(l)}">${escHtml(l)}</button>`).join('')}</div></details>`}
+    ${publicOnly?'':`<details class="ci-label-filter"><summary>${escHtml(t('ci_labels'))}${CI.label?' · '+escHtml(CI.label):''}</summary><div class="filters"><button type="button" class="chip" data-ci-label="">${escHtml(t('ci_all'))}</button>${[...new Set(items.flatMap(i=>i.labels||[]))].sort().map(l=>`<button type="button" class="chip ${CI.label===l?'active':''}" data-ci-label="${escAttr(l)}">${escHtml(l)}</button>`).join('')}</div></details>`}
     <p class="page-hint">${!data.ok ? escHtml(t('ci_failed')) : `${data.stale?'⚠ ':''}${data.updated_at?escHtml(new Date(data.updated_at*1000).toLocaleString(LOCALE_TAG)):''}${data.stale?' · '+escHtml(t('ci_stale')):''}`}</p></div>
-    ${filtered.length?filtered.map(i=>`<button type="button" class="th-card th-row ci-row ${CI.selected===i.key?'selected':''}" data-ci-open="${i.key}"><div class="ci-meta"><span class="ci-status ${i.state==='CLOSED'?'closed':''}">${icon(i.state==='CLOSED'?'ok':'dot',12)} ${escHtml(t('ci_'+i.state.toLowerCase()))}</span>${BOOT.static?'':`<span>#${i.number}</span><time>${escHtml(new Date(i.updatedAt).toLocaleDateString(LOCALE_TAG))}</time>`}</div><div class="th-title">${escHtml(i.title)}</div>${!BOOT.static?`<div class="ci-row-foot"><span>${escHtml((i.labels||[]).join(' · '))}</span><span>${icon('doc',11)} ${i.comments?.length||0}</span></div>`:`<div class="th-excerpt">${escHtml(i.excerpt||'')}</div>`}</button>`).join(''):`<div class="gempty">${escHtml(t(data.ok?'ci_empty':'ci_failed'))}</div>`}`;
+    ${filtered.length?filtered.map(i=>`<button type="button" class="th-card th-row ci-row ${CI.selected===i.key?'selected':''}" data-ci-open="${i.key}"><div class="ci-meta"><span class="ci-status ${i.state==='CLOSED'?'closed':''}">${icon(i.state==='CLOSED'?'ok':'dot',12)} ${escHtml(t('ci_'+i.state.toLowerCase()))}</span>${publicOnly?'':`<span>#${i.number}</span><time>${escHtml(new Date(i.updatedAt).toLocaleDateString(LOCALE_TAG))}</time>`}</div><div class="th-title">${escHtml(i.title)}</div>${!publicOnly?`<div class="ci-row-foot"><span>${escHtml((i.labels||[]).join(' · '))}</span><span>${icon('doc',11)} ${i.comments?.length||0}</span></div>`:`<div class="th-excerpt">${escHtml(i.excerpt||'')}</div>`}</button>`).join(''):`<div class="gempty">${escHtml(t(data.ok?'ci_empty':'ci_failed'))}</div>`}`;
   box.querySelectorAll('[data-ci-state]').forEach(b=>b.addEventListener('click',()=>{CI.state=b.dataset.ciState;CI.selected=null;ciRenderList();}));
   box.querySelectorAll('[data-ci-label]').forEach(b=>b.addEventListener('click',()=>{CI.label=b.dataset.ciLabel;CI.selected=null;ciRenderList();}));
   box.querySelectorAll('[data-ci-open]').forEach(b=>b.addEventListener('click',()=>{CI.selected=Number(b.dataset.ciOpen);CI.detailTab="body";ciRenderDetail();ciLayout();ciSetDetailTab("body");}));
@@ -7863,7 +7863,7 @@ function ciRenderDetail() {
   const i=ciItems().find(i=>i.key===CI.selected);
   if(!i){detail.innerHTML=`<div class="gempty">${escHtml(t('ci_select'))}</div>`;return;}
   const back=`<button type="button" class="th-btn ci-back" id="ci-back">${icon('back',13)} ${escHtml(t('ci_back'))}</button>`;
-  if(BOOT.static){detail.innerHTML=`${back}<h2>${escHtml(i.title)}</h2><p>${escHtml(i.excerpt||'')}</p><div class="gempty">${escHtml(t('ci_public'))}</div>`;}
+  if(BOOT.static || CI.data?.publicSnapshot){detail.innerHTML=`${back}<h2>${escHtml(i.title)}</h2><p>${escHtml(i.excerpt||'')}</p><div class="gempty">${escHtml(t('ci_public'))}</div>`;}
   else {
     const comments=i.comments||[];
     detail.innerHTML=`${back}<header class="th-head"><div class="ci-meta"><span class="ci-status ${i.state==='CLOSED'?'closed':''}">${escHtml(t('ci_'+i.state.toLowerCase()))}</span><span>#${i.number} · ${escHtml(i.author?.login||'')}</span><a href="${ciSafeUrl(i.url)}" target="_blank" rel="noopener">GitHub ↗</a></div><h2>${escHtml(i.title)}</h2><div class="ci-tags">${(i.labels||[]).map(l=>`<span class="chip">${escHtml(l)}</span>`).join('')}</div><p class="page-hint">${escHtml(t('ci_assignees'))}: ${escHtml((i.assignees||[]).join(', ')||'—')}${i.milestone?' · '+escHtml(i.milestone.title):''} · ${escHtml(new Date(i.updatedAt).toLocaleString(LOCALE_TAG))}${i.stateReason?' · '+escHtml(i.stateReason):''}</p><nav class="ci-detail-nav"><button type="button" class="th-btn" data-ci-jump="ci-body">${escHtml(t('ci_body'))}</button><button type="button" class="th-btn" data-ci-jump="ci-comments">${escHtml(t('ci_comments'))} (${comments.length})</button></nav></header>

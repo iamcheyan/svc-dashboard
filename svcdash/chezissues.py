@@ -28,6 +28,7 @@ def read_snapshot(public=False):
     if remote.get('ok') is not True or 'chezmoiIssues' not in remote:
         return _read_local_snapshot(public=public)
     d = dict(remote['chezmoiIssues'])
+    d['publicSnapshot'] = True
     d['stale'] = bool(d.get('error')) or time.time() - d.get('updated_at', 0) > 900
     if public:
         d['items'] = public_items(d.get('items', []))
