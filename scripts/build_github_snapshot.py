@@ -10,37 +10,28 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-ISSUES_QUERY = '''query($cursor:String){repository(owner:"iamcheyan",name:"chezmoi"){issues(first:100,after:$cursor,orderBy:{field:UPDATED_AT,direction:DESC}){pageInfo{hasNextPage endCursor} nodes{title body state labels(first:100){nodes{name}}}}}}'''
-
-
 def collect_public_issues():
     from svcdash.privacy import sanitize_text
 
-    items, cursor = [], None
-    truncated = False
-    while True:
-        args = ["gh", "api", "graphql", "-f", "query=" + ISSUES_QUERY]
-        if cursor:
-            args += ["-f", "cursor=" + cursor]
-        raw = subprocess.check_output(args, timeout=60, stderr=subprocess.PIPE)
-        response = json.loads(raw)
-        if response.get("errors"):
-            raise RuntimeError("GitHub issue query failed")
-        result = response["data"]["repository"]["issues"]
-        for issue in result["nodes"]:
-            labels = {x["name"].strip().lower() for x in issue["labels"]["nodes"]}
+    pages = json.loads(subprocess.check_output(
+        ["gh", "api", "--paginate", "--slurp",
+         "repos/iamcheyan/chezmoi/issues?state=all&per_page=100"],
+        timeout=60, stderr=subprocess.PIPE))
+    items = []
+    for page in pages:
+        for issue in page:
+            if "pull_request" in issue:
+                continue
+            labels = {str(x.get("name") or "").strip().lower() for x in issue.get("labels", [])}
             if labels & {"private", "secret", "no-publish"}:
                 continue
             title = sanitize_text(issue.get("title", ""), mask_ips=True, mask_paths=True).strip()
             if not title:
                 continue
             body = sanitize_text((issue.get("body") or "")[:240], mask_ips=True, mask_paths=True).strip()
-            items.append({"title": title[:160], "excerpt": body[:220], "state": issue.get("state", "OPEN")})
-        if not result["pageInfo"]["hasNextPage"]:
-            break
-        cursor = result["pageInfo"]["endCursor"]
-    return {"ok": True, "repo": "iamcheyan/chezmoi", "updated_at": time.time(),
-            "items": items, "truncated": truncated}
+            items.append({"title": title[:160], "excerpt": body[:220],
+                          "state": str(issue.get("state") or "open").upper()})
+    return {"ok": True, "repo": "iamcheyan/chezmoi", "updated_at": time.time(), "items": items}
 
 
 def main():
