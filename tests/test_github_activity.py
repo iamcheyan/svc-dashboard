@@ -57,6 +57,13 @@ class PublicActivityTest(unittest.TestCase):
         }):
             self.assertEqual(github.github_events(), [])
 
+    def test_snapshot_failure_falls_back_to_atom(self):
+        with patch.object(github, 'read_snapshot', return_value={'ok': False}), \
+             patch.object(github, 'fetch_github_events', return_value=[{'ts': NOW, 'subject': 'atom fallback'}]):
+            rows = github.github_events()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]['subject'], 'atom fallback')
+
     def test_backend_formats_push_timestamp_in_server_timezone(self):
         with patch.object(github, 'read_snapshot', return_value={
             'ok': True, 'activity': {'ok': True, 'events': [{'ts': NOW}]},

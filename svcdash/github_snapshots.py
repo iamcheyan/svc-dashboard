@@ -6,7 +6,7 @@ import time
 import urllib.error
 import urllib.request
 
-PUBLIC_URL = "https://raw.githubusercontent.com/iamcheyan/svc-dashboard/refs/heads/github-data/github-snapshots.json"
+PUBLIC_URL = "https://raw.githubusercontent.com/iamcheyan/svc-dashboard/github-data/github-snapshots.json"
 URL = os.environ.get("SVC_GITHUB_SNAPSHOT_URL", PUBLIC_URL)
 CACHE_TTL = 60
 _cache = {"fetched_at": 0.0, "attempted_at": 0.0, "data": None}
