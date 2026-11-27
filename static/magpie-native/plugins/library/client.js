@@ -3752,8 +3752,8 @@ magpie.plugin("library", (ctx) => {
       }
       const a = () => (d.oauth ||= { clientId: "", clientSecret: "", callbackPort: 0 });
       const id = field2(d.oauth?.clientId, t("Client ID"), (v) => { a().clientId = v.trim(); signBox?.redraw(); });
-      const secret = ******, t("Client secret"), (v) => { a().clientSecret = v.trim(); signBox?.redraw(); });
-      secret.type = "password";
+      const secretInput = field2(d.oauth?.clientSecret, t("Client secret"), (v) => { a().clientSecret = v.trim(); signBox?.redraw(); });
+      secretInput.type = "password";
       const port = field2(d.oauth?.callbackPort || "", t("Callback port"), (v) => {
         port.value = v.replace(/\D/g, "").slice(0, 5);
         a().callbackPort = Number(port.value) || 0;
@@ -3762,11 +3762,11 @@ magpie.plugin("library", (ctx) => {
       });
       port.inputMode = "numeric";
       port.classList.add("port");
-      for (const [i, l] of [[id, t("Client ID")], [secret, t("Client secret")], [port, t("Callback port")]]) i.setAttribute("aria-label", l);
+      for (const [i, l] of [[id, t("Client ID")], [secretInput, t("Client secret")], [port, t("Callback port")]]) i.setAttribute("aria-label", l);
       const x = button("", "lib-x", () => { d.oauth = s?.oauth ? null : undefined; appOpen = false; drawApp(); signBox?.redraw(); });
       x.append(svg("M4.5 4.5l7 7M11.5 4.5l-7 7", 11, 1.6));
       x.title = t("Remove");
-      appBox.append(id, secret, port, x);
+      appBox.append(id, secretInput, port, x);
       if (hint) hint.textContent = callback();
     }
     const callback = () => t("Made with its vendor (GitHub's under Settings › Developer settings › OAuth Apps), with {url} as its callback URL", { url: "http://localhost" + (d.oauth?.callbackPort ? ":" + d.oauth.callbackPort : "") + "/callback" });

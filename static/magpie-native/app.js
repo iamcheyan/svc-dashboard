@@ -5078,7 +5078,7 @@ function switchPickerGroup(id) {
   const reduced = calm();
   if (reduced) { filter(); return; }
   const direction = to >= from ? 1 : -1;
-  const token = ****** || 0) + 1;
+  const token = 1 + (pick.groupTransition || 0);
   pick.groupTransition = token;
   const out = list.animate([
     { opacity: 1, transform: "translate3d(0, 0, 0)" },
@@ -9704,7 +9704,7 @@ function drawEditor(p, presetID) {
   // Vertex AI: no key, the user's Google Cloud project's token
   const vertex = p ? !!p.vertex : !!pr?.vertex;
   let vertexProject = null;
-  if (vertex) draft.vertex = draft.vertex || { project: p?.vertex?.project || "", location: p?.vertex?.location || "", credentials: ****** || "", impersonate: p?.vertex?.impersonate || "", baseUrl: p?.vertex?.baseUrl || "" };
+  if (vertex) draft.vertex = draft.vertex || { project: p?.vertex?.project || "", location: p?.vertex?.location || "", credentials: p?.vertex ? (p.vertex.credentials || "") : "", impersonate: p?.vertex?.impersonate || "", baseUrl: p?.vertex?.baseUrl || "" };
   const vertexFields = () => {
     // the address shown follows a key typed: with one the project is optional
     const typedKey = key.oninput;
@@ -20808,8 +20808,8 @@ function proxyRow(s, keep, o) {
     i.setAttribute("aria-label", t("Proxy address"));
     const auth = el("div", "proxy-auth");
     const username = input(fields.username, t("Username (optional)"));
-    const password = ******, t("Password (optional)"), "password");
-    for (const field of [username, password]) {
+    const passwordInput = input(fields.password, t("Password (optional)"), "password");
+    for (const field of [username, passwordInput]) {
       field.className = "proxy-credential";
       field.setAttribute("aria-label", field.placeholder);
     }
@@ -20818,14 +20818,14 @@ function proxyRow(s, keep, o) {
       if (parsed.username || parsed.password) {
         fields = parsed;
         i.value = parsed.address;
-        username.value = parsed.username; password.value = parsed.password;
+        username.value = parsed.username; passwordInput.value = parsed.password;
       }
     };
     let saving = false;
     const save = () => {
       if (!i.value.trim() || saving) return;
       let v;
-      try { v = proxyAddress(i.value, fields, username.value, password.value); } catch { return; }
+      try { v = proxyAddress(i.value, fields, username.value, passwordInput.value); } catch { return; }
       if (v === s[o.key]) return;
       saving = true;
       o.state.custom = false;

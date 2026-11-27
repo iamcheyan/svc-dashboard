@@ -5961,7 +5961,7 @@ function routingPage(part) {
   // the default for every group (groups.defaults), each value checked
   const groupDefaults = () => {
     const d = groups?.defaults || {};
-    return { sink: d.sink === true, firstToken: ****** && d.firstToken > 0 ? d.firstToken : 0,
+    return { sink: d.sink === true, firstToken: d.firstToken > 0 && Number.isInteger(d.firstToken) ? d.firstToken : 0,
       patience: Number.isInteger(d.patience) && d.patience >= -1 ? d.patience : 0 };
   };
   const patienceWord = (n) => {

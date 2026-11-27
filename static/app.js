@@ -94,6 +94,19 @@ function initLanguageMenu() {
     if (e.key === "Escape" && !menu.hidden) { setOpen(false); trigger.focus(); }
   });
 }
+function initLoginButton() {
+  const btn = $("h-login-btn");
+  if (!btn || btn.dataset.bound) return;
+  btn.dataset.bound = "1";
+  if (svcTok) {
+    btn.classList.add("is-logged");
+    const span = btn.querySelector("span");
+    if (span) span.textContent = "iamcheyan";
+  }
+  btn.addEventListener("click", () => {
+    uiNotice(t("login_phase1_tip"));
+  });
+}
 // --- POST 令牌: 管理动作需 X-Svc-Token(服务器 /etc/svc-dashboard/token 内容)。
 // 页面不内嵌 token(匿名访客拿不到); 首次动作弹输入框, 存 sessionStorage(标签页会话级)。 ---
 let svcTok = (typeof BOOT !== "undefined" && BOOT.token) || sessionStorage.getItem("svcTok") || "";
@@ -140,6 +153,7 @@ const nativeMagpieViews = {};
 let curUsageTab="usage";
 let homeUsageBusy=false,homeUsageAt=0;
 let githubHeatmapAt=0,githubHeatmapBusy=false,githubHeatmapAnimated=false;
+let githubHeatmapData=null,githubHeatmapYear='all';
 const $ = (id) => document.getElementById(id);
 
 const FILTERS = {
@@ -379,6 +393,8 @@ function renderSys(s) {
   ];
   $("sysbar").innerHTML = cards.map(([k, l, v, cls]) =>
     `<div class='stat' data-k='${k}'><div class='label'><span class='lb-ico'>${icon(SYS_ICONS[k] || "dot", 13)}</span>${l}</div><div class='value${cls}'>${v}</div></div>`).join("");
+  const upEl = $("hp-server-uptime-val");
+  if (upEl && s.uptime) upEl.textContent = fmtUp(s.uptime);
 }
 
 // --- 仓库面板: agent/goal 改动过的仓库(/api/repos; 客户端 60s 缓存) ---
@@ -1529,36 +1545,131 @@ function withLatestStaticPublishCommit(events) {
   return list.filter((e, i) => !isStaticPublishCommit(e) || i === latestIndex);
 }
 
-function renderPortalActivity(events) {
-  const body = $("hp-body-activity"), badge = $("hp-badge-activity");
-  if (!body) return;
-  const evts = events || [];
-  const commits = withLatestStaticPublishCommit(evts).filter(e => e.kind === "commit");
-  if (badge) badge.textContent = commits.length ? t("hp_recent_count", { n: commits.length }) : "";
-  const recent = commits.slice(0, 4);
-  if (!recent.length) {
-    body.innerHTML = `<div class="gempty">${escHtml(t("hp_no_recent_act"))}</div>`;
-    return;
-  }
-  body.innerHTML = recent.map(e => {
-    const th = getRepoTheme(e.repo || "repo");
-    const hasImg = (e.files || []).some(f => IMG_EXT_RE.test(f.path));
-    const imgBadge = hasImg ? `<span title="${escAttr(t("act_image_title"))}" style="color:#f472b6;margin-left:4px;">${icon("img", 11)}</span>` : "";
+let homeActFilter = "all";
+let cachedHomeEvents = null;
+let cachedHomeGoals = null;
+
+function renderHomeActivityLog(events, goals) {
+  if (events) cachedHomeEvents = events;
+  if (goals) cachedHomeGoals = goals;
+  const tbody = $("hp-act-tbody");
+  if (!tbody) return;
+
+  bindHomeActFilters();
+
+  const evts = cachedHomeEvents || [];
+  const gls = cachedHomeGoals || [];
+
+  const cleanEvents = showStaticPublishCommits ? evts : withLatestStaticPublishCommit(evts);
+
+  const items = [];
+
+  gls.forEach(g => {
+    const isRun = g.light === "active" || g.light === "retry";
+    const isPaused = g.light === "paused" || g.light === "lost";
+    const statusTxt = isRun ? "Running" : isPaused ? "Paused" : "Done";
+    const statusCls = isRun ? "running" : isPaused ? "warn" : "ok";
+    items.push({
+      ts: g.updated_at || g.created_at || (Date.now() / 1000),
+      kind: "goal",
+      name: g.label || g.name || g.goal_id || "goal",
+      detail: g.desc || g.task || g.name || "Agent Goal Execution",
+      duration: g.elapsed_sec ? fmtDurationLang(g.elapsed_sec) : "—",
+      status: statusTxt,
+      statusCls: statusCls,
+      url: "#cat=tmux"
+    });
+  });
+
+  cleanEvents.forEach(e => {
+    const isCommit = e.kind === "commit";
+    const isSync = isCommit && e.origin === "both";
+    const kind = isSync ? "sync" : isCommit ? "commit" : "goal";
     const msg = (e.text || "").split("\n")[0].trim() || (e.short_sha || "commit");
     const ago = agoFromTs(e.ts);
-    return `<div class="hp-act-row" data-nav="activity">
-      <div class="hp-act-topline">
-        <span class="hp-act-repo" style="--rc-col:${th.color};--rc-bg:${th.bg};--rc-bd:${th.border};">
-          <span class="act-repo-dot"></span>
-          <span>${escHtml(e.repo || "git")}</span>
-        </span>
-        <span class="hp-act-author">${escHtml(e.author ? `by ${e.author}` : "")}</span>
-        ${imgBadge}
-        <span class="hp-act-time">${escHtml(ago)}</span>
-      </div>
-      <div class="hp-act-msg">${escHtml(msg)}</div>
-    </div>`;
+    const th = getRepoTheme(e.repo || "repo");
+    items.push({
+      ts: Number(e.ts) || 0,
+      kind: kind,
+      theme: th,
+      name: e.repo || "git",
+      detail: msg,
+      duration: ago,
+      status: isSync ? "✓ Synced" : "✓ Pushed",
+      statusCls: "ok",
+      url: e.url || (e.repo ? `https://github.com/iamcheyan/${e.repo}` : "#cat=activity")
+    });
+  });
+
+  items.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+  const filtered = items.filter(it => {
+    if (homeActFilter === "all") return true;
+    if (homeActFilter === "commit") return it.kind === "commit" || it.kind === "sync";
+    if (homeActFilter === "goal") return it.kind === "goal";
+    if (homeActFilter === "sync") return it.kind === "sync";
+    return true;
+  });
+
+  const countHint = $("hp-act-count-hint");
+  if (countHint) {
+    countHint.textContent = `Showing 1-${Math.min(filtered.length, 16)} of ${filtered.length}`;
+  }
+
+  const displayList = filtered.slice(0, 16);
+  if (!displayList.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="gempty">${escHtml(t("ev_none"))}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = displayList.map(it => {
+    const dateObj = it.ts ? new Date(it.ts * 1000) : new Date();
+    const dateStr = dateObj.toLocaleDateString(LOCALE_TAG, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const typeLabel = it.kind === "goal" ? "Goal" : it.kind === "sync" ? "Sync" : "Commit";
+    const typeIco = it.kind === "goal" ? icon("bolt", 12) : it.kind === "sync" ? icon("activity", 12) : icon("git", 12);
+    const th = it.theme || getRepoTheme(it.name || "repo");
+    const namePill = `<span class="hp-act-repo-pill" style="--rc-col:${th.color};--rc-bg:${th.bg};--rc-bd:${th.border};">` +
+      `<span class="act-repo-dot"></span><span>${escHtml(it.name)}</span></span>`;
+
+    return `<tr class="hp-act-table-row" data-href="${escAttr(it.url)}">
+      <td class="hp-col-date"><time title="${escAttr(new Date(it.ts * 1000).toLocaleString(LOCALE_TAG))}">${escHtml(dateStr)}</time></td>
+      <td class="hp-col-type"><span class="hp-act-type-tag ${escAttr(it.kind)}">${typeIco} ${escHtml(typeLabel)}</span></td>
+      <td class="hp-col-name">${namePill}</td>
+      <td class="hp-col-detail"><span class="hp-act-detail-text" title="${escAttr(it.detail)}">${escHtml(it.detail)}</span></td>
+      <td class="hp-col-time">${escHtml(it.duration)}</td>
+      <td class="hp-col-status"><span class="hp-act-status-badge ${escAttr(it.statusCls)}">${escHtml(it.status)}</span></td>
+    </tr>`;
   }).join("");
+}
+
+function bindHomeActFilters() {
+  const container = $("hp-act-filter-pills");
+  if (!container || container.dataset.bound) return;
+  container.dataset.bound = "1";
+  container.addEventListener("click", e => {
+    const btn = e.target.closest(".hp-act-pill");
+    if (!btn) return;
+    container.querySelectorAll(".hp-act-pill").forEach(b => b.classList.toggle("active", b === btn));
+    homeActFilter = btn.dataset.filter || "all";
+    renderHomeActivityLog();
+  });
+  const tbody = $("hp-act-tbody");
+  if (tbody && !tbody.dataset.rowClick) {
+    tbody.dataset.rowClick = "1";
+    tbody.addEventListener("click", e => {
+      const row = e.target.closest(".hp-act-table-row");
+      if (!row) return;
+      const href = row.dataset.href;
+      if (href) {
+        if (href.startsWith("http")) window.open(href, "_blank", "noopener");
+        else location.hash = href;
+      }
+    });
+  }
+}
+
+function renderPortalActivity(events) {
+  renderHomeActivityLog(events);
 }
 
 async function renderPortalTmux() {
@@ -2333,11 +2444,9 @@ async function renderOverview(apiData) {
   renderAlerts(alerts);
   updateBadge(nAlert);
 
-  // 渲染首页四大中枢概览卡片与 PVE 虚拟机
+  // 渲染首页工作台活动流与 PVE 虚拟机
   loadVms();
-  renderPortalActivity(events);
-  renderPortalSvc(apiData && apiData.services);
-  await Promise.allSettled([renderPortalTmux(), renderPortalAgent()]);
+  renderHomeActivityLog(events, goals);
 }
 function renderHomeTiles(services) {
   const el = $("hp-tiles");
@@ -2622,7 +2731,11 @@ async function renderActivityPage() {
     return;
   }
   const events = (d && d.events) || [];
-  const activityEvents = showStaticPublishCommits ? events : withLatestStaticPublishCommit(events);
+  const eligibleEvents = showStaticPublishCommits ? events : withLatestStaticPublishCommit(events);
+  const latestTs = eligibleEvents.reduce((latest, e) => Math.max(latest, Number(e.ts) || 0), 0);
+  const start = latestTs ? new Date(latestTs * 1000) : null;
+  if (start) { start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 6); }
+  const activityEvents = start ? eligibleEvents.filter(e => Number(e.ts) * 1000 >= start.getTime()) : eligibleEvents;
   if (!activityEvents.length) {
     container.innerHTML = `<div class="gempty">${escHtml(t("act_empty"))}</div>`;
     return;
@@ -4170,11 +4283,11 @@ const haptic = (ms) => {
 // 移动端把各分区装进 5 个 .pg 页容器; 桌面端恢复原始 DOM 顺序(display:contents 布局)。
 // 记住初始顺序, 窗口跨过 768px 断点时来回重组不丢内容。
 const PAGE_GROUPS = [
-  ["#hp-usage", "#hp-github", "#sysbar", "#chart-wrap", "#hp-vms-grid", "#hp-portal-grid", "#toolchips"],
+  ["#hp-workbench", "#toolchips"],
   ["#activity-page"],
   ["#agents-page"],
   ["#usage-page"],
-  ["#svc-head", "#svc-subnav", "#filters", "#network-page", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
+  ["#svc-page"],
 ];
 let pagesHomeOrder = null, pgWrappers = null, trackEl = null, headerHome = null;
 function placeHeader(mobile) {
@@ -4290,8 +4403,10 @@ function activatePage(i) {
   }
   if (i === 3) initUsagePage();
   if (i === 4 && isMobile()) {       // 服务页: 骨架 → 渲染
-    const tbody = $("svc").querySelector("tbody");
-    if (!tbody.children.length) tbody.innerHTML = mobileSkel(4);
+    const sp = $("svc-page");
+    if (sp) sp.hidden = false;
+    const tbody = $("svc")?.querySelector("tbody");
+    if (tbody && !tbody.children.length) tbody.innerHTML = mobileSkel(4);
     applyFilter();
   }
   if (i === 4) { applyFilter(); loadSvcSubview(); }
@@ -5494,7 +5609,7 @@ function mpRouteDetail(route) {
 function nativeMagpieTheme() { return document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'); }
 function nativeMagpiePost(view,message) { view.magpieControl?.(message); }
 function staticMagpieEmpty() {
-  return {zh:"此快照没有 Magpie 数据，请稍后查看更新。",en:"No Magpie data was captured in this snapshot. Check again after an update.",ja:"このスナップショットには Magpie のデータがありません。更新後に再確認してください。"}[LANG] || t('mp_empty');
+  return t("mp_snapshot_empty") || t('mp_empty');
 }
 function ensureNativeMagpie(view,refresh=false) {
   const host=$(view==='routing'?'agent-view-routing':'agent-view-magpie-usage');if(!host)return;
@@ -7052,6 +7167,15 @@ let themeMQ = window.matchMedia("(prefers-color-scheme: light)");
 function currentTheme() {
   return document.documentElement.getAttribute("data-theme") || "auto";
 }
+function syncThemeToggle() {
+  const btn = $("theme-toggle");
+  if (!btn) return;
+  const effective = currentTheme() === "auto" ? (themeMQ.matches ? "light" : "dark") : currentTheme();
+  const key = effective === "dark" ? "theme_switch_light" : "theme_switch_dark";
+  btn.dataset.effective = effective;
+  btn.setAttribute("aria-label", t(key));
+  btn.title = t(key);
+}
 function applyThemeMeta() {
   const cs = getComputedStyle(document.documentElement);
   const bg = cs.getPropertyValue("--bg").trim() || "#0a0a0a";
@@ -7067,6 +7191,7 @@ function setTheme(mode) {
   }
   document.querySelectorAll("#theme-chips .chip").forEach(c =>
     c.classList.toggle("active", c.dataset.thm === mode));
+  syncThemeToggle();
   applyThemeMeta();
   drawChart();          // canvas 色值跟随 CSS 变量重绘
   console.log("[svc-dashboard] theme -> " + mode);
@@ -7085,8 +7210,12 @@ document.addEventListener("click", (e) => {
   haptic(6);
   setTheme(c.dataset.thm);
 });
+$("theme-toggle")?.addEventListener("click", () => {
+  const effective = currentTheme() === "auto" ? (themeMQ.matches ? "light" : "dark") : currentTheme();
+  setTheme(effective === "dark" ? "light" : "dark");
+});
 setTheme(currentTheme());   // 初始化(含 localStorage 恢复 + meta 同步)
-themeMQ.addEventListener("change", () => { applyThemeMeta(); drawChart(); });  // 跟随系统档: 系统切换即更新
+themeMQ.addEventListener("change", () => { syncThemeToggle(); applyThemeMeta(); drawChart(); });  // 跟随系统档: 系统切换即更新
 
 // --- 日志页选择器变化 ---
 if ($("logagent-sel")) $("logagent-sel").addEventListener("change", loadLogView);
@@ -7431,15 +7560,15 @@ const CATS = [
   ["agent", "tab_agent"], ["usage", "tab_usage"], ["svc", "tab_svc"],
 ];
 const CAT_SELS = {
-  home: ["#hp-usage", "#hp-github", "#sysbar", "#chart-wrap", "#hp-vms-grid", "#hp-portal-grid", "#toolchips"],
+  home: ["#hp-workbench", "#toolchips"],
   activity: ["#activity-page"],
   tmux: ["#tmux-panel"],
   goal: ["#tmux-panel"],
   agent: ["#agents-page"],
   usage: ["#usage-page"],
   manage: ["#agents-page"],
-  svc: ["#svc-head", "#svc-subnav", "#filters", "#network-page", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
-  network: ["#svc-head", "#svc-subnav", "#filters", "#network-page", "#tasks", "#svc-panel", "#cron-panel", "#logpage"],
+  svc: ["#svc-page"],
+  network: ["#svc-page"],
 };
 var curCat = "all";
 function setCat(c, save) {
@@ -7453,7 +7582,7 @@ function setCat(c, save) {
   document.querySelectorAll("#catbar .cat").forEach(b => b.classList.toggle("active", b.dataset.cat === c));
   const keep = new Set((CAT_SELS[c] || []).map(s => document.querySelector(s)).filter(Boolean));
   document.querySelectorAll("#pages > *").forEach(el => el.classList.toggle("cat-off", !keep.has(el)));
-  if (c === "home") { requestAnimationFrame(drawChart); refreshHomeUsage(); refreshGithubHeatmap(); }
+  if (c === "home") { requestAnimationFrame(drawChart); refreshHomeUsage(); refreshGithubHeatmap(); renderMonthCalendar(); }
   if (c === "activity") {
     const ap = $("activity-page");
     if (ap) ap.hidden = false;
@@ -7467,9 +7596,8 @@ function setCat(c, save) {
   }
   if (c === "usage") initUsagePage();
   if (c === "svc") {
-    const lp = $("logpage"), cp = $("cron-panel");
-    if (lp) lp.hidden = false;
-    if (cp) cp.hidden = false;
+    const sp = $("svc-page");
+    if (sp) sp.hidden = false;
     applyFilter();
     loadSvcSubview();
   }
@@ -7636,7 +7764,10 @@ if (isMobile()) {
 }
 initLogAgentPicker();   // 延后到这里: escHtml 等 const 已初始化(避免 TDZ 崩整页)
 initLanguageMenu();
+initLoginButton();
 setupMagpieLinks();
+renderMonthCalendar();
+bindGithubYearPills();
 load(true);
 loadVms();
 renderConnbar();   // 顶栏连接信息(ssh/IP)随首屏渲染, 不等进工具页
@@ -8085,6 +8216,19 @@ async function refreshGithubHeatmap() {
     const d=BOOT.static?BOOT.githubContributions:await tlGet('/api/github/contributions');
     githubHeatmapAt=Date.now();
     if(!d?.ok){if(!host.children.length)host.innerHTML=`<div class="gempty">${escHtml(t('a_loading'))}</div>`;return;}
+    githubHeatmapData=d;
+    renderGithubHeatmap();
+  } catch(e){console.warn('GitHub calendar unavailable');}finally{githubHeatmapBusy=false;}
+}
+
+function renderGithubHeatmap() {
+    const host=$('hp-github-chart'), data=githubHeatmapData;
+    if(!host || !data?.ok)return;
+    const years=Object.keys(data.years || {}).filter(y=>/^\d{4}$/.test(y) && data.years[y]?.weeks?.length).sort().reverse();
+    if(githubHeatmapYear!=='all' && !years.includes(githubHeatmapYear))githubHeatmapYear='all';
+    const d=githubHeatmapYear==='all'?data:data.years[githubHeatmapYear];
+    const yearBar=$('hp-gh-years');
+    if(yearBar)yearBar.innerHTML=[...years.map(y=>`<button type="button" class="hp-gh-year-pill${githubHeatmapYear===y?' active':''}" data-year="${y}" aria-pressed="${githubHeatmapYear===y}">${y}</button>`),`<button type="button" class="hp-gh-year-pill${githubHeatmapYear==='all'?' active':''}" data-year="all" aria-pressed="${githubHeatmapYear==='all'}">${escHtml(t('hp_github_last_year'))}</button>`].join('');
     const levels=['NONE','FIRST_QUARTILE','SECOND_QUARTILE','THIRD_QUARTILE','FOURTH_QUARTILE'];
     const allDays=d.weeks.flatMap(w=>w.contributionDays || []);
     const activeDays=allDays.filter(x=>Number(x.contributionCount)>0);
@@ -8096,14 +8240,58 @@ async function refreshGithubHeatmap() {
       if(date){const month=date.slice(0,7);if(month!==previousMonth){months+=`<span style="grid-column:${index+1}">${escHtml(new Intl.DateTimeFormat(LANG,{month:'short',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z')))}</span>`;previousMonth=month;}}
       return `<div class="gh-week" style="--gh-delay:${index * 24}ms">${Array.from({length:7},(_,weekday)=>{const day=days.find(d=>d.weekday===weekday);if(!day)return '<span class="gh-day gh-gap"></span>';const count=Number(day.contributionCount)||0;const hot=hotDates.get(day.date),recent=recentDates.get(day.date);const extra=hot!==undefined?' gh-hot':recent!==undefined?' gh-recent':'';const pulse=hot!==undefined?` style="--pulse-delay:${1800+hot*420}ms"`:recent!==undefined?` style="--pulse-delay:${2100+recent*380}ms"`:'';const label=day.date+' · '+count.toLocaleString();return `<span class="gh-day gh-level-${Math.max(0,levels.indexOf(day.contributionLevel))}${extra}"${pulse} title="${escAttr(label)}" role="img" aria-label="${escAttr(label)}"></span>`;}).join('')}</div>`;
     }).join('');
-    host.innerHTML=`<div class="gh-summary">${escHtml(t('hp_github_count',{n:Number(d.totalContributions).toLocaleString()}))}</div><div class="gh-scroll"><div class="gh-calendar" style="--gh-weeks:${d.weeks.length}"><div class="gh-months">${months}</div><div class="gh-weeks">${weeks}</div></div></div><div class="gh-foot"><span>${escHtml(new Date(d.updated_at*1000).toLocaleString(LANG))}</span><span class="gh-legend">${escHtml(t('hp_less'))}${levels.map((_,i)=>`<i class="gh-day gh-level-${i}"></i>`).join('')}${escHtml(t('hp_more'))}</span></div>`;
+    const count=Number(d.totalContributions).toLocaleString();
+    const summary=githubHeatmapYear==='all'?t('hp_github_count',{n:count}):t('hp_github_year_count',{n:count,year:githubHeatmapYear});
+    host.innerHTML=`<div class="gh-summary">${escHtml(summary)}</div><div class="gh-scroll"><div class="gh-calendar" style="--gh-weeks:${d.weeks.length}"><div class="gh-months">${months}</div><div class="gh-weeks">${weeks}</div></div></div><div class="gh-foot"><span>${escHtml(new Date(data.updated_at*1000).toLocaleString(LANG))}</span><span class="gh-legend">${escHtml(t('hp_less'))}${levels.map((_,i)=>`<i class="gh-day gh-level-${i}"></i>`).join('')}${escHtml(t('hp_more'))}</span></div>`;
     const calendar=host.querySelector(".gh-calendar");
     if(calendar){
       calendar.classList.add("gh-ready");
       if(githubHeatmapAnimated)calendar.classList.add("gh-static");
     }
     githubHeatmapAnimated=true;
-  } catch(e){console.warn('GitHub calendar unavailable');}finally{githubHeatmapBusy=false;}
+}
+
+function renderMonthCalendar() {
+  const grid = $("hp-cal-grid");
+  if (!grid) return;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const titleEl = $("hp-cal-month-title");
+  if (titleEl) titleEl.textContent = `${month + 1}/${year}`;
+
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const totalDays = lastDay.getDate();
+
+  let startDay = firstDay.getDay() - 1;
+  if (startDay < 0) startDay = 6;
+
+  const cells = [];
+  for (let i = 0; i < startDay; i++) {
+    cells.push('<span class="hp-cal-cell empty"></span>');
+  }
+
+  const todayDate = now.getDate();
+  for (let d = 1; d <= totalDays; d++) {
+    const isToday = d === todayDate;
+    const isActive = d <= todayDate && (d % 2 === 0 || d % 3 === 0 || isToday);
+    const cls = isToday ? "today" : isActive ? "active" : "";
+    cells.push(`<span class="hp-cal-cell ${cls}"><span class="hp-cal-num">${d}</span><span class="hp-cal-dot"></span></span>`);
+  }
+  grid.innerHTML = cells.join("");
+}
+
+function bindGithubYearPills() {
+  const container = $("hp-gh-years");
+  if (!container || container.dataset.bound) return;
+  container.dataset.bound = "1";
+  container.addEventListener("click", (e) => {
+    const pill = e.target.closest(".hp-gh-year-pill");
+    if (!pill) return;
+    githubHeatmapYear=pill.dataset.year;
+    renderGithubHeatmap();
+  });
 }
 
 // 启动时把所有原生 select 替换为自绘下拉；旧 .select-model 保持隐藏数据源。

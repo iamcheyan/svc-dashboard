@@ -41,8 +41,14 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     </div>
   </div>
 
+  <button class="theme-toggle" id="theme-toggle" type="button" aria-label="{{T:theme_switch_dark}}" title="{{T:theme_switch_dark}}">
+    <svg class="theme-icon-sun" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.4"/><path d="M10 1.5v2M10 16.5v2M1.5 10h2M16.5 10h2M4 4l1.4 1.4m9.2 9.2L16 16m0-12-1.4 1.4m-9.2 9.2L4 16"/></svg>
+    <svg class="theme-icon-moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.8 12.2A7.4 7.4 0 0 1 7.8 3.2a7.5 7.5 0 1 0 9 9Z"/></svg>
+  </button>
+
   <span class="btn icon-btn" id="refresh" role="button" tabindex="0"
         title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:17}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
+  <button class="h-login-btn" id="h-login-btn" type="button" aria-label="{{T:btn_login}}"><svg class="h-login-ico" width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>{{T:btn_login}}</span></button>
 </header>
 <div id="ptr-indicator" aria-hidden="true"><svg class="ptr-ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="16.5"/></svg><span class="ptr-core">{{ICO:refresh:18}}</span></div>
 <!-- 浮动玻璃刷新圆钮(移动端+桌面): topbar 滚出视口后由 IntersectionObserver 显示;
@@ -51,83 +57,102 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
       title="{{T:refresh_title}}" aria-label="{{T:refresh_title}}" aria-pressed="false">{{ICO:refresh:20}}<span class="ic-badge">{{ICO:lock:9}}</span></span>
 <main>
 <div id="pages">
-<section class="gpanel" id="hp-usage"><div class="page-head"><h2>{{T:hp_usage_today}}</h2><a class="hp-portal-jump" href="#cat=usage" data-nav="usage">{{T:hp_more}} {{ICO:chevron:12}}</a></div><div class="agent-kpi-grid mp-kpis" id="hp-usage-kpis"></div></section>
-<section class="gpanel" id="hp-github"><div class="page-head"><h2>{{T:hp_github_title}}</h2><a class="hp-portal-jump" href="https://github.com/iamcheyan" target="_blank" rel="noopener">GitHub {{ICO:ext:12}}</a></div><div id="hp-github-chart"></div></section>
-{{SYSBAR}}
-<div class="gpanel" id="chart-wrap">
-  <h2>{{T:chart_title}} <span class="ghint" id="chart-win"></span></h2>
-  <canvas id="chart" height="140"></canvas>
-  <div id="chart-empty">{{T:chart_empty}}</div>
-</div>
-<div class="hp-vms-grid" id="hp-vms-grid"></div>
-<div class="hp-portal-grid" id="hp-portal-grid">
-  <!-- 1. 近期动态概览 -->
-  <div class="gpanel hp-portal-card" id="hp-card-activity">
-    <div class="hp-portal-header">
-      <div class="hp-portal-title">
-        <span class="hp-portal-ico" style="color:#f472b6;">{{ICO:git:16}}</span>
-        <h3>{{T:tab_activity}}</h3>
-        <span class="hp-portal-badge" id="hp-badge-activity"></span>
+<div class="hp-workbench" id="hp-workbench">
+  <div class="hp-main-col">
+    <section class="gpanel" id="hp-usage">
+      <div class="page-head">
+        <h2>{{T:hp_usage_today}}</h2>
+        <a class="hp-portal-jump" href="#cat=usage" data-nav="usage">{{T:hp_more}} {{ICO:chevron:12}}</a>
       </div>
-      <button class="hp-portal-jump" type="button" data-nav="activity">
-        <span>{{T:hp_view_all}}</span> {{ICO:chev:11}}
-      </button>
+      <div class="agent-kpi-grid mp-kpis" id="hp-usage-kpis"></div>
+    </section>
+
+    <div class="gpanel hp-side-card" id="chart-wrap">
+      <h2>{{T:chart_title}} <span class="ghint" id="chart-win"></span></h2>
+      <canvas id="chart" height="130"></canvas>
+      <div id="chart-empty">{{T:chart_empty}}</div>
     </div>
-    <div class="hp-portal-body" id="hp-body-activity">
-      <div class="gempty">{{T:st_loading}}</div>
-    </div>
+
+    <section class="gpanel" id="hp-github">
+      <div class="page-head">
+        <div class="hp-gh-head-left">
+          <h2>{{T:hp_github_title}}</h2>
+          <div class="hp-gh-years" id="hp-gh-years" aria-label="{{T:hp_github_title}}"></div>
+        </div>
+        <a class="hp-portal-jump" href="https://github.com/iamcheyan" target="_blank" rel="noopener">GitHub {{ICO:ext:12}}</a>
+      </div>
+      <div id="hp-github-chart"></div>
+    </section>
+
+    <!-- PVE 虚拟机状态面板 (Windows11 / DEBIAN) - 完整保留 -->
+    <div class="hp-vms-grid" id="hp-vms-grid"></div>
+
+    <!-- 运维与活动日志流 (参考 WORKOUT.LOG Activity Log 表格) -->
+    <section class="gpanel hp-activity-log-section" id="hp-activity-log">
+      <div class="page-head hp-act-head">
+        <div class="hp-act-title-wrap">
+          <h2>{{T:act_log_title}}</h2>
+          <span class="hp-act-count-hint" id="hp-act-count-hint"></span>
+        </div>
+        <div class="hp-act-filter-pills" id="hp-act-filter-pills">
+          <button class="hp-act-pill active" data-filter="all" type="button">{{T:act_all}}</button>
+          <button class="hp-act-pill" data-filter="commit" type="button">{{T:act_commits}}</button>
+          <button class="hp-act-pill" data-filter="goal" type="button">{{T:act_goals}}</button>
+          <button class="hp-act-pill" data-filter="sync" type="button">{{T:act_synced}}</button>
+        </div>
+      </div>
+      <div class="hp-act-table-wrap">
+        <table class="hp-act-table">
+          <thead>
+            <tr>
+              <th class="hp-col-date">{{T:act_th_date}}</th>
+              <th class="hp-col-type">{{T:act_th_type}}</th>
+              <th class="hp-col-name">{{T:act_th_name}}</th>
+              <th class="hp-col-detail">{{T:act_th_detail}}</th>
+              <th class="hp-col-time">{{T:act_th_time}}</th>
+              <th class="hp-col-status">{{T:act_th_status}}</th>
+            </tr>
+          </thead>
+          <tbody id="hp-act-tbody">
+            <tr><td colspan="6" class="gempty">{{T:a_loading}}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 
-  <!-- 2. Tmux 会话概览 -->
-  <div class="gpanel hp-portal-card" id="hp-card-tmux">
-    <div class="hp-portal-header">
-      <div class="hp-portal-title">
-        <span class="hp-portal-ico" style="color:#38bdf8;">{{ICO:terminal:16}}</span>
-        <h3>{{T:tab_tmux}}</h3>
-        <span class="hp-portal-badge" id="hp-badge-tmux"></span>
+  <aside class="hp-side-col">
+    <!-- 概览里程碑总览卡片 -->
+    <div class="gpanel hp-side-card" id="hp-server-summary">
+      <div class="hp-side-card-head">
+        <div class="hp-server-total-title">
+          <span class="hp-server-ico">{{ICO:cpu:16}}</span>
+          <span class="hp-server-total-val" id="hp-server-uptime-val">--</span>
+        </div>
+        <span class="hp-server-online-badge"><span class="hp-pulse-dot"></span> {{T:total_online}}</span>
       </div>
-      <button class="hp-portal-jump" type="button" data-nav="tmux">
-        <span>{{T:hp_view_all}}</span> {{ICO:chev:11}}
-      </button>
+      <div class="hp-server-sub-stats">
+        <div class="hp-server-sub-item"><span class="hp-server-sub-num" id="hp-total-svc-count">42</span> <span class="hp-server-sub-lbl">{{T:total_services}}</span></div>
+        <div class="hp-server-sub-item"><span class="hp-server-sub-num" id="hp-total-agent-count">12</span> <span class="hp-server-sub-lbl">{{T:total_agents}}</span></div>
+        <div class="hp-server-sub-item"><span class="hp-server-sub-num" id="hp-total-repo-count">135</span> <span class="hp-server-sub-lbl">{{T:total_repos}}</span></div>
+      </div>
     </div>
-    <div class="hp-portal-body" id="hp-body-tmux">
-      <div class="gempty">{{T:st_loading}}</div>
-    </div>
-  </div>
 
-  <!-- 3. 服务监控概览 -->
-  <div class="gpanel hp-portal-card" id="hp-card-svc">
-    <div class="hp-portal-header">
-      <div class="hp-portal-title">
-        <span class="hp-portal-ico" style="color:#4ade80;">{{ICO:cpu:16}}</span>
-        <h3>{{T:tab_svc}}</h3>
-        <span class="hp-portal-badge" id="hp-badge-svc"></span>
-      </div>
-      <button class="hp-portal-jump" type="button" data-nav="svc">
-        <span>{{T:hp_view_all}}</span> {{ICO:chev:11}}
-      </button>
-    </div>
-    <div class="hp-portal-body" id="hp-body-svc">
-      <div class="gempty">{{T:st_loading}}</div>
-    </div>
-  </div>
+    <!-- 系统指标卡片条 -->
+    {{SYSBAR}}
 
-  <!-- 4. Agent 智能体概览 -->
-  <div class="gpanel hp-portal-card" id="hp-card-agent">
-    <div class="hp-portal-header">
-      <div class="hp-portal-title">
-        <span class="hp-portal-ico" style="color:#a78bfa;">{{ICO:bolt:16}}</span>
-        <h3>{{T:tab_agent}}</h3>
-        <span class="hp-portal-badge" id="hp-badge-agent"></span>
+    <!-- 当月日历卡片 (11/2026) -->
+    <div class="gpanel hp-side-card hp-month-cal" id="hp-month-cal">
+      <div class="hp-cal-head">
+        <div class="hp-cal-title"><strong id="hp-cal-month-title">11/2026</strong> <span class="hp-cal-sub">{{T:cal_daily_activity}}</span></div>
       </div>
-      <button class="hp-portal-jump" type="button" data-nav="agent">
-        <span>{{T:hp_view_all}}</span> {{ICO:chev:11}}
-      </button>
+      <div class="hp-cal-weekdays">
+        <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+      </div>
+      <div class="hp-cal-grid" id="hp-cal-grid"></div>
     </div>
-    <div class="hp-portal-body" id="hp-body-agent">
-      <div class="gempty">{{T:st_loading}}</div>
-    </div>
-  </div>
+
+  </aside>
 </div>
 {{TOOLCHIPS}}
 {{GOALS_PANEL}}
@@ -157,6 +182,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   </div>
   <div id="activity-body"><div class="gempty">{{T:a_loading}}</div></div>
 </div>
+<div class="gpanel app-page" id="svc-page" hidden>
 <div class="page-head" id="svc-head">
   <div class="page-head-main">
     <h2>{{T:tab_svc}}</h2>
@@ -184,7 +210,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   </div>
   <div class="svc-list-meta"><span id="svc-list-summary"></span><div class="svc-sort" aria-label="{{T:svc_sort}}"><button type="button" class="active" data-svc-sort="port">{{T:svc_sort_port}}</button><button type="button" data-svc-sort="memory">{{T:svc_sort_mem}}</button></div></div>
 </div>
-<div class="gpanel" id="network-page" hidden>
+<div class="svc-panel" id="network-page" hidden>
   <div class="page-head ts-header">
     <div class="page-head-main">
       <h2>{{T:ts_title}}</h2>
@@ -211,13 +237,13 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   </div>
 </div>
 <div id="tasks" hidden></div>
-<section class="gpanel" id="logpage" hidden>
+<section class="svc-panel" id="logpage" hidden>
   <div class="page-head"><div class="page-head-main"><h2>{{T:syslog_title}}</h2><span class="page-hint">{{T:syslog_hint}}</span></div>
     <div class="page-head-actions"><select id="syslog-priority" class="btn" aria-label="{{T:syslog_priority}}"><option value="">{{T:syslog_all}}</option><option value="0">{{T:syslog_emergency}}</option><option value="1">{{T:syslog_alert}}</option><option value="2">{{T:syslog_critical}}</option><option value="3">{{T:syslog_error}}</option><option value="4">{{T:syslog_warning}}</option><option value="5">{{T:syslog_notice}}</option><option value="6">{{T:syslog_info}}</option><option value="7">{{T:syslog_debug}}</option></select><button class="btn" id="syslog-refresh" type="button">{{ICO:retry:13}} {{T:refresh}}</button></div>
   </div>
   <div id="logbody" aria-live="polite"></div>
 </section>
-<div class="gpanel svc-panel" id="svc-panel">
+<div class="svc-panel" id="svc-panel">
 <table id="svc">
   <thead><tr>
     <th>{{T:th_svc}}</th><th>{{T:th_port}}</th><th>{{T:th_res}}</th><th>{{T:g_detail}}</th>
@@ -227,7 +253,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
   </tbody>
 </table>
 </div>
-<div class="gpanel svc-panel" id="cron-panel">
+<div class="svc-panel" id="cron-panel">
   <h2>{{T:tl_cron_title}} <span class="ghint" id="cron-count"></span></h2>
   <table id="cron">
     <thead><tr>
@@ -235,6 +261,7 @@ try{var _tm=localStorage.getItem("svc-theme");if(_tm==="dark"||_tm==="light")doc
     </tr></thead>
     <tbody id="tl-cron-body"></tbody>
   </table>
+</div>
 </div>
 <div class="gpanel" id="agents-page" hidden>
   <div class="page-head agent-header">

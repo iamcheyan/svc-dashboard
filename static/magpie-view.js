@@ -61,6 +61,21 @@
     .mp-native-html :is(.seg,.sess-pick) { border-radius:8px; }
     .mp-native-html .seg button { font-size:12px; }
     .mp-native-html :is(.sess-kpi,.us-kpi) { font-variant-numeric:tabular-nums; }
+    /* Keep the embedded views aligned with the open, rule-separated dashboard. */
+    .mp-native-html :is(.rt,.ctx-card,.usage-box,.subscription-card,.pq-card,.ctx-agent,.ctx-tune,.ctx-sess-list) {
+      background:transparent !important; border:0 !important; border-top:1px solid var(--svc-line) !important;
+      border-radius:0 !important; box-shadow:none !important;
+    }
+    .mp-native-html :is(.rt-node,.rt-accts li,.quota,.sess-kpi,.us-kpi) { box-shadow:none !important; }
+    .mp-native-html :is(.rt-reqs,.rt-acts) {
+      height:auto !important; max-height:none !important; min-height:0 !important;
+      overflow:visible !important; background:transparent !important; border:0 !important;
+      border-radius:0 !important; box-shadow:none !important; padding:0 !important;
+    }
+    .mp-native-html .rt-acts { flex:none !important; columns:auto !important; }
+    .mp-native-html .rt-req { border:0 !important; border-radius:0 !important; background:transparent !important; }
+    .mp-native-html .rt-req + .rt-req { margin-top:6px !important; }
+    .mp-native-html .rt-req:hover, .mp-native-html .rt-req[aria-pressed="true"] { background:var(--svc-hover) !important; }
     .mp-native-html :is(button,input,select,textarea):focus-visible {
       outline:2px solid var(--focus); outline-offset:2px;
     }
