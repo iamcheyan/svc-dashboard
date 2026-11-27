@@ -11,6 +11,7 @@ from svcdash.render import _render_shell_core, _svc_rows, icon_files
 from svcdash.tools import tools_conf
 from svcdash.pullrequests import read_snapshot as read_pr_snapshot
 from svcdash.githubheatmap import read_snapshot as read_heatmap_snapshot
+from svcdash.github_snapshots import PUBLIC_URL as GITHUB_SNAPSHOT_URL, read_snapshot as read_github_snapshot
 from svcdash.chezissues import read_snapshot as read_chez_snapshot
 
 
@@ -86,7 +87,8 @@ def _collect_static_snapshot(lang=DEFAULT_LANG):
     g_list = goals.scan_goals()
     g_completed = goals.parse_completed_goals(limit=60)
     g_wd = goals.parse_watchdog_events(limit=80)
-    commits = repos.parse_repo_commits(per_repo=15, total=100)
+    commits = repos.parse_repo_commits(total=100)
+    activity = read_github_snapshot().get('activity') or {}
     events = goals.merge_events(g_wd, g_completed, commits, limit=100)
     goals_data = deep_sanitize({
         "updated": now,
@@ -184,6 +186,7 @@ def _collect_static_snapshot(lang=DEFAULT_LANG):
         "native_magpie": native_magpie,
         "now": now, "clean_services": clean_services, "sysdata": sysdata,
         "chart_data": chart_data, "goals_data": goals_data,
+        "github_activity_updated_at": activity.get('updated_at', 0),
         "repos_data": repos_data, "clean_tmux": clean_tmux,
         "clean_runtimes": clean_runtimes, "clean_agent_details": clean_agent_details,
         "clean_tl": clean_tl, "clean_magpie_usage": clean_magpie_usage,
@@ -303,6 +306,8 @@ def gather_static_payload(lang=DEFAULT_LANG, snapshot=None):
         "sysData": sysdata,
         "chartData": chart_data,
         "goalsData": public_goals,
+        "githubSnapshotUrl": GITHUB_SNAPSHOT_URL,
+        "githubActivityUpdatedAt": snapshot.get('github_activity_updated_at', 0),
         "reposData": deep_sanitize(repos_data, mask_ips=True, mask_paths=True),
         "tasksData": sanitize_public_payload(tasks_data, lang),
         # 任务标题/摘要按字段单独脱敏：只清洗密钥、家目录、内网 IP，

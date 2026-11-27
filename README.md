@@ -42,6 +42,12 @@ static/
 
 手势：左右滑动切页、触感反馈、safe-area 适配。桌面端用顶部分类条，移动端用底部页签。
 
+### GitHub 推送活动
+
+[GitHub Actions](.github/workflows/github-snapshots.yml) 约每 5 分钟通过公开仓库的 Activity API 更新 `github-data` 分支的 `github-snapshots.json`，也可手动运行。活动记录展示最近 7 天至多 100 条本人在名下公开仓库的分支推送及新建分支记录，每条链接到该次推送的末端提交；排除 `gh-pages`、`github-data` 和其他账号（含机器人）的推送。私有仓库不采集。
+
+在线 dashboard 读取同一快照；GitHub Pages 的活动页在打开时直接刷新公开 JSON，不必等整站重建。网络异常时沿用已有数据。不使用 Atom、不遍历本地 Git 仓库、也没有本地 GitHub 采集定时器；整站的本机运维快照仍按原流程单独导出。
+
 ## Agent 操作轨迹（设计笔记，复习用）
 
 **灵感来源**：[icesixgod/codex-trajectory](https://github.com/icesixgod/codex-trajectory)（95★，MIT）——
@@ -186,7 +192,7 @@ journalctl -u svc-dashboard -f             # 日志
 
 ## Tailscale 源切换
 
-用户手机经 Tailscale（CGNAT 段 `100.64.0.0/10`）访问时，页面里的服务链接主机会自动从内网 IP 切到 Tailscale IP（服务端检测客户端来源网段，前端 `linkHost()` 切换）。
+用户手机经 Tailscale（CGNAT 段 `******/10`）访问时，页面里的服务链接主机会自动从内网 IP 切到 Tailscale IP（服务端检测客户端来源网段，前端 `linkHost()` 切换）。
 
 ## 注意事项
 

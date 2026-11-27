@@ -1370,9 +1370,42 @@ async function triggerSharedRefresh(opts = {}) {
 let lastUpdatedTs = Date.now();
 let goalsCache = { t: 0, data: null };
 const LOG_LIMIT = 200;
+let publicActivity = null, publicActivityRequest = null, publicActivityCheckedAt = 0;
+
+async function fetchStaticGoalsData(force) {
+  const baked = BOOT.goalsData;
+  if (!baked || !BOOT.githubSnapshotUrl) return baked;
+  if (!publicActivityRequest && (force || Date.now() - publicActivityCheckedAt >= 60000)) {
+    publicActivityRequest = (async () => {
+      try {
+        const r = await fetch(BOOT.githubSnapshotUrl, {
+          credentials: 'omit', cache: 'no-cache', signal: AbortSignal.timeout(5000),
+        });
+        if (!r.ok) return;
+        const data = (await r.json()).activity;
+        if (data?.ok !== true || !Array.isArray(data.events) ||
+            !Number.isFinite(data.updated_at) ||
+            data.updated_at < (BOOT.githubActivityUpdatedAt || 0) ||
+            data.updated_at < (publicActivity?.updated_at || 0) ||
+            !data.events.every(e => e?.kind === 'commit' && e.src === 'github' &&
+              Number.isFinite(e.ts) && typeof e.repo === 'string' &&
+              /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/commit\/[a-f0-9]{40}$/.test(e.url))) return;
+        publicActivity = data;
+      } catch {
+        // Keep the last good data (or the embedded snapshot) if GitHub is unreachable.
+      } finally {
+        publicActivityCheckedAt = Date.now();
+      }
+    })().finally(() => { publicActivityRequest = null; });
+  }
+  await publicActivityRequest;
+  if (!publicActivity) return baked;
+  const localEvents = (baked.events || []).filter(e => e.kind !== 'commit');
+  return { ...baked, events: [...publicActivity.events, ...localEvents].sort((a, b) => b.ts - a.ts) };
+}
 
 async function fetchGoalsData(force) {
-  if (BOOT.static && BOOT.goalsData) return BOOT.goalsData;
+  if (BOOT.static) return fetchStaticGoalsData(force);
   const now = Date.now();
   if (!force && goalsCache.data && now - goalsCache.t < 15000) return goalsCache.data;
   const snap = snapGet("goals");

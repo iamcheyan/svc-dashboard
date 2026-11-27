@@ -6,7 +6,7 @@ from svcdash.i18n import t, DEFAULT_LANG
 # ---------------- 仓库层: development git 仓库 + agent/goal 改动仓库 ----------------
 # 仓库集合包括 ~/development 下的 Git 项目，也补充 Hermes worktree 与
 # agent/goal 使用过的仓库根。只跳过依赖与缓存目录。
-# 本地仓库清单与统计仅供轨迹页按需读取；活动提交只读 GitHub Atom feed。
+# 本地仓库清单与统计仅供轨迹页按需读取；活动提交只读 GitHub Actions 的公开活动快照。
 
 _DEVELOPMENT_ROOT = "/home/tetsuya/development"
 _HERMES_WORKTREES_ROOT = "/home/tetsuya/.hermes/worktrees"
@@ -192,7 +192,7 @@ def agent_repos(force: bool = False):
 
 
 def parse_repo_commits(per_repo=30, total=150):
-    """Compatibility name for the GitHub-only Atom activity feed."""
+    """Read the public GitHub push snapshot; never walk local repositories."""
     from svcdash.github import github_events
     return github_events(total=total)
 

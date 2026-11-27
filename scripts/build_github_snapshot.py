@@ -9,7 +9,11 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from scripts.collect_public_activity import collect as collect_activity
+
+
 def main():
+    activity = collect_activity(os.environ.get('SVC_GITHUB_LOGIN', 'iamcheyan'))
     from svcdash.githubheatmap import collect as collect_heatmap, _read_local_snapshot as read_heatmap
     from svcdash.pullrequests import collect as collect_prs, _read_local_snapshot as read_prs
 
@@ -19,6 +23,7 @@ def main():
     payload = {
         "ok": True,
         "updated_at": time.time(),
+        "activity": activity,
         "githubContributions": read_heatmap(),
         "pullrequests": read_prs(public=True),
         "chezmoiIssues": {"ok": False, "repo": "iamcheyan/chezmoi",
@@ -30,7 +35,7 @@ def main():
     temporary = output.with_suffix(output.suffix + ".tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     temporary.replace(output)
-    print(f"snapshot={output} prs={len(payload['pullrequests'].get('items', []))} issues={len(payload['chezmoiIssues'].get('items', []))}")
+    print(f"snapshot={output} pushes={len(activity['events'])} prs={len(payload['pullrequests'].get('items', []))}")
 
 
 if __name__ == "__main__":
