@@ -1391,10 +1391,18 @@ let publicActivity = null, publicActivityRequest = null, publicActivityCheckedAt
 async function fetchStaticGoalsData(force) {
   const baked = BOOT.goalsData;
   if (!baked || !BOOT.githubSnapshotUrl) return baked;
-  if (!publicActivityRequest && (force || Date.now() - publicActivityCheckedAt >= 60000)) {
+  if (!publicActivityRequest && (force || Date.now() - publicActivityCheckedAt >= 120000)) {
     publicActivityRequest = (async () => {
       try {
-        const r = await fetch(BOOT.githubSnapshotUrl, {
+        let url = BOOT.githubSnapshotUrl;
+        try {
+          const ref = await fetch('https://api.github.com/repos/iamcheyan/svc-dashboard/git/ref/heads/github-data', {
+            credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(5000),
+          });
+          const sha = ref.ok ? (await ref.json())?.object?.sha : '';
+          if (/^[a-f0-9]{40}$/.test(sha || '')) url = url.replace('/github-data/', '/' + sha + '/');
+        } catch { /* Fall back to the public branch URL. */ }
+        const r = await fetch(url, {
           credentials: 'omit', cache: 'no-cache', signal: AbortSignal.timeout(5000),
         });
         if (!r.ok) return;
@@ -7157,6 +7165,13 @@ function autoTick() {
   }
 }
 applyAutoSec();
+
+// Activity has its own cadence: the general refresh only reloads system data.
+setInterval(() => {
+  if (document.hidden || (isMobile() ? page !== 1 : curCat !== 'activity')) return;
+  if (prState().tab !== 'feed') return;
+  renderActivityPage();
+}, 30000);
 
 /* ================================================================
    明暗主题: 跟随系统 / 手动深色 / 手动浅色(localStorage 记住)。

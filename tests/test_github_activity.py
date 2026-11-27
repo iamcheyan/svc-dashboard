@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import json
 
 from scripts import collect_public_activity as activity
 from svcdash import github
@@ -21,6 +24,22 @@ def push(sha, ref='refs/heads/main', actor='iamcheyan', **kw):
 
 
 class PublicActivityTest(unittest.TestCase):
+    def setUp(self):
+        self.cache_dir = TemporaryDirectory()
+        self.addCleanup(self.cache_dir.cleanup)
+        self.cache_path = Path(self.cache_dir.name) / 'activity.json'
+        cache_patch = patch.object(github, 'ACTIVITY_PATH', self.cache_path)
+        cache_patch.start()
+        self.addCleanup(cache_patch.stop)
+
+    def test_newer_local_activity_replaces_stale_public_snapshot(self):
+        self.cache_path.write_text(json.dumps({'ok': True, 'updated_at': NOW + 1,
+                                               'events': [{'ts': NOW, 'subject': 'new push'}]}))
+        with patch.object(github, 'read_snapshot', return_value={
+            'activity': {'ok': True, 'updated_at': NOW, 'events': []},
+        }):
+            self.assertEqual(github.github_events()[0]['subject'], 'new push')
+
     def test_uses_public_repo_activity_and_omits_publisher_refs_and_bots(self):
         sha = '6cd26a1' + 'a' * 33
         blocked = [dict(repo('hidden'), private=True), repo('another', visibility='internal'),

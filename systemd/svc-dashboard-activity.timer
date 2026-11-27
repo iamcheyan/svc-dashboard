@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh public GitHub activity regularly
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+AccuracySec=1s
+Unit=svc-dashboard-activity.service
+
+[Install]
+WantedBy=timers.target

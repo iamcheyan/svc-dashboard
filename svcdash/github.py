@@ -1,16 +1,19 @@
 """Read public push activity published by GitHub Actions, with fallback to user Atom feed."""
 import os
+import json
 import re
 import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from pathlib import Path
 
 from svcdash.github_snapshots import read_snapshot
 
 FEED_URL = os.environ.get("SVC_GITHUB_FEED") or "https://github.com/iamcheyan.atom"
 FEED_CACHE_SEC = 300
+ACTIVITY_PATH = Path(os.environ.get('SVC_GITHUB_ACTIVITY_CACHE', '/home/tetsuya/.cache/svc-dashboard/public-activity.json'))
 
 _atom_cache = {"t": 0.0, "etag": None, "data": []}
 
@@ -130,6 +133,13 @@ def fetch_github_events(url=FEED_URL, timeout=8):
 def github_events(total=60):
     """Return recent public pushes from snapshot, with fallback to Atom feed."""
     activity = read_snapshot().get('activity') or {}
+    try:
+        local = json.loads(ACTIVITY_PATH.read_text(encoding='utf-8'))
+        if (local.get('ok') is True and isinstance(local.get('events'), list)
+                and local.get('updated_at', 0) > activity.get('updated_at', 0)):
+            activity = local
+    except (OSError, ValueError, TypeError):
+        pass
     if activity.get('ok') is True:
         return [dict(event, time=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(event['ts'])))
                 for event in activity['events'][:total]]
