@@ -1,0 +1,368 @@
+/* Plugins: the market of provider plugins, and the ones installed. */
+#view-plugins { gap: 0; }
+.pm-head { gap: 10px; }
+.pm-mirror { display: inline-flex; align-items: center; gap: 7px; padding: 2px 0; background: none; border: 0; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.pm-mirror:hover, .pm-mirror.on { color: var(--fg); }
+.pm-mirror:disabled { opacity: .6; cursor: default; }
+.pm-mirror .lib-switch { width: 28px; height: 16px; }
+.pm-mirror .lib-switch i { width: 12px; height: 12px; }
+.pm-mirror .lib-switch.on i { transform: translateX(12px); }
+.pm-find {
+  display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; width: min(280px, 46%);
+  border-radius: 8px; background: var(--pill); color: var(--muted);
+  box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .14s var(--ease), background .14s var(--ease);
+}
+.pm-find:focus-within { background: var(--card); box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.pm-find svg { flex: none; }
+.pm-find input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--fg); font: inherit; font-size: 12.5px; }
+.pm-find input::placeholder { color: var(--faint); }
+.pm-find input::-webkit-search-cancel-button { cursor: default; }
+.pm-body { gap: 18px; padding: 10px 0 18px; }
+
+/* the week's picks: the day's plugin, the most downloaded, the most starred */
+.pm-recs { gap: 10px; }
+.pm-rectitle { display: flex; align-items: baseline; gap: 8px; padding: 0 2px; }
+.pm-rectitle h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.pm-rectitle span { font-size: 11.5px; color: var(--muted); }
+.pm-rec { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; align-items: stretch; }
+.pm-rec.two { grid-template-columns: 1.3fr 1fr; }
+.pm-hero, .pm-rank { min-width: 0; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+.pm-hero { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; cursor: pointer; transition: border-color .14s ease, box-shadow .14s ease; }
+.pm-hero:hover { border-color: color-mix(in srgb, var(--fg) 16%, var(--line)); box-shadow: 0 4px 14px rgba(20, 22, 30, .07); }
+.pm-hero:focus-visible, .pm-rrow:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+.pm-eyebrow { font-size: 11px; font-weight: 600; color: var(--accent); }
+.pm-htop { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pm-logo.hero { width: 52px; height: 52px; border-radius: 14px; }
+.pm-logo.hero .ic { width: 30px; height: 30px; }
+.pm-htop .pm-name b { font-size: 15px; }
+.pm-hsum { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--fg-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.pm-stats { display: flex; gap: 22px; margin-top: auto; padding-top: 2px; }
+.pm-stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pm-stat b { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pm-stat span { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.pm-hact { display: flex; align-items: center; gap: 8px; }
+.pm-act.ghost { background: none; box-shadow: inset 0 0 0 1px var(--line); color: var(--fg-2); }
+.pm-act.ghost:hover { background: var(--pill); color: var(--fg); }
+.pm-rank { display: flex; flex-direction: column; padding: 12px 8px 8px; }
+.pm-rhead { display: flex; align-items: baseline; gap: 7px; padding: 0 8px 6px; }
+.pm-rhead b { font-size: 12.5px; font-weight: 650; }
+.pm-rhead span { font-size: 11px; color: var(--muted); }
+.pm-rrow { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 9px; cursor: pointer; transition: background .14s ease; }
+.pm-rrow:hover { background: var(--pill); }
+.pm-rnum { flex: none; width: 14px; text-align: center; font-size: 11.5px; font-weight: 600; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pm-rrow .pm-logo { width: 28px; height: 28px; border-radius: 8px; }
+.pm-rrow .pm-logo .ic { width: 16px; height: 16px; }
+.pm-rwho { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pm-rwho b { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-rwho span { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-rec.ghost .pm-hero, .pm-rec.ghost .pm-rank { cursor: default; gap: 10px; padding: 16px; min-height: 196px; }
+.pm-rec.ghost .sk { height: 10px; border-radius: 5px; background: var(--pill); animation: pm-pulse 1.4s linear infinite; }
+.pm-rec.ghost .sk:first-child { width: 40%; }
+.pm-rec.ghost .sk:nth-child(2n) { width: 75%; }
+
+/* the strip of kinds, then where from and in which order */
+.pm-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pm-bar .segs { flex: none; max-width: 100%; }
+.pm-bar .segs .opt em { margin-left: 5px; font-style: normal; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pm-bar .segs .opt.on em { color: var(--muted); }
+.pm-bar .grow { flex: 1; }
+.pm-pop { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border: 0; border-radius: 7px; background: none; box-shadow: inset 0 0 0 1px var(--line); font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; transition: background .14s ease, color .14s ease; }
+.pm-pop b { font-weight: 500; color: var(--fg); }
+.pm-pop:hover { background: var(--pill); }
+.pm-pop:active { transform: scale(.97); }
+.pm-sechead .pm-n { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pm-sechead .grow { flex: 1; }
+.pm-more { display: inline-flex; align-items: center; gap: 2px; padding: 1px 4px; border: 0; border-radius: 5px; background: none; font: inherit; font-size: 11.5px; color: var(--accent); cursor: pointer; }
+.pm-more:hover { background: var(--accent-soft); }
+.pm-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px 14px; flex-wrap: wrap; padding: 0 2px; }
+.pm-foot .pm-trust { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11.5px; color: var(--muted); }
+.pm-foot .pm-trust svg { flex: none; color: var(--green); }
+.pm-foot .pm-write { font-size: 12px; }
+@media (max-width: 1180px) {
+  .pm-rec, .pm-rec.two { grid-template-columns: 1fr 1fr; }
+  .pm-rec .pm-hero { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .pm-rec, .pm-rec.two { grid-template-columns: 1fr; }
+}
+
+/* sections of cards */
+.pm-sec { display: flex; flex-direction: column; gap: 9px; }
+.pm-sechead { display: flex; align-items: baseline; gap: 8px; padding: 0 2px; flex-wrap: wrap; }
+.pm-sechead h3 { margin: 0; font-size: 12.5px; font-weight: 650; }
+.pm-sechead span { font-size: 11.5px; color: var(--muted); }
+.pm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(262px, 1fr)); gap: 10px; }
+.pm-ghnone { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 12px; border-radius: 12px; border: 1px dashed var(--line); font-size: 12px; color: var(--muted); text-align: center; }
+/* what GitHub couldn't give, over the cards it could: a quiet line, its
+   reason wrapping anywhere (a URL in it is one long word) */
+.pm-ghwarn { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; padding: 0 2px; font-size: 11.5px; color: var(--muted); }
+/* its Try again reads as the button it is, beside the quiet line */
+.pm-ghwarn .text { padding: 1px 6px; margin: -1px 0; font-size: 11.5px; color: var(--accent); }
+.pm-ghwarn .text:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
+.pm-ghwarn > span, .pm-ghnone > span { overflow-wrap: anywhere; }
+
+.pm-logo { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--pill); color: var(--fg-2); }
+.pm-logo .ic { width: 20px; height: 20px; }
+.pm-logo.big { width: 44px; height: 44px; border-radius: 12px; }
+.pm-logo.big .ic { width: 25px; height: 25px; }
+
+.pm-card {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px 12px 11px 13px;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--card); cursor: default; outline: none;
+  transition: border-color .16s var(--ease), box-shadow .16s var(--ease), transform .16s var(--ease);
+}
+.pm-card:hover { border-color: color-mix(in srgb, var(--fg) 16%, var(--line)); box-shadow: 0 4px 14px rgba(20, 22, 30, .07); }
+.pm-card:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); border-color: var(--accent); }
+.pm-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pm-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pm-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pm-name b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-by { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-by > span { overflow: hidden; text-overflow: ellipsis; }
+.pm-verified { display: inline-flex; align-items: center; gap: 3px; color: var(--green); font-weight: 500; }
+.pm-sum {
+  margin: 0; font-size: 12px; line-height: 1.45; color: var(--fg-2); min-height: 2.9em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pm-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 18px; }
+.pm-dl { display: inline-flex; align-items: center; gap: 3px; }
+.pm-ver { font: var(--code-style, normal) var(--code-weight, 400) 10.5px var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); color: var(--muted); }
+.pm-chip { display: inline-flex; align-items: center; height: 17px; padding: 0 6px; border-radius: 5px; font-size: 10.5px; font-weight: 500; background: var(--pill); color: var(--fg-2); }
+.pm-chip.up { background: var(--accent-soft); color: var(--accent); }
+button.pm-chip { border: 0; font-family: inherit; cursor: pointer; }
+button.pm-chip.up:hover:not(:disabled) { background: var(--accent); color: var(--accent-fg); }
+button.pm-chip:disabled { cursor: default; opacity: .6; }
+.pm-mw-fail { color: var(--red); }
+/* a plugin's tools: the names on one line, the MCP server's address to copy */
+.pm-row .sub.pm-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pm-tools > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-tools > .copy { flex: none; width: 20px; height: 20px; }
+.pm-chip.bad { background: var(--red-soft); color: var(--red); }
+.pm-chip.moved { gap: 4px; background: var(--accent-soft); color: var(--accent); }
+.pm-chip.moved .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.pm-row .sub.ask { color: var(--fg); }
+/* unofficial: a hairline and a small amber dot, quiet beside the rest
+   of the line (yetone: 这些配色有点丑，一点都不优雅精致) */
+.pm-chip.warn { gap: 5px; background: none; box-shadow: inset 0 0 0 1px var(--line); color: var(--fg-2); font-weight: 400; }
+.pm-chip.warn .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--amber); flex: none; }
+/* a provider two installed plugins sign in to: a line that wraps, never clipped */
+.pm-row .sub.pm-clash { display: block; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.pm-clash .dot { display: inline-block; width: 6px; height: 6px; margin: 0 5px 1px 0; border-radius: 50%; background: var(--faint); vertical-align: middle; }
+.pm-row .sub.pm-clash.warn { color: var(--amber); }
+.pm-clash.warn .dot { background: currentColor; }
+.pm-foot .pm-check { display: inline-flex; align-items: center; gap: 5px; }
+.pm-foot .pm-check .spin { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; }
+/* what a plugin is reads as the line's other facts do (stars, version):
+   its glyph and its word, no fill of its own */
+.pm-chip.kind { gap: 4px; flex: none; padding: 0; background: none; color: var(--fg-2); font-weight: 400; }
+.pm-chip.kind svg { flex: none; }
+/* yet the two kinds part at a glance (yetone: 中间件和供应商稍微有点区分吧):
+   each its own hue on the glyph and word, softened toward the text;
+   middleware leans teal, apart from the community badge's green */
+.pm-chip.kind.pv { color: color-mix(in srgb, var(--accent) 80%, var(--fg-2)); }
+.pm-chip.kind.mw { color: color-mix(in srgb, color-mix(in oklch, var(--green) 60%, var(--accent)) 80%, var(--fg-2)); }
+/* an agent leans warm, apart from both */
+.pm-chip.kind.ag { color: color-mix(in srgb, color-mix(in oklch, var(--amber) 55%, var(--accent)) 80%, var(--fg-2)); }
+.pm-chip.soft { background: none; box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); }
+
+/* a plugin's one button */
+:root { --ring-act: color-mix(in srgb, var(--fg) 15%, transparent); }
+@supports not (color: color-mix(in srgb, red 50%, blue)) { :root { --ring-act: var(--line); } }
+.pm-act {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  height: 26px; min-width: 64px; padding: 0 12px; border-radius: 13px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  background: var(--pill); color: var(--fg-2); transition: background .14s ease, color .14s ease, filter .14s ease;
+}
+.pm-act:hover:not(:disabled) { background: var(--pill-hover); color: var(--fg); }
+/* Install, Move and a list's Sign in: a thin ring round body-coloured
+   text, grey under the pointer, so a grid of them reads as quiet as a
+   list's (the owner: 一个个大安装像一个个补丁); a plugin's page fills its one */
+.pm-act.get, .pm-act.go, .pm-act.pm-up { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1px var(--ring-act); }
+.pm-act.get:hover:not(:disabled), .pm-act.go:hover:not(:disabled), .pm-act.pm-up:hover:not(:disabled) { background: var(--pill); }
+.pm-act .dl { flex: none; margin-left: -1px; }
+/* an update out: Install's ring, its word green (#1587) */
+.pm-act.pm-up, .pm-act.pm-up:hover:not(:disabled) { color: var(--green); }
+.pm-dact .pm-act.go { background: var(--accent); color: var(--accent-fg); box-shadow: none; }
+.pm-dact .pm-act.go:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+.pm-act.done { background: none; color: var(--green); padding: 0 8px; min-width: 0; }
+.pm-act.done:hover:not(:disabled) { background: var(--green-soft); color: var(--green); }
+.pm-act.busy { color: var(--muted); font-weight: 500; }
+.pm-act:disabled:not(.busy):not(.done) { opacity: .55; }
+.pm-act .spin { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; }
+
+/* loading: cards laid out as a card is, in soft bars a light passes
+   over, one card a beat after the one before it */
+.pm-card.ghost { gap: 9px; pointer-events: none; border-color: color-mix(in srgb, var(--line) 70%, transparent); }
+.pm-card.ghost .sk {
+  border-radius: 5px;
+  background: linear-gradient(100deg, var(--pill) 30%, color-mix(in srgb, var(--pill-hover) 70%, var(--card)) 50%, var(--pill) 70%);
+  background-size: 300% 100%;
+  animation: pm-sheen 1.8s cubic-bezier(.45, 0, .25, 1) infinite;
+  animation-delay: calc(var(--i, 0) * 120ms);
+}
+.pm-card.ghost .gtop { display: flex; align-items: center; gap: 10px; }
+.pm-card.ghost .gwho { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.pm-card.ghost .glogo { flex: none; width: 36px; height: 36px; border-radius: 10px; }
+.pm-card.ghost .gname { height: 11px; width: 52%; }
+.pm-card.ghost .gby { height: 8px; width: 30%; opacity: .7; }
+.pm-card.ghost .gact { flex: none; width: 56px; height: 26px; border-radius: 13px; opacity: .8; }
+.pm-card.ghost .gline { height: 8px; margin-top: 6px; }
+.pm-card.ghost .gline.short { width: 68%; margin-top: 0; }
+.pm-card.ghost .gmeta { display: flex; gap: 8px; margin-top: 7px; }
+.pm-card.ghost .gchip { height: 8px; width: 46px; opacity: .8; }
+.pm-card.ghost .gchip.short { width: 30px; }
+@keyframes pm-pulse { 50% { opacity: .5; } }
+@keyframes pm-sheen { from { background-position: 100% 0; } to { background-position: 0 0; } }
+/* the GitHub section looking: three dots breathing in turn, and the word */
+.pm-ghlook { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; font-size: 11px; color: var(--faint); animation: pm-fade .26s var(--ease) both .08s; }
+.pm-ghlook .dots { display: inline-flex; gap: 3px; }
+.pm-ghlook .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); opacity: .25; animation: pm-breathe 1.2s ease-in-out infinite; }
+.pm-ghlook .dots i:nth-child(2) { animation-delay: .16s; }
+.pm-ghlook .dots i:nth-child(3) { animation-delay: .32s; }
+@keyframes pm-breathe { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: .9; transform: translateY(-1.5px); } }
+@keyframes pm-fade { from { opacity: 0; } }
+/* its cards when they come: in where the ghosts were, one after another */
+.pm-arrive .pm-card { animation: pm-arrive .3s cubic-bezier(.23, 1, .32, 1) both; animation-delay: calc(min(var(--i, 0), 12) * 28ms); }
+@keyframes pm-arrive { from { opacity: 0; transform: translateY(4px); } }
+
+.pm-note { margin: 0; padding: 4px 2px; font-size: 12px; color: var(--muted); }
+.pm-note.bad { color: var(--red); }
+.pm-note.warn { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--amber-soft); color: var(--fg); line-height: 1.5; }
+.pm-note.warn svg { flex: none; margin-top: 2px; color: var(--amber); }
+.pm-empty { margin: 24px 4px; font-size: 12.5px; color: var(--red); }
+
+/* a package the market doesn't list. It floats at the foot of the view
+   while the cards scroll under it (0x3108 on X: with many plugins it was
+   found only at the very end), on a strip of the page's own colour that
+   reaches into the gaps round it and the view's padding below; at the end
+   of the list it is back in its place, above the registry line. The strip
+   is the box's ::before, which a sticky box paints over its own border, so
+   the dashed border is drawn by its ::after. The strip takes the pointer, so
+   a press on it never reaches a card hidden under it */
+.pm-manual { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid transparent; flex-wrap: wrap; --bleed-l: 12px; }
+body.window .pm-manual { --bleed-l: 16px; }
+.pm-manual::before { content: ""; position: absolute; z-index: -1; top: -11px; bottom: -13px; left: calc(-1 * var(--bleed-l)); right: calc(var(--bar, 0px) - 12px); background: var(--bg); }
+.pm-manual::after { content: ""; position: absolute; inset: -1px; pointer-events: none; border-radius: inherit; border: 1px dashed var(--line); }
+/* a card reached with Tab stops above the box, not under it */
+#view-plugins { scroll-padding-bottom: 76px; }
+.pm-mlabel { font-size: 12px; color: var(--muted); }
+.pm-registry { display: flex; align-items: center; gap: 8px; padding: 4px 12px 0; flex-wrap: wrap; font-size: 12px; min-width: 0; }
+.pm-reg-url { min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+.pm-reg-from { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.pm-reg-err { flex-basis: 100%; color: var(--red); }
+.pm-minput { flex: 1; min-width: 180px; height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: var(--code-style, normal) var(--code-weight, 400) 12px var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); outline: none; }
+.pm-minput:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+/* the system's folder picker, beside the field it fills */
+.pm-browse { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex: none; padding: 0; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; transition: color .14s var(--ease), border-color .14s var(--ease); }
+.pm-browse:hover:not(:disabled) { color: var(--fg); border-color: var(--faint); }
+.pm-browse:disabled { opacity: .5; cursor: default; }
+
+/* Installed */
+.pm-listhead { margin: 0 0 -10px; padding: 0 2px; }
+/* the plugins with an update, above the list: the sidebar's dot, named */
+.pm-updates { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 9px 10px 9px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 12px; line-height: 1.35; }
+.pm-updates .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pm-updates .pm-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.pm-updates .pm-up { flex: none; }
+.pm-list .row { min-height: 54px; padding: 8px 10px 8px 12px; gap: 11px; cursor: default; transition: background .14s var(--ease); }
+.pm-list .row:hover { background: var(--card-2); }
+.pm-list .row + .row { border-top: 1px solid var(--line-2); }
+.pm-row .pm-logo { width: 32px; height: 32px; border-radius: 9px; }
+.pm-row .pm-logo .ic { width: 18px; height: 18px; }
+.pm-row .who { flex: 1; min-width: 0; }
+.pm-row .name { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; }
+.pm-row .sub { display: flex; align-items: center; flex-wrap: wrap; gap: 0 2px; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+.pm-row .sub.bad { color: var(--red); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-row .sub .sep { color: var(--faint); }
+.pm-sub { display: inline-flex; align-items: center; gap: 5px; }
+.pm-sub .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.pm-sub.in .dot { background: var(--green); }
+.pm-opts { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.pm-opts textarea {
+  width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--card); color: var(--fg); font: var(--code-style, normal) var(--code-weight, 400) 12px/1.5 var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); tab-size: 2; outline: none;
+}
+.pm-opts textarea:focus { border-color: var(--accent); }
+.pm-opts-err { font-size: 11.5px; color: var(--red); }
+.pm-opts-err:empty { display: none; }
+.pm-opts-bar { display: flex; align-items: center; gap: 2px; }
+.pm-opts-bar > span { flex: 1; min-width: 0; font-size: 11.5px; color: var(--muted); }
+.pm-row .val { display: flex; align-items: center; gap: 2px; flex: none; }
+.pm-row.off .who, .pm-row.off .pm-logo { opacity: .5; }
+.pm-foot { display: flex; align-items: center; gap: 8px; padding: 0 4px; font-size: 11px; color: var(--faint); }
+.pm-none { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 44px 16px; text-align: center; }
+.pm-none b { font-size: 13.5px; font-weight: 600; margin-top: 4px; }
+.pm-none p { margin: 0 0 6px; font-size: 12px; color: var(--muted); max-width: 320px; line-height: 1.5; }
+
+/* a plugin's page */
+.modal .editor.pm-detail.framed > .ehead { min-height: 76px; gap: 12px; }
+.modal .editor.pm-detail.framed > .ebody { display: block; padding: 0; }
+.pm-dhead .pm-name b { font-size: 15px; }
+.pm-dhead .pm-by { font-size: 11.5px; }
+.pm-dact .pm-act { height: 28px; min-width: 80px; border-radius: 14px; }
+.pm-dbody { display: flex; flex-direction: column; gap: 12px; padding: 14px 18px 18px; }
+.pm-dsum { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
+.pm-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 1px; border-radius: 10px; overflow: hidden; background: var(--line-2); border: 1px solid var(--line-2); }
+.pm-fact { display: flex; flex-direction: column; gap: 2px; padding: 8px 11px; background: var(--card); min-width: 0; }
+.pm-fact .k { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.pm-fact .v { font-size: 12.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pm-links { display: flex; gap: 6px; flex-wrap: wrap; }
+.pm-link { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px; border-radius: 7px; background: var(--pill); color: var(--fg-2); font-size: 11.5px; text-decoration: none; }
+.pm-link:hover { background: var(--pill-hover); color: var(--fg); }
+.pm-readme { border-top: 1px solid var(--line-2); padding-top: 12px; min-height: 60px; }
+/* the README's skeleton: strings the bird bounces down (bounceLoader) */
+.pm-bounce { position: relative; height: 108px; }
+.pm-bounce[data-gone] { position: absolute; z-index: 2; pointer-events: none; }
+.pm-bounce > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transition: opacity .3s ease-out; }
+.pm-bounce[data-gone] > svg { opacity: 0; }
+.pm-bounce path { fill: none; stroke: var(--skel, var(--pill)); stroke-width: 10; stroke-linecap: round; transition: stroke .35s ease-out; }
+.pm-bounce path[data-lit] { stroke: color-mix(in srgb, var(--accent) 18%, var(--skel, var(--pill))); }
+
+/* a README */
+.pm-md { font-size: 12.5px; line-height: 1.6; color: var(--fg-2); overflow-wrap: anywhere; }
+.pm-md > :first-child { margin-top: 0; }
+.pm-md h3, .pm-md h4, .pm-md h5, .pm-md h6 { color: var(--fg); margin: 16px 0 6px; line-height: 1.3; text-wrap: balance; }
+.pm-md h3 { font-size: 15px; font-weight: 650; }
+.pm-md h4 { font-size: 13.5px; font-weight: 650; }
+.pm-md h5, .pm-md h6 { font-size: 12.5px; font-weight: 600; }
+.pm-md p { margin: 0 0 9px; }
+.pm-md ul, .pm-md ol { margin: 0 0 9px; padding-left: 20px; }
+.pm-md li + li { margin-top: 2px; }
+.pm-md a { color: var(--accent); text-decoration: none; }
+.pm-md a:hover { text-decoration: underline; }
+.pm-md code { font: var(--code-style, normal) var(--code-weight, 400) 11.5px var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); padding: 1px 4px; border-radius: 4px; background: var(--pill); color: var(--fg); }
+.pm-md pre { margin: 0 0 10px; padding: 9px 11px; border-radius: 8px; background: var(--card-2); border: 1px solid var(--line-2); overflow-x: auto; }
+.pm-md pre code { padding: 0; background: none; font-size: 11.5px; line-height: 1.35; white-space: pre; } /* close enough for a box drawn in │ and ─ to join */
+.pm-md blockquote { margin: 0 0 9px; padding: 7px 11px; border-radius: 8px; background: var(--card-2); color: var(--fg-2); }
+.pm-md hr { border: 0; border-top: 1px solid var(--line-2); margin: 12px 0; }
+.pm-table { overflow-x: auto; margin: 0 0 10px; }
+.pm-md table { border-collapse: collapse; font-size: 12px; }
+.pm-md th, .pm-md td { padding: 5px 9px; border: 1px solid var(--line-2); text-align: left; vertical-align: top; }
+.pm-md th { background: var(--card-2); font-weight: 600; color: var(--fg); }
+
+/* the add sheet's row to Plugins */
+.tile.more-plugins { color: var(--accent); }
+.tile.more-plugins .puzzle { flex: none; width: 18px; height: 18px; display: grid; place-items: center; }
+.tile.more-plugins > svg { flex: none; opacity: .7; }
+.tile.more-plugins:hover { background: var(--accent-soft); }
+
+@media (max-width: 560px) {
+  .pm-head { flex-wrap: wrap; }
+  .pm-find { width: 100%; order: 3; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-card { transition: none; }
+  .pm-card.ghost .sk, .pm-rec.ghost .sk, .pm-ghlook, .pm-ghlook .dots i, .pm-arrive .pm-card { animation: none; }
+  .pm-ghlook .dots i { opacity: .5; }
+}
+/* Discover's own menus use the app's: plugins' .pm-name and .pm-note don't reach them */
+.proto-menu.pm-srcmenu .pm-name, .proto-menu.pm-sortmenu .pm-name { display: block; }
+.proto-menu.pm-srcmenu .pm-note:empty, .proto-menu.pm-sortmenu .pm-note:empty { display: none; }
+.proto-menu.pm-srcmenu .pm-item:last-child { margin-top: 4px; box-shadow: 0 -1px 0 var(--line-2); }
+.pm-like { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px; border: 0; border-radius: 7px; background: var(--pill); color: var(--fg-2); font: inherit; font-size: 11.5px; font-variant-numeric: tabular-nums; cursor: pointer; transition: background .15s ease, color .15s ease, transform .12s cubic-bezier(.23, 1, .32, 1); }
+.pm-like:disabled { cursor: default; opacity: .55; }
+.pm-like.on { color: var(--fg); }
+.pm-like.on svg path { fill: currentColor; }
+.pm-like:not(:disabled):active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) { .pm-like:not(:disabled):hover { background: var(--pill-hover); color: var(--fg); } }

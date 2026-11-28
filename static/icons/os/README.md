@@ -1,0 +1,1 @@
+OS logos vendored from [Simple Icons 16.0.0](https://github.com/simple-icons/simple-icons/tree/16.0.0/icons). See LICENSE.md; the logos are used to identify their respective platforms and distributions.
