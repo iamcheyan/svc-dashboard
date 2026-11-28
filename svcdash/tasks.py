@@ -136,8 +136,11 @@ def _run_timers(scope, lang=DEFAULT_LANG):
         return []
     tasks = []
     for line in r.stdout.splitlines():
-        unit, _, state = line.partition(" ")
-        if not unit.endswith(".timer"):
+        fields = line.split()
+        if len(fields) < 2 or not fields[0].endswith(".timer"):
+            continue
+        unit, state = fields[:2]
+        if state in {"masked", "masked-runtime"}:
             continue
         try:
             show = subprocess.run(cmd + ["show", unit, "-p", "NextElapseUSec", "-p",
