@@ -1,8 +1,0 @@
-[Unit]
-Description=Refresh public GitHub activity for svc-dashboard
-After=network-online.target
-
-[Service]
-Type=oneshot
-WorkingDirectory=******/development/svc-dashboard
-ExecStart=/usr/bin/python3 ******/development/svc-dashboard/scripts/refresh_public_activity.py

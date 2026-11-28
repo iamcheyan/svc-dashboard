@@ -13,6 +13,9 @@ from scripts.collect_public_activity import collect as collect_activity
 
 
 def main():
+    if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted':
+        raise SystemExit('GitHub snapshots must be built by GitHub-hosted Actions.')
+
     activity = collect_activity(os.environ.get('SVC_GITHUB_LOGIN', 'iamcheyan'))
     from svcdash.githubheatmap import collect as collect_heatmap, _read_local_snapshot as read_heatmap
     from svcdash.pullrequests import collect as collect_prs, _read_local_snapshot as read_prs

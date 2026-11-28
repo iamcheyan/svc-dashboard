@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
+import os
+import subprocess
+import sys
 from pathlib import Path
-from tempfile import TemporaryDirectory
-import json
 
 from scripts import collect_public_activity as activity
 from svcdash import github
@@ -24,21 +25,16 @@ def push(sha, ref='refs/heads/main', actor='iamcheyan', **kw):
 
 
 class PublicActivityTest(unittest.TestCase):
-    def setUp(self):
-        self.cache_dir = TemporaryDirectory()
-        self.addCleanup(self.cache_dir.cleanup)
-        self.cache_path = Path(self.cache_dir.name) / 'activity.json'
-        cache_patch = patch.object(github, 'ACTIVITY_PATH', self.cache_path)
-        cache_patch.start()
-        self.addCleanup(cache_patch.stop)
-
-    def test_newer_local_activity_replaces_stale_public_snapshot(self):
-        self.cache_path.write_text(json.dumps({'ok': True, 'updated_at': NOW + 1,
-                                               'events': [{'ts': NOW, 'subject': 'new push'}]}))
-        with patch.object(github, 'read_snapshot', return_value={
-            'activity': {'ok': True, 'updated_at': NOW, 'events': []},
-        }):
-            self.assertEqual(github.github_events()[0]['subject'], 'new push')
+    def test_snapshot_builder_rejects_non_hosted_execution(self):
+        script = Path(__file__).resolve().parents[1] / 'scripts' / 'build_github_snapshot.py'
+        for actions, runner in [('false', ''), ('true', 'self-hosted')]:
+            with self.subTest(runner=runner):
+                result = subprocess.run([sys.executable, str(script)], capture_output=True,
+                                        text=True, timeout=3,
+                                        env=dict(os.environ, GITHUB_ACTIONS=actions,
+                                                 RUNNER_ENVIRONMENT=runner))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('GitHub-hosted Actions', result.stderr)
 
     def test_uses_public_repo_activity_and_omits_publisher_refs_and_bots(self):
         sha = '6cd26a1' + 'a' * 33
@@ -70,18 +66,15 @@ class PublicActivityTest(unittest.TestCase):
                          ('feature/trn', '6cd26a1', 'Fix terminal paste', NOW))
         self.assertEqual(event['url'], f'https://github.com/iamcheyan/termtuck/commit/{sha}')
 
-    def test_valid_empty_snapshot_does_not_fall_back_to_atom(self):
+    def test_valid_empty_snapshot_stays_empty(self):
         with patch.object(github, 'read_snapshot', return_value={
             'ok': True, 'activity': {'ok': True, 'events': []},
         }):
             self.assertEqual(github.github_events(), [])
 
-    def test_snapshot_failure_falls_back_to_atom(self):
-        with patch.object(github, 'read_snapshot', return_value={'ok': False}), \
-             patch.object(github, 'fetch_github_events', return_value=[{'ts': NOW, 'subject': 'atom fallback'}]):
-            rows = github.github_events()
-            self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]['subject'], 'atom fallback')
+    def test_snapshot_failure_does_not_collect_from_another_source(self):
+        with patch.object(github, 'read_snapshot', return_value={'ok': False}):
+            self.assertEqual(github.github_events(), [])
 
     def test_backend_formats_push_timestamp_in_server_timezone(self):
         with patch.object(github, 'read_snapshot', return_value={

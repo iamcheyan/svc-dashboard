@@ -114,22 +114,9 @@ HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）�
 
 ## 六、活动流与 GitHub 快照
 
-活动流提交只来自 GitHub 用户 Atom 订阅 `https://github.com/iamcheyan.atom`，通过 `svcdash.github.fetch_github_events()` 获取并在进程内缓存 5 分钟。活动 API 不扫描本地仓库、不读取本地 `git log`，也不依赖活动事件磁盘快照；GitHub 暂时不可用时显示为空或沿用进程内最近成功结果。
+GitHub 活动、公开 PR 与贡献日历由 `github-snapshots.yml` 在 GitHub 托管 runner 上采集并发布至 `github-data`。活动 API 只读公开快照，不扫描本地仓库或读取本地 `git log`。私有 chezmoi Issues 不参与更新。
 
-用户级 `svc-dashboard-github.timer` 每 5 分钟刷新首页贡献日历、PR 与 chezmoi Issues 的 GitHub 快照，入口是 `scripts/collect_github_snapshots.py`。该采集器不遍历本机仓库。
-
-### 安装与检查 GitHub 快照采集器
-
-```bash
-install -Dm644 systemd/svc-dashboard-github.service ~/.config/systemd/user/svc-dashboard-github.service
-install -Dm644 systemd/svc-dashboard-github.timer ~/.config/systemd/user/svc-dashboard-github.timer
-systemctl --user daemon-reload
-systemctl --user enable --now svc-dashboard-github.timer
-systemctl --user start svc-dashboard-github.service
-systemctl --user status svc-dashboard-github.timer svc-dashboard-github.service
-```
-
-日志：`journalctl --user -u svc-dashboard-github.service -n 30 --no-pager`。
+如果云端快照延迟，检查 Actions 运行与数据分支，必要时手动运行工作流。不要创建或恢复本机的 GitHub 采集服务、timer 或 cron。整站运维快照发布是独立任务。
 ### 隐私打码（#138）
 
 - `scripts/check_secrets.py --staged --fix`：pre-commit 时把命中的密钥/内网 IP/Tailscale IP/邮箱/电话就地改成 `******` 并重新 `git add`，不再阻断提交。
@@ -344,9 +331,8 @@ Agent（4 个运行时子页）、网络页头。新增页面照此四段式接�
   数据来自 `/api/magpie/usage` 的 `series[].cost`；不再渲染「提供商额度与账号池」，额度详情统一在「用量」的原生 Magpie 视图查看。
 - 首页顶部 `#hp-usage` 复用同一 `magpieKpisHtml()`，固定读取 `period=today`；更多进入 `#cat=usage`。
   不得随用量页所选周期变化，不得在请求失败时伪造零用量。
-- `svcdash/githubheatmap.py` 通过本机 gh GraphQL 采集公开贡献日历，每分钟更新一次，复用活动采集 timer；
-  HTTP `/api/github/contributions` 只读缓存。采集失败保留最后成功的数据和时间；不在访客请求中访问 GitHub。
-  在线页面定期读取；静态导出写入 `BOOT.githubContributions`，不访问在线 API。
+- `svcdash/githubheatmap.py` 在 GitHub Actions 中通过 GraphQL 采集贡献日历；HTTP `/api/github/contributions` 从公开快照读取。
+  静态导出写入 `BOOT.githubContributions`，不访问在线 dashboard API。
 - 点击运行时子页必须始终渲染缓存数据；不能只在 `!rtCache` 时渲染，否则首页预热缓存会造成永久加载中。
 
 - 当前首页顺序（以用户最新要求为准）：今日用量 → GitHub 贡献 → 系统状态/趋势图。今日用量只保留外层面板，五项统计不画内层边框或背景。
